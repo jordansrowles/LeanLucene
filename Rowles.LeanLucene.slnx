@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="Rowles.LeanLucene.Tests/Rowles.LeanLucene.Tests.csproj" />
+  <Project Path="Rowles.LeanLucene/Rowles.LeanLucene.csproj" />
+</Solution>

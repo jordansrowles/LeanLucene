@@ -1,0 +1,198 @@
+using Rowles.LeanLucene.Codecs;
+using Rowles.LeanLucene.Index;
+using Rowles.LeanLucene.Tests.Fixtures;
+
+namespace Rowles.LeanLucene.Tests.Codecs;
+
+public sealed class CodecsTests : IClassFixture<TestDirectoryFixture>
+{
+    private readonly TestDirectoryFixture _fixture;
+
+    public CodecsTests(TestDirectoryFixture fixture) => _fixture = fixture;
+
+    [Fact]
+    public void DicFile_RoundTrip_AllTermsRecoverable()
+    {
+        var filePath = System.IO.Path.Combine(_fixture.Path, "roundtrip");
+        var terms = Enumerable.Range(0, 1000)
+            .Select(i => $"term_{i:D5}")
+            .OrderBy(t => t, StringComparer.Ordinal)
+            .ToList();
+
+        var postingsOffsets = new Dictionary<string, long>();
+        long offset = 0;
+        foreach (var term in terms)
+        {
+            postingsOffsets[term] = offset;
+            offset += 100;
+        }
+
+        TermDictionaryWriter.Write(filePath + ".dic", terms, postingsOffsets);
+        using var reader = TermDictionaryReader.Open(filePath + ".dic");
+
+        foreach (var term in terms)
+        {
+            Assert.True(reader.TryGetPostingsOffset(term, out long readOffset));
+            Assert.Equal(postingsOffsets[term], readOffset);
+        }
+    }
+
+    [Fact]
+    [Trait("Category", "Advanced")]
+    public void DicFile_SkipIndex_BoundsColdReadLatency()
+    {
+        var filePath = System.IO.Path.Combine(_fixture.Path, "skipindex");
+        var terms = Enumerable.Range(0, 10_000)
+            .Select(i => $"term_{i:D6}")
+            .OrderBy(t => t, StringComparer.Ordinal)
+            .ToList();
+
+        var offsets = new Dictionary<string, long>();
+        for (int i = 0; i < terms.Count; i++)
+            offsets[terms[i]] = i * 50L;
+
+        TermDictionaryWriter.Write(filePath + ".dic", terms, offsets);
+        using var reader = TermDictionaryReader.Open(filePath + ".dic");
+
+        var target = terms[5000];
+        Assert.True(reader.TryGetPostingsOffset(target, out _));
+    }
+
+    [Fact]
+    public void PosFile_DeltaEncoding_IdsRestoredCorrectly()
+    {
+        var filePath = System.IO.Path.Combine(_fixture.Path, "posfile_delta");
+        var docIds = new[] { 1, 5, 9, 100, 101 };
+
+        PostingsWriter.Write(filePath + ".pos", "testterm", docIds);
+        var readIds = PostingsReader.ReadDocIds(filePath + ".pos", "testterm");
+
+        Assert.Equal(docIds, readIds);
+    }
+
+    [Fact]
+    public void PosFile_DeltaDecodingOverflow_ThrowsInvalidDataException()
+    {
+        var filePath = System.IO.Path.Combine(_fixture.Path, "posfile_overflow.pos");
+        using (var fs = new FileStream(filePath, FileMode.Create, FileAccess.Write, FileShare.None))
+        using (var writer = new BinaryWriter(fs, System.Text.Encoding.UTF8, leaveOpen: false))
+        {
+            writer.Write("overflow".Length);
+            writer.Write("overflow".ToCharArray());
+            writer.Write(2); // count
+            WriteVarInt(writer, int.MaxValue);
+            WriteVarInt(writer, 1); // overflows cumulative doc ID
+        }
+
+        Assert.Throws<InvalidDataException>(() => PostingsReader.ReadDocIds(filePath, "overflow"));
+    }
+
+    [Fact]
+    [Trait("Category", "Advanced")]
+    public void PosFile_Simple8bCompression_OutputSmallerThanRaw()
+    {
+        var filePath = System.IO.Path.Combine(_fixture.Path, "posfile_compress");
+        var docIds = Enumerable.Range(0, 10_000).ToArray();
+
+        PostingsWriter.Write(filePath + ".pos", "bigterm", docIds);
+
+        var compressedSize = new FileInfo(filePath + ".pos").Length;
+        var rawSize = docIds.Length * sizeof(int);
+        Assert.True(compressedSize < rawSize,
+            $"Compressed {compressedSize} bytes should be less than raw {rawSize} bytes");
+    }
+
+    [Fact]
+    public void NrmFile_RoundTrip_QuantisedValuesRestored()
+    {
+        var filePath = System.IO.Path.Combine(_fixture.Path, "nrmfile");
+        var norms = new float[100];
+        for (int i = 0; i < norms.Length; i++)
+            norms[i] = 1.0f / (1.0f + i);
+
+        NormsWriter.Write(filePath + ".nrm", norms);
+        var restored = NormsReader.Read(filePath + ".nrm");
+
+        Assert.Equal(norms.Length, restored.Length);
+        for (int i = 0; i < norms.Length; i++)
+            Assert.InRange(restored[i], norms[i] - 0.01f, norms[i] + 0.01f);
+    }
+
+    [Fact]
+    public void FdtFile_StoredFields_ExactRetrievalByDocId()
+    {
+        var filePath = System.IO.Path.Combine(_fixture.Path, "fdtfile");
+        var docs = new[]
+        {
+            new Dictionary<string, string> { ["title"] = "First Document" },
+            new Dictionary<string, string> { ["title"] = "Second Document" },
+            new Dictionary<string, string> { ["title"] = "Third Document" }
+        };
+
+        StoredFieldsWriter.Write(filePath + ".fdt", filePath + ".fdx", docs);
+        using var reader = StoredFieldsReader.Open(filePath + ".fdt", filePath + ".fdx");
+
+        for (int i = 0; i < docs.Length; i++)
+        {
+            var stored = reader.ReadDocument(i);
+            Assert.Equal(docs[i]["title"], stored["title"]);
+        }
+    }
+
+    [Fact]
+    public void DelFile_Serialise_Deserialise_BitsetPreserved()
+    {
+        var filePath = System.IO.Path.Combine(_fixture.Path, "delfile.del");
+        var liveDocs = new LiveDocs(1000);
+        var deletedIds = new HashSet<int>();
+
+        var rng = new Random(42);
+        while (deletedIds.Count < 300)
+            deletedIds.Add(rng.Next(1000));
+
+        foreach (var id in deletedIds)
+            liveDocs.Delete(id);
+
+        LiveDocs.Serialise(filePath, liveDocs);
+        var restored = LiveDocs.Deserialise(filePath, 1000);
+
+        for (int i = 0; i < 1000; i++)
+            Assert.Equal(liveDocs.IsLive(i), restored.IsLive(i));
+    }
+
+    [Fact]
+    [Trait("Category", "Advanced")]
+    public void VecFile_RoundTrip_FloatVectorsRestoredExactly()
+    {
+        var filePath = System.IO.Path.Combine(_fixture.Path, "vecfile");
+        var vectors = new float[50][];
+        var rng = new Random(42);
+
+        for (int i = 0; i < 50; i++)
+        {
+            vectors[i] = new float[128];
+            for (int j = 0; j < 128; j++)
+                vectors[i][j] = (float)rng.NextDouble();
+        }
+
+        VectorWriter.Write(filePath + ".vec", vectors);
+        using var reader = VectorReader.Open(filePath + ".vec");
+
+        for (int i = 0; i < 50; i++)
+        {
+            var restored = reader.ReadVector(i);
+            Assert.Equal(vectors[i], restored);
+        }
+    }
+
+    private static void WriteVarInt(BinaryWriter writer, int value)
+    {
+        uint v = (uint)value;
+        while (v >= 0x80)
+        {
+            writer.Write((byte)(v | 0x80));
+            v >>= 7;
+        }
+        writer.Write((byte)v);
+    }
+}
