@@ -2,8 +2,7 @@ namespace Rowles.LeanLucene.Codecs;
 
 /// <summary>
 /// Writes delta-encoded postings lists for a given term.
-/// Deltas are encoded as variable-length integers (VarInt) for compactness.
-/// Format: [int: termLength][chars: term][int: docIdCount][varint[]: deltaEncodedIds].
+/// Deltas are encoded as variable-length integers (VarInt/LEB128) for compactness.
 /// </summary>
 public static class PostingsWriter
 {
@@ -25,7 +24,7 @@ public static class PostingsWriter
     }
 
     /// <summary>Writes a non-negative integer using variable-length encoding (LEB128).</summary>
-    private static void WriteVarInt(BinaryWriter writer, int value)
+    public static void WriteVarInt(BinaryWriter writer, int value)
     {
         uint v = (uint)value;
         while (v >= 0x80)

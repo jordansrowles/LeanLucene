@@ -6,7 +6,7 @@ namespace Rowles.LeanLucene.Analysis;
 /// Removes common English stop words from a token list using a frozen set
 /// for fast, allocation-free lookups.
 /// </summary>
-public sealed class StopWordFilter
+public sealed class StopWordFilter : ITokenFilter
 {
     private static readonly FrozenSet<string> StopWords = new[]
     {
@@ -19,9 +19,8 @@ public sealed class StopWordFilter
     /// <summary>Returns true if the given term is a stop word.</summary>
     public bool IsStopWord(string term) => StopWords.Contains(term);
 
-    public List<Token> Apply(List<Token> tokens)
+    public void Apply(List<Token> tokens)
     {
         tokens.RemoveAll(t => StopWords.Contains(t.Text));
-        return tokens;
     }
 }

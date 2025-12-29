@@ -22,6 +22,9 @@ using LuceneTermQuery = Lucene.Net.Search.TermQuery;
 namespace Rowles.LeanLucene.Example.Benchmarks;
 
 [MemoryDiagnoser]
+[HtmlExporter]
+[JsonExporterAttribute.Full]
+[KeepBenchmarkFiles]
 [SimpleJob]
 public class TermQueryBenchmarks
 {

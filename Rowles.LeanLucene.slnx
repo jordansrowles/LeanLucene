@@ -1,4 +1,5 @@
 <Solution>
+  <Project Path="example/Rowles.LeanLucene.Example.Benchmarks/Rowles.LeanLucene.Example.Benchmarks.csproj" />
   <Project Path="Rowles.LeanLucene.Tests/Rowles.LeanLucene.Tests.csproj" />
   <Project Path="Rowles.LeanLucene/Rowles.LeanLucene.csproj" />
 </Solution>

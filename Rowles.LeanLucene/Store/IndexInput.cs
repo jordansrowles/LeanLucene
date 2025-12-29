@@ -206,6 +206,68 @@ public sealed unsafe class IndexInput : IDisposable
         return bytes;
     }
 
+    /// <summary>
+    /// Reads a variable-length encoded non-negative integer (LEB128).
+    /// Small values (0–127) consume a single byte.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public int ReadVarInt()
+    {
+        uint result = 0;
+        int shift = 0;
+        byte b;
+        do
+        {
+            if (_position >= _length)
+                ThrowEndOfStream();
+            b = _ptr[_position++];
+            if (shift >= 35)
+                throw new InvalidDataException("VarInt is too large or malformed.");
+            result |= (uint)(b & 0x7F) << shift;
+            shift += 7;
+        } while ((b & 0x80) != 0);
+
+        if (result > int.MaxValue)
+            throw new InvalidDataException("VarInt exceeds Int32 range.");
+        return (int)result;
+    }
+
+    /// <summary>
+    /// Hints the OS to prefetch the mapped region for sequential access.
+    /// Uses PrefetchVirtualMemory on Windows and madvise(MADV_SEQUENTIAL) on Linux.
+    /// Failures are silently ignored (advisory only).
+    /// </summary>
+    public void Prefetch()
+    {
+        if (_length == 0 || _ptr == null) return;
+
+        if (OperatingSystem.IsWindows())
+            PrefetchWindows();
+        else if (OperatingSystem.IsLinux() || OperatingSystem.IsMacOS())
+            PrefetchPosix();
+    }
+
+    private void PrefetchWindows()
+    {
+        nint handle = Environment.ProcessId != 0
+            ? NativeMethods.GetCurrentProcess()
+            : IntPtr.Zero;
+        if (handle == IntPtr.Zero) return;
+
+        var entry = new NativeMethods.WIN32_MEMORY_RANGE_ENTRY
+        {
+            VirtualAddress = (nint)_ptr,
+            NumberOfBytes = (nuint)_length
+        };
+        NativeMethods.PrefetchVirtualMemory(handle, 1, &entry, 0);
+    }
+
+    private void PrefetchPosix()
+    {
+        // MADV_SEQUENTIAL = 2 on Linux and macOS
+        NativeMethods.madvise((nint)_ptr, (nuint)_length, 2);
+    }
+
     public void Dispose()
     {
         if (_disposed) return;

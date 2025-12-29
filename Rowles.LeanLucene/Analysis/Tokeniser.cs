@@ -4,7 +4,7 @@ namespace Rowles.LeanLucene.Analysis;
 /// Slices input text into tokens at word boundaries, splitting on
 /// whitespace and punctuation whilst tracking character offsets.
 /// </summary>
-public sealed class Tokeniser
+public sealed class Tokeniser : ITokeniser
 {
     public List<Token> Tokenise(ReadOnlySpan<char> input)
     {

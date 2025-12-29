@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Rowles.LeanLucene.Analysis;
 using Rowles.LeanLucene.Codecs;
 using Rowles.LeanLucene.Index;
 using Rowles.LeanLucene.Store;
@@ -81,10 +82,38 @@ public sealed class IndexSearcher : IDisposable
         var globalDFs = PrecomputeGlobalDocFreqs(query);
         var collector = new TopNCollector(topN);
 
-        foreach (var reader in _readers)
-            ExecuteQuery(query, reader, globalDFs, ref collector);
+        if (_readers.Count == 1)
+        {
+            ExecuteQuery(query, _readers[0], globalDFs, ref collector);
+        }
+        else
+        {
+            var lockObj = new Lock();
+            Parallel.ForEach(_readers, new ParallelOptions { MaxDegreeOfParallelism = Environment.ProcessorCount }, reader =>
+            {
+                var localCollector = new TopNCollector(topN);
+                ExecuteQuery(query, reader, globalDFs, ref localCollector);
+                var localDocs = localCollector.ToTopDocs();
+                lock (lockObj)
+                {
+                    foreach (var sd in localDocs.ScoreDocs)
+                        collector.Collect(sd.DocId, sd.Score);
+                }
+            });
+        }
 
         return collector.ToTopDocs();
+    }
+
+    /// <summary>
+    /// Parses a query string, applies analysis, and searches.
+    /// </summary>
+    public TopDocs Search(string queryString, string defaultField, int topN, IAnalyser? analyser = null)
+    {
+        analyser ??= new StandardAnalyser();
+        var parser = new QueryParser(defaultField, analyser);
+        var query = parser.Parse(queryString);
+        return Search(query, topN);
     }
 
     private TopDocs SearchTermQuery(TermQuery query, int topN)
@@ -113,6 +142,7 @@ public sealed class IndexSearcher : IDisposable
         // Phase 2: score using already-decoded postings
         float avgDocLength = _stats.GetAvgFieldLength(query.Field);
         var (idf, k1BOverAvgDL) = Bm25Scorer.PrecomputeFactors(_totalDocCount, globalDF, avgDocLength);
+        float boost = query.Boost;
 
         // Reuse the backing ScoreDoc[] across queries to avoid per-query allocation
         if (_collectorHeapCache is null || _collectorHeapCache.Length < topN)
@@ -138,6 +168,7 @@ public sealed class IndexSearcher : IDisposable
                     int tf = postings.Freq;
                     int docLength = reader.GetFieldLength(docId);
                     float score = Bm25Scorer.ScorePrecomputed(idf, k1BOverAvgDL, tf, docLength);
+                    if (boost != 1.0f) score *= boost;
                     collector.Collect(docBase + docId, score);
                 }
             }
@@ -171,6 +202,15 @@ public sealed class IndexSearcher : IDisposable
             case VectorQuery vq:
                 ExecuteVectorQuery(vq, reader, ref collector);
                 break;
+            case PrefixQuery pfq:
+                ExecutePrefixQuery(pfq, reader, globalDFs, ref collector);
+                break;
+            case WildcardQuery wq:
+                ExecuteWildcardQuery(wq, reader, globalDFs, ref collector);
+                break;
+            case FuzzyQuery fq:
+                ExecuteFuzzyQuery(fq, reader, globalDFs, ref collector);
+                break;
         }
     }
 
@@ -193,6 +233,7 @@ public sealed class IndexSearcher : IDisposable
             int tf = postings.Freq;
             int docLength = reader.GetFieldLength(docId);
             float score = Bm25Scorer.Score(tf, docLength, avgDocLength, _totalDocCount, docFreq);
+            if (query.Boost != 1.0f) score *= query.Boost;
             collector.Collect(docBase + docId, score);
         }
     }
@@ -298,8 +339,9 @@ public sealed class IndexSearcher : IDisposable
             case RangeQuery rq:
             {
                 var rangeResults = reader.GetNumericRange(rq.Field, rq.Min, rq.Max);
+                float rqScore = rq.Boost != 1.0f ? rq.Boost : 1.0f;
                 foreach (var r in rangeResults)
-                    results.Add(new ScoreDoc(r.DocId, 1.0f));
+                    results.Add(new ScoreDoc(r.DocId, rqScore));
                 break;
             }
         }
@@ -309,11 +351,12 @@ public sealed class IndexSearcher : IDisposable
     private void ExecuteRangeQuery(RangeQuery query, SegmentReader reader, ref TopNCollector collector)
     {
         int docBase = reader.DocBase;
+        float score = query.Boost != 1.0f ? query.Boost : 1.0f;
         var rangeResults = reader.GetNumericRange(query.Field, query.Min, query.Max);
         if (rangeResults.Count > 0)
         {
             foreach (var r in rangeResults)
-                collector.Collect(docBase + r.DocId, 1.0f);
+                collector.Collect(docBase + r.DocId, score);
             return;
         }
 
@@ -325,7 +368,7 @@ public sealed class IndexSearcher : IDisposable
             if (stored.TryGetValue(query.Field, out var valStr) && double.TryParse(valStr, out var val))
             {
                 if (val >= query.Min && val <= query.Max)
-                    collector.Collect(docBase + docId, 1.0f);
+                    collector.Collect(docBase + docId, score);
             }
         }
     }
@@ -343,6 +386,7 @@ public sealed class IndexSearcher : IDisposable
             candidates.IntersectWith(termDocSets[i]);
 
         int docBase = reader.DocBase;
+        float boost = query.Boost;
         foreach (var docId in candidates)
         {
             if (!reader.IsLive(docId)) continue;
@@ -360,17 +404,18 @@ public sealed class IndexSearcher : IDisposable
                 termPositions.Add(positions);
             }
 
-            if (hasAllPositions && HasAdjacentPositions(termPositions))
+            if (hasAllPositions && HasPositionsWithinSlop(termPositions, query.Slop))
             {
-                collector.Collect(docBase + docId, 1.0f);
+                float score = boost != 1.0f ? boost : 1.0f;
+                collector.Collect(docBase + docId, score);
                 continue;
             }
 
-            if (!hasAllPositions)
+            if (!hasAllPositions && query.Slop == 0)
             {
                 var stored = reader.GetStoredFields(docId);
                 if (stored.TryGetValue(query.Field, out var text) && ContainsPhrase(text, query.Terms))
-                    collector.Collect(docBase + docId, 1.0f);
+                    collector.Collect(docBase + docId, boost != 1.0f ? boost : 1.0f);
             }
         }
     }
@@ -389,6 +434,111 @@ public sealed class IndexSearcher : IDisposable
 
             float similarity = VectorQuery.CosineSimilarity(query.QueryVector, docVector);
             collector.Collect(docBase + docId, similarity);
+        }
+    }
+
+    private void ExecutePrefixQuery(PrefixQuery query, SegmentReader reader,
+        Dictionary<(string Field, string Term), int> globalDFs, ref TopNCollector collector)
+    {
+        var qualifiedPrefix = $"{query.Field}\x00{query.Prefix}";
+        var matchingTerms = reader.GetTermsWithPrefix(qualifiedPrefix);
+        if (matchingTerms.Count == 0) return;
+
+        float boost = query.Boost;
+        float avgDocLength = _stats.GetAvgFieldLength(query.Field);
+        int docBase = reader.DocBase;
+
+        foreach (var (qualifiedTerm, _) in matchingTerms)
+        {
+            using var postings = reader.GetPostingsEnum(qualifiedTerm);
+            if (postings.IsExhausted) continue;
+
+            var termPart = qualifiedTerm.AsSpan(query.Field.Length + 1).ToString();
+            int docFreq = globalDFs.GetValueOrDefault((query.Field, termPart), postings.DocFreq);
+
+            while (postings.MoveNext())
+            {
+                int docId = postings.DocId;
+                if (!reader.IsLive(docId)) continue;
+
+                int tf = postings.Freq;
+                int docLength = reader.GetFieldLength(docId);
+                float score = Bm25Scorer.Score(tf, docLength, avgDocLength, _totalDocCount, docFreq);
+                if (boost != 1.0f) score *= boost;
+                collector.Collect(docBase + docId, score);
+            }
+        }
+    }
+
+    private void ExecuteWildcardQuery(WildcardQuery query, SegmentReader reader,
+        Dictionary<(string Field, string Term), int> globalDFs, ref TopNCollector collector)
+    {
+        var fieldPrefix = $"{query.Field}\x00";
+        var matchingTerms = reader.GetTermsMatching(fieldPrefix, query.Pattern.AsSpan());
+        if (matchingTerms.Count == 0) return;
+
+        float boost = query.Boost;
+        float avgDocLength = _stats.GetAvgFieldLength(query.Field);
+        int docBase = reader.DocBase;
+
+        foreach (var (qualifiedTerm, _) in matchingTerms)
+        {
+            using var postings = reader.GetPostingsEnum(qualifiedTerm);
+            if (postings.IsExhausted) continue;
+
+            var termPart = qualifiedTerm.AsSpan(query.Field.Length + 1).ToString();
+            int docFreq = globalDFs.GetValueOrDefault((query.Field, termPart), postings.DocFreq);
+
+            while (postings.MoveNext())
+            {
+                int docId = postings.DocId;
+                if (!reader.IsLive(docId)) continue;
+
+                int tf = postings.Freq;
+                int docLength = reader.GetFieldLength(docId);
+                float score = Bm25Scorer.Score(tf, docLength, avgDocLength, _totalDocCount, docFreq);
+                if (boost != 1.0f) score *= boost;
+                collector.Collect(docBase + docId, score);
+            }
+        }
+    }
+
+    private void ExecuteFuzzyQuery(FuzzyQuery query, SegmentReader reader,
+        Dictionary<(string Field, string Term), int> globalDFs, ref TopNCollector collector)
+    {
+        var fieldPrefix = $"{query.Field}\x00";
+        var allTerms = reader.GetAllTermsForField(fieldPrefix);
+        if (allTerms.Count == 0) return;
+
+        float boost = query.Boost;
+        float avgDocLength = _stats.GetAvgFieldLength(query.Field);
+        int docBase = reader.DocBase;
+        var queryTermSpan = query.Term.AsSpan();
+
+        foreach (var (qualifiedTerm, _) in allTerms)
+        {
+            var termPart = qualifiedTerm.AsSpan(query.Field.Length + 1);
+            int distance = LevenshteinDistance.Compute(queryTermSpan, termPart);
+            if (distance > query.MaxEdits) continue;
+
+            using var postings = reader.GetPostingsEnum(qualifiedTerm);
+            if (postings.IsExhausted) continue;
+
+            float distanceFactor = 1.0f - ((float)distance / (query.MaxEdits + 1));
+            var termStr = termPart.ToString();
+            int docFreq = globalDFs.GetValueOrDefault((query.Field, termStr), postings.DocFreq);
+
+            while (postings.MoveNext())
+            {
+                int docId = postings.DocId;
+                if (!reader.IsLive(docId)) continue;
+
+                int tf = postings.Freq;
+                int docLength = reader.GetFieldLength(docId);
+                float score = Bm25Scorer.Score(tf, docLength, avgDocLength, _totalDocCount, docFreq) * distanceFactor;
+                if (boost != 1.0f) score *= boost;
+                collector.Collect(docBase + docId, score);
+            }
         }
     }
 
@@ -417,18 +567,38 @@ public sealed class IndexSearcher : IDisposable
         return false;
     }
 
-    private static bool HasAdjacentPositions(List<int[]> termPositions)
+    private static bool HasPositionsWithinSlop(List<int[]> termPositions, int slop)
     {
         foreach (var startPos in termPositions[0])
         {
             bool match = true;
             for (int i = 1; i < termPositions.Count; i++)
             {
-                if (Array.BinarySearch(termPositions[i], startPos + i) < 0)
+                int expectedPos = startPos + i;
+                bool found = false;
+
+                if (slop == 0)
                 {
-                    match = false;
-                    break;
+                    found = Array.BinarySearch(termPositions[i], expectedPos) >= 0;
                 }
+                else
+                {
+                    // Search for any position within [expectedPos - slop, expectedPos + slop]
+                    int idx = Array.BinarySearch(termPositions[i], expectedPos - slop);
+                    if (idx < 0) idx = ~idx;
+                    for (int j = idx; j < termPositions[i].Length; j++)
+                    {
+                        int pos = termPositions[i][j];
+                        if (pos > expectedPos + slop) break;
+                        if (pos >= expectedPos - slop)
+                        {
+                            found = true;
+                            break;
+                        }
+                    }
+                }
+
+                if (!found) { match = false; break; }
             }
             if (match) return true;
         }
@@ -467,6 +637,8 @@ public sealed class IndexSearcher : IDisposable
                 foreach (var term in pq.Terms)
                     terms.Add((pq.Field, term));
                 break;
+            // Expansion queries (prefix/wildcard/fuzzy) resolve terms at execution
+            // time per-segment, so no static term collection is needed here.
         }
     }
 

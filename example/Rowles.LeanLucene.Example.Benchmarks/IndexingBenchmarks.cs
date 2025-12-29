@@ -13,10 +13,13 @@ using LuceneTextField = Lucene.Net.Documents.TextField;
 namespace Rowles.LeanLucene.Example.Benchmarks;
 
 [MemoryDiagnoser]
+[HtmlExporter]
+[JsonExporterAttribute.Full]
+[KeepBenchmarkFiles]
 [SimpleJob]
 public class IndexingBenchmarks
 {
-    [Params(5_000)]
+    [Params(3_000)]
     public int DocumentCount { get; set; }
 
     private string[] _documents = [];

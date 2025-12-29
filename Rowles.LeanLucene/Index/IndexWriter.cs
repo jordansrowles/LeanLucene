@@ -14,7 +14,7 @@ public sealed class IndexWriter : IDisposable
 {
     private readonly MMapDirectory _directory;
     private readonly IndexWriterConfig _config;
-    private readonly StandardAnalyser _analyser = new();
+    private readonly IAnalyser _defaultAnalyser;
 
     // Buffered in-memory inverted index: field → term → list of doc IDs
     private Dictionary<string, Dictionary<string, List<int>>> _invertedIndex = new();
@@ -29,6 +29,8 @@ public sealed class IndexWriter : IDisposable
     // Term positions: field → term → docId → list of positions
     private Dictionary<string, Dictionary<string, Dictionary<int, List<int>>>> _termPositions = new();
     private readonly HashSet<string> _termPool = new(StringComparer.Ordinal);
+    // Per-doc token count for O(1) norm computation
+    private int[] _docTokenCounts = new int[64];
 
     private int _bufferedDocCount;
     private long _estimatedRamBytes;
@@ -37,12 +39,20 @@ public sealed class IndexWriter : IDisposable
     private readonly List<SegmentInfo> _committedSegments = [];
     // Pending deletions: field → term → set of matching terms to delete
     private readonly List<(string field, string term)> _pendingDeletes = [];
+    private readonly Lock _writeLock = new();
+    private readonly SemaphoreSlim? _backpressureSemaphore;
+    private int _semaphoreSlotsHeld; // Track how many semaphore slots are currently held
     private bool _disposed;
 
     public IndexWriter(MMapDirectory directory, IndexWriterConfig config)
     {
         _directory = directory;
         _config = config;
+        _defaultAnalyser = config.DefaultAnalyser;
+
+        // Initialize backpressure semaphore if MaxQueuedDocs > 0
+        if (config.MaxQueuedDocs > 0)
+            _backpressureSemaphore = new SemaphoreSlim(config.MaxQueuedDocs, config.MaxQueuedDocs);
 
         // Load existing commit state if present
         LoadLatestCommit();
@@ -52,6 +62,49 @@ public sealed class IndexWriter : IDisposable
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
 
+        // Apply backpressure if enabled: wait for a semaphore slot before acquiring the write lock.
+        // This prevents unbounded memory growth when documents are queued faster than they can be flushed.
+        _backpressureSemaphore?.Wait();
+
+        try
+        {
+            lock (_writeLock)
+            {
+                // Track that we've acquired a slot
+                if (_backpressureSemaphore is not null)
+                    _semaphoreSlotsHeld++;
+
+                AddDocumentCore(doc);
+            }
+        }
+        catch
+        {
+            // If AddDocumentCore fails, release the semaphore slot immediately
+            if (_backpressureSemaphore is not null)
+            {
+                _backpressureSemaphore.Release();
+                lock (_writeLock)
+                {
+                    _semaphoreSlotsHeld--;
+                }
+            }
+            throw;
+        }
+    }
+
+    /// <summary>Atomically deletes documents matching the selector and adds the replacement.</summary>
+    public void UpdateDocument(string field, string term, LeanDocument replacement)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        lock (_writeLock)
+        {
+            _pendingDeletes.Add((field, term));
+            AddDocumentCore(replacement);
+        }
+    }
+
+    private void AddDocumentCore(LeanDocument doc)
+    {
         int localDocId = _bufferedDocCount;
         var storedDoc = new Dictionary<string, string>();
         var numericDoc = new Dictionary<string, double>();
@@ -97,19 +150,40 @@ public sealed class IndexWriter : IDisposable
 
     public void DeleteDocuments(Search.TermQuery query)
     {
-        _pendingDeletes.Add((query.Field, query.Term));
+        lock (_writeLock)
+        {
+            _pendingDeletes.Add((query.Field, query.Term));
+        }
     }
 
     public void Commit()
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
+        lock (_writeLock)
+        {
+            CommitCore();
+        }
+    }
+
+    private void CommitCore()
+    {
+        // Snapshot the segments that exist BEFORE flushing. Deletions from
+        // UpdateDocument must only target these older segments — not the
+        // replacement segment that will be flushed next.
+        var preFlushSegmentCount = _committedSegments.Count;
+
+        // Apply pending deletions to pre-existing segments only (for UpdateDocument)
+        if (preFlushSegmentCount > 0 && _pendingDeletes.Count > 0)
+            ApplyPendingDeletions(_committedSegments.GetRange(0, preFlushSegmentCount));
 
         // Flush any remaining buffered documents
         if (_bufferedDocCount > 0)
             FlushSegment();
 
-        // Apply pending deletions across committed segments
-        ApplyPendingDeletions();
+        // Apply any remaining deletions to ALL segments (including the just-flushed one).
+        // This handles the case where DeleteDocuments + Commit are called without UpdateDocument.
+        if (_pendingDeletes.Count > 0)
+            ApplyPendingDeletions(_committedSegments);
 
         // Maybe merge segments
         var merger = new SegmentMerger(_directory);
@@ -134,6 +208,8 @@ public sealed class IndexWriter : IDisposable
     {
         if (_disposed) return;
         _disposed = true;
+
+        _backpressureSemaphore?.Dispose();
     }
 
     /// <summary>
@@ -150,7 +226,14 @@ public sealed class IndexWriter : IDisposable
 
     private void IndexTextField(string fieldName, string value, int docId)
     {
-        var tokens = _analyser.Analyse(value.AsSpan());
+        var analyser = _config.FieldAnalysers.GetValueOrDefault(fieldName, _defaultAnalyser);
+        var tokens = analyser.Analyse(value.AsSpan());
+
+        // Track token count for O(1) norm computation
+        if (docId >= _docTokenCounts.Length)
+            Array.Resize(ref _docTokenCounts, Math.Max(_docTokenCounts.Length * 2, docId + 1));
+        _docTokenCounts[docId] += tokens.Count;
+
         if (!_invertedIndex.ContainsKey(fieldName))
             _invertedIndex[fieldName] = new Dictionary<string, List<int>>();
         if (!_termFreqs.ContainsKey(fieldName))
@@ -223,6 +306,9 @@ public sealed class IndexWriter : IDisposable
     {
         if (_bufferedDocCount == 0) return;
 
+        // Track how many documents we're flushing so we can release the corresponding semaphore slots.
+        int docCountToFlush = _bufferedDocCount;
+
         var segId = $"seg_{_nextSegmentOrdinal++}";
         var basePath = Path.Combine(_directory.DirectoryPath, segId);
 
@@ -260,6 +346,7 @@ public sealed class IndexWriter : IDisposable
         var postingsOffsets = new Dictionary<string, long>();
 
         // Write all postings to a single .pos file
+        const int SkipInterval = 128;
         using (var posStream = new BinaryWriter(File.Create(basePath + ".pos")))
         {
             foreach (var qt in sortedQualifiedTerms)
@@ -268,12 +355,46 @@ public sealed class IndexWriter : IDisposable
                 var ids = postingsData[qt];
                 posStream.Write(ids.Length);
 
-                // Delta encode
-                int prev = 0;
-                foreach (var id in ids)
+                // Write skip pointer entries (every SkipInterval docs)
+                int skipCount = ids.Length >= SkipInterval ? (ids.Length - 1) / SkipInterval : 0;
+                posStream.Write(skipCount);
+
+                if (skipCount > 0)
                 {
-                    posStream.Write(id - prev);
-                    prev = id;
+                    // Reserve space for skip entries, fill in after writing deltas
+                    long skipTablePos = posStream.BaseStream.Position;
+                    for (int s = 0; s < skipCount; s++)
+                    {
+                        posStream.Write(0); // placeholder docId
+                        posStream.Write(0); // placeholder byte offset
+                    }
+                    long deltaStartPos = posStream.BaseStream.Position;
+
+                    int prev = 0;
+                    for (int i = 0; i < ids.Length; i++)
+                    {
+                        if (i > 0 && i % SkipInterval == 0)
+                        {
+                            int skipIdx = (i / SkipInterval) - 1;
+                            long currentPos = posStream.BaseStream.Position;
+                            posStream.BaseStream.Seek(skipTablePos + skipIdx * 8, SeekOrigin.Begin);
+                            posStream.Write(ids[i - 1]); // docId at boundary
+                            posStream.Write((int)(currentPos - deltaStartPos)); // byte offset
+                            posStream.BaseStream.Seek(currentPos, SeekOrigin.Begin);
+                        }
+                        PostingsWriter.WriteVarInt(posStream, ids[i] - prev);
+                        prev = ids[i];
+                    }
+                }
+                else
+                {
+                    // Small posting list — write deltas directly
+                    int prev = 0;
+                    foreach (var id in ids)
+                    {
+                        PostingsWriter.WriteVarInt(posStream, id - prev);
+                        prev = id;
+                    }
                 }
 
                 var parts = qt.Split('\x00', 2);
@@ -285,7 +406,7 @@ public sealed class IndexWriter : IDisposable
                 if (hasFreqs)
                 {
                     foreach (var id in ids)
-                        posStream.Write(freqMap!.GetValueOrDefault(id, 1));
+                        PostingsWriter.WriteVarInt(posStream, freqMap!.GetValueOrDefault(id, 1));
                 }
 
                 Dictionary<int, List<int>>? posMap = null;
@@ -298,11 +419,11 @@ public sealed class IndexWriter : IDisposable
                     foreach (var id in ids)
                     {
                         var positions = posMap!.GetValueOrDefault(id, []);
-                        posStream.Write(positions.Count);
+                        PostingsWriter.WriteVarInt(posStream, positions.Count);
                         int prevPos = 0;
                         foreach (var p in positions)
                         {
-                            posStream.Write(p - prevPos);
+                            PostingsWriter.WriteVarInt(posStream, p - prevPos);
                             prevPos = p;
                         }
                     }
@@ -313,21 +434,12 @@ public sealed class IndexWriter : IDisposable
         // Write term dictionary (.dic)
         TermDictionaryWriter.Write(basePath + ".dic", sortedQualifiedTerms, postingsOffsets);
 
-        // Write norms (.nrm) — simple field length norms
+        // Write norms (.nrm) — use pre-tracked token counts (O(1) per doc)
         var norms = new float[_bufferedDocCount];
         for (int i = 0; i < _bufferedDocCount; i++)
         {
-            // Approximate: count total tokens across all fields for this doc
-            int totalTokens = 1; // avoid division by zero
-            foreach (var (_, terms) in _invertedIndex)
-            {
-                foreach (var (_, docIds) in terms)
-                {
-                    if (docIds.Contains(i))
-                        totalTokens++;
-                }
-            }
-            norms[i] = 1.0f / (1.0f + totalTokens);
+            int totalTokens = i < _docTokenCounts.Length ? _docTokenCounts[i] : 0;
+            norms[i] = 1.0f / (1.0f + Math.Max(1, totalTokens));
         }
         NormsWriter.Write(basePath + ".nrm", norms);
 
@@ -349,13 +461,26 @@ public sealed class IndexWriter : IDisposable
 
         _committedSegments.Add(segInfo);
         ResetBuffer();
+
+        // Release semaphore slots AFTER the flush is complete and buffers are cleared.
+        // Only release the slots we actually held (which equals docCountToFlush).
+        if (_backpressureSemaphore is not null && docCountToFlush > 0)
+        {
+            // Ensure we don't release more slots than we're currently holding
+            int toRelease = Math.Min(docCountToFlush, _semaphoreSlotsHeld);
+            if (toRelease > 0)
+            {
+                _backpressureSemaphore.Release(toRelease);
+                _semaphoreSlotsHeld -= toRelease;
+            }
+        }
     }
 
-    private void ApplyPendingDeletions()
+    private void ApplyPendingDeletions(List<SegmentInfo> segments)
     {
         if (_pendingDeletes.Count == 0) return;
 
-        foreach (var seg in _committedSegments)
+        foreach (var seg in segments)
         {
             var basePath = Path.Combine(_directory.DirectoryPath, seg.SegmentId);
             var dicPath = basePath + ".dic";
@@ -407,11 +532,14 @@ public sealed class IndexWriter : IDisposable
         using var reader = new BinaryReader(File.OpenRead(posPath));
         reader.BaseStream.Seek(offset, SeekOrigin.Begin);
         int count = reader.ReadInt32();
+        int skipCount = reader.ReadInt32();
+        // Skip past skip entries (each is 2 × int32 = 8 bytes)
+        reader.BaseStream.Seek(skipCount * 8L, SeekOrigin.Current);
         var ids = new int[count];
         int prev = 0;
         for (int i = 0; i < count; i++)
         {
-            int delta = reader.ReadInt32();
+            int delta = PostingsReader.ReadVarInt(reader);
             if (delta < 0)
                 throw new InvalidDataException("Postings data is corrupt: negative delta encountered.");
             try
@@ -439,14 +567,23 @@ public sealed class IndexWriter : IDisposable
         _bufferedVectors = new();
         _bufferedDocCount = 0;
         _estimatedRamBytes = 0;
+        Array.Clear(_docTokenCounts);
     }
 
     private string CanonicaliseTerm(string term)
     {
+        // Check if the term already exists in the pool and return the canonical reference.
+        // This ensures all dictionaries share the same string instance, reducing memory pressure.
         if (_termPool.TryGetValue(term, out var canonical))
             return canonical;
 
+        // Add the term to the pool. Since HashSet.Add returns false if the item already exists,
+        // we need to retrieve the actual reference from the set after adding.
         _termPool.Add(term);
+        
+        // Now retrieve the canonical reference from the set.
+        // For HashSet<string>, the set itself maintains the canonical reference.
+        // We return the input term since we just added it, but the next lookup will return this instance.
         return term;
     }
 

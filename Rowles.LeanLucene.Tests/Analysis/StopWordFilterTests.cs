@@ -16,9 +16,9 @@ public class StopWordFilterTests
             new("a", 7, 8),
         };
 
-        var result = _filter.Apply(tokens);
+        _filter.Apply(tokens);
 
-        Assert.Empty(result);
+        Assert.Empty(tokens);
     }
 
     [Fact]
@@ -30,9 +30,9 @@ public class StopWordFilterTests
             new("fox", 6, 9),
         };
 
-        var result = _filter.Apply(tokens);
+        _filter.Apply(tokens);
 
-        Assert.Equal(2, result.Count);
+        Assert.Equal(2, tokens.Count);
     }
 
     [Fact]
@@ -46,11 +46,11 @@ public class StopWordFilterTests
             new("fox", 16, 19),
         };
 
-        var result = _filter.Apply(tokens);
+        _filter.Apply(tokens);
 
-        Assert.Equal(3, result.Count);
-        Assert.Equal("quick", result[0].Text);
-        Assert.Equal("brown", result[1].Text);
-        Assert.Equal("fox", result[2].Text);
+        Assert.Equal(3, tokens.Count);
+        Assert.Equal("quick", tokens[0].Text);
+        Assert.Equal("brown", tokens[1].Text);
+        Assert.Equal("fox", tokens[2].Text);
     }
 }

@@ -169,6 +169,10 @@ public sealed class SegmentReader : IDisposable
 
         _posInput.Seek(offset);
         int count = _posInput.ReadInt32();
+        // Skip past skip entries
+        int skipCount = _posInput.ReadInt32();
+        if (skipCount > 0)
+            _posInput.Seek(_posInput.Position + skipCount * 8L);
 
         var ids = new int[count];
         int prev = 0;
@@ -182,7 +186,7 @@ public sealed class SegmentReader : IDisposable
         if (hasFreqs)
         {
             for (int i = 0; i < count; i++)
-                _posInput.ReadInt32(); // skip freqs
+                _posInput.ReadVarInt(); // skip freqs
         }
 
         bool hasPositions = _posInput.ReadBoolean();
@@ -193,17 +197,17 @@ public sealed class SegmentReader : IDisposable
 
         for (int i = 0; i < targetIndex; i++)
         {
-            int posCount = _posInput.ReadInt32();
+            int posCount = _posInput.ReadVarInt();
             for (int j = 0; j < posCount; j++)
-                _posInput.ReadInt32();
+                _posInput.ReadVarInt();
         }
 
-        int targetPosCount = _posInput.ReadInt32();
+        int targetPosCount = _posInput.ReadVarInt();
         var positions = new int[targetPosCount];
         int prevPos = 0;
         for (int i = 0; i < targetPosCount; i++)
         {
-            prevPos += _posInput.ReadInt32();
+            prevPos += _posInput.ReadVarInt();
             positions[i] = prevPos;
         }
 
@@ -250,10 +254,32 @@ public sealed class SegmentReader : IDisposable
         return _vectorReader?.ReadVector(docId);
     }
 
+    /// <summary>Returns all terms matching a qualified prefix.</summary>
+    public List<(string Term, long Offset)> GetTermsWithPrefix(string qualifiedPrefix)
+    {
+        return _dicReader.GetTermsWithPrefix(qualifiedPrefix.AsSpan());
+    }
+
+    /// <summary>Returns all terms for a field matching a wildcard pattern.</summary>
+    public List<(string Term, long Offset)> GetTermsMatching(string fieldPrefix, ReadOnlySpan<char> pattern)
+    {
+        return _dicReader.GetTermsMatching(fieldPrefix, pattern);
+    }
+
+    /// <summary>Returns all terms for a given field.</summary>
+    public List<(string Term, long Offset)> GetAllTermsForField(string fieldPrefix)
+    {
+        return _dicReader.GetAllTermsForField(fieldPrefix);
+    }
+
     private int[] ReadPostingsAtOffset(long offset)
     {
         _posInput.Seek(offset);
         int count = _posInput.ReadInt32();
+        // Skip past skip entries
+        int skipCount = _posInput.ReadInt32();
+        if (skipCount > 0)
+            _posInput.Seek(_posInput.Position + skipCount * 8L);
         var ids = new int[count];
         int prev = 0;
         for (int i = 0; i < count; i++)
@@ -268,6 +294,10 @@ public sealed class SegmentReader : IDisposable
     {
         _posInput.Seek(offset);
         int count = _posInput.ReadInt32();
+        // Skip past skip entries
+        int skipCount = _posInput.ReadInt32();
+        if (skipCount > 0)
+            _posInput.Seek(_posInput.Position + skipCount * 8L);
 
         var ids = new int[count];
         int prev = 0;
@@ -282,7 +312,7 @@ public sealed class SegmentReader : IDisposable
 
         for (int i = 0; i < count; i++)
         {
-            int freq = _posInput.ReadInt32();
+            int freq = _posInput.ReadVarInt();
             if (ids[i] == targetDocId)
                 return freq;
         }
@@ -300,7 +330,7 @@ public sealed class SegmentReader : IDisposable
 
     private static int ReadNextDocId(IndexInput input, int previous)
     {
-        int delta = input.ReadInt32();
+        int delta = input.ReadVarInt();
         if (delta < 0)
             throw new InvalidDataException("Postings data is corrupt: negative delta encountered.");
 

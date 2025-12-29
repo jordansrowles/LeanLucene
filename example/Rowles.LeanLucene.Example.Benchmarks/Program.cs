@@ -6,36 +6,55 @@ namespace Rowles.LeanLucene.Example.Benchmarks;
 
 internal static class Program
 {
-    public static void Main(string[] args)
+    public static int Main(string[] args)
     {
         var (suite, benchmarkArgs) = ParseArguments(args);
         var repoRoot = FindRepositoryRoot();
-        var runRoot = Path.Combine(
-            repoRoot,
-            "bench",
-            DateTime.Now.ToString("yyyy-MM-dd HH-mm-ss", CultureInfo.InvariantCulture));
+        var benchRoot = Path.Combine(repoRoot, "bench");
+        var dataDirectory = Path.Combine(benchRoot, "data");
+        Directory.CreateDirectory(dataDirectory);
 
-        Directory.CreateDirectory(runRoot);
+        var runId = DateTimeOffset.UtcNow.ToString("yyyyMMdd-HHmmss", CultureInfo.InvariantCulture);
+        var suiteArtifacts = new List<(string Suite, string ArtifactsPath)>();
 
         if (suite is BenchmarkSuite.All or BenchmarkSuite.Query)
         {
-            var queryArtifactsPath = Path.Combine(runRoot, "query");
+            var queryArtifactsPath = BuildArtifactsPath(dataDirectory, runId, "query");
             BenchmarkRunner.Run<TermQueryBenchmarks>(BuildConfig(queryArtifactsPath), benchmarkArgs);
+            suiteArtifacts.Add(("query", queryArtifactsPath));
         }
 
         if (suite is BenchmarkSuite.All or BenchmarkSuite.Index)
         {
-            var indexArtifactsPath = Path.Combine(runRoot, "index");
+            var indexArtifactsPath = BuildArtifactsPath(dataDirectory, runId, "index");
             BenchmarkRunner.Run<IndexingBenchmarks>(BuildConfig(indexArtifactsPath), benchmarkArgs);
+            suiteArtifacts.Add(("index", indexArtifactsPath));
         }
 
-        Console.WriteLine($"Benchmark artifacts written to: {runRoot}");
+        if (suiteArtifacts.Count == 0)
+        {
+            Console.Error.WriteLine("No benchmark suite selected.");
+            return 1;
+        }
+
+        foreach (var (suiteName, artifactsPath) in suiteArtifacts)
+        {
+            Console.WriteLine($"[{suiteName}] Artifacts: {artifactsPath}");
+        }
+
+        Console.WriteLine("Use BenchmarkDotNet HtmlExporter and JsonExporterAttribute.Full outputs from these folders.");
+        return 0;
     }
 
     private static IConfig BuildConfig(string artifactsPath)
     {
         Directory.CreateDirectory(artifactsPath);
         return DefaultConfig.Instance.WithArtifactsPath(artifactsPath);
+    }
+
+    private static string BuildArtifactsPath(string dataDirectory, string runId, string suiteName)
+    {
+        return Path.Combine(dataDirectory, runId, suiteName);
     }
 
     private static (BenchmarkSuite Suite, string[] BenchmarkArgs) ParseArguments(string[] args)

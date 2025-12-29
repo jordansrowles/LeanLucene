@@ -123,6 +123,7 @@ public sealed class SegmentMerger
         newDocId = 0;
         allPostings.Clear();
         allFreqs.Clear();
+        var allPositions = new Dictionary<string, Dictionary<int, int[]>>();
 
         foreach (var segInfo in segments)
         {
@@ -140,7 +141,7 @@ public sealed class SegmentMerger
             }
 
             // Re-read the .pos file to get all postings with their qualified terms
-            RemapPostings(segBasePath + ".pos", segBasePath + ".dic", docIdMap, allPostings, allFreqs);
+            RemapPostings(segBasePath + ".pos", segBasePath + ".dic", docIdMap, allPostings, allFreqs, allPositions);
         }
 
         int totalDocs = newDocId;
@@ -190,6 +191,7 @@ public sealed class SegmentMerger
         var postingsOffsets = new Dictionary<string, long>();
 
         // Write .pos
+        const int SkipInterval = 128;
         using (var posStream = new BinaryWriter(File.Create(basePath + ".pos")))
         {
             foreach (var qt in sortedTerms)
@@ -198,25 +200,76 @@ public sealed class SegmentMerger
                 var ids = postingsData[qt];
                 posStream.Write(ids.Length);
 
-                int prev = 0;
-                foreach (var id in ids)
+                int skipCount = ids.Length >= SkipInterval ? (ids.Length - 1) / SkipInterval : 0;
+                posStream.Write(skipCount);
+
+                if (skipCount > 0)
                 {
-                    posStream.Write(id - prev);
-                    prev = id;
+                    long skipTablePos = posStream.BaseStream.Position;
+                    for (int s = 0; s < skipCount; s++)
+                    {
+                        posStream.Write(0);
+                        posStream.Write(0);
+                    }
+                    long deltaStartPos = posStream.BaseStream.Position;
+
+                    int prev = 0;
+                    for (int i = 0; i < ids.Length; i++)
+                    {
+                        if (i > 0 && i % SkipInterval == 0)
+                        {
+                            int skipIdx = (i / SkipInterval) - 1;
+                            long currentPos = posStream.BaseStream.Position;
+                            posStream.BaseStream.Seek(skipTablePos + skipIdx * 8, SeekOrigin.Begin);
+                            posStream.Write(ids[i - 1]);
+                            posStream.Write((int)(currentPos - deltaStartPos));
+                            posStream.BaseStream.Seek(currentPos, SeekOrigin.Begin);
+                        }
+                        PostingsWriter.WriteVarInt(posStream, ids[i] - prev);
+                        prev = ids[i];
+                    }
+                }
+                else
+                {
+                    int prev = 0;
+                    foreach (var id in ids)
+                    {
+                        PostingsWriter.WriteVarInt(posStream, id - prev);
+                        prev = id;
+                    }
                 }
 
                 if (allFreqs.TryGetValue(qt, out var freqMap))
                 {
                     posStream.Write(true);
                     foreach (var id in ids)
-                        posStream.Write(freqMap.GetValueOrDefault(id, 1));
+                        PostingsWriter.WriteVarInt(posStream, freqMap.GetValueOrDefault(id, 1));
                 }
                 else
                 {
                     posStream.Write(false);
                 }
 
-                posStream.Write(false); // merged segments: no positional data
+                // Preserve positional data through merges
+                if (allPositions.TryGetValue(qt, out var posMap) && posMap.Count > 0)
+                {
+                    posStream.Write(true); // hasPositions
+                    foreach (var id in ids)
+                    {
+                        var positions = posMap.GetValueOrDefault(id, []);
+                        PostingsWriter.WriteVarInt(posStream, positions.Length);
+                        int prevPos = 0;
+                        foreach (var p in positions)
+                        {
+                            PostingsWriter.WriteVarInt(posStream, p - prevPos);
+                            prevPos = p;
+                        }
+                    }
+                }
+                else
+                {
+                    posStream.Write(false);
+                }
             }
         }
 
@@ -258,18 +311,13 @@ public sealed class SegmentMerger
         string posPath, string dicPath,
         Dictionary<int, int> docIdMap,
         SortedDictionary<string, List<int>> allPostings,
-        Dictionary<string, Dictionary<int, int>> allFreqs)
+        Dictionary<string, Dictionary<int, int>> allFreqs,
+        Dictionary<string, Dictionary<int, int[]>> allPositions)
     {
-        var dicReader = TermDictionaryReader.Open(dicPath);
-        dicReader.Dispose(); // not used directly; scanning via raw reader below
-
-        // Scan the entire .dic to enumerate all terms.
-        // Re-read the dic file sequentially.
         using var dicFs = new FileStream(dicPath, FileMode.Open, FileAccess.Read, FileShare.Read);
         using var dicBr = new BinaryReader(dicFs, System.Text.Encoding.UTF8, leaveOpen: false);
 
         int skipCount = dicBr.ReadInt32();
-        // Skip the skip index
         for (int i = 0; i < skipCount; i++)
         {
             int termLen = dicBr.ReadInt32();
@@ -277,7 +325,6 @@ public sealed class SegmentMerger
             dicBr.ReadInt64();
         }
 
-        // Read all term entries
         while (dicFs.Position < dicFs.Length)
         {
             int termLen;
@@ -288,17 +335,19 @@ public sealed class SegmentMerger
             long postingsOffset = dicBr.ReadInt64();
             string qualifiedTerm = new string(chars);
 
-            // Read postings at this offset
             using var posFs = new FileStream(posPath, FileMode.Open, FileAccess.Read, FileShare.Read);
             using var posBr = new BinaryReader(posFs, System.Text.Encoding.UTF8, leaveOpen: false);
             posFs.Seek(postingsOffset, SeekOrigin.Begin);
 
             int count = posBr.ReadInt32();
+            int postingSkipCount = posBr.ReadInt32();
+            // Skip past skip entries (each is 2 × int32 = 8 bytes)
+            posFs.Seek(postingSkipCount * 8L, SeekOrigin.Current);
             var oldIds = new int[count];
             int prev = 0;
             for (int j = 0; j < count; j++)
             {
-                int delta = posBr.ReadInt32();
+                int delta = PostingsReader.ReadVarInt(posBr);
                 prev += delta;
                 oldIds[j] = prev;
             }
@@ -308,14 +357,32 @@ public sealed class SegmentMerger
             if (hasFreqs)
             {
                 for (int j = 0; j < count; j++)
-                    freqs[j] = posBr.ReadInt32();
+                    freqs[j] = PostingsReader.ReadVarInt(posBr);
             }
             else
             {
                 Array.Fill(freqs, 1);
             }
 
-            // Remap and add to merged postings
+            // Read positional data if present
+            bool hasPositions = posBr.ReadBoolean();
+            int[][]? positions = null;
+            if (hasPositions)
+            {
+                positions = new int[count][];
+                for (int j = 0; j < count; j++)
+                {
+                    int posCount = PostingsReader.ReadVarInt(posBr);
+                    positions[j] = new int[posCount];
+                    int prevPos = 0;
+                    for (int k = 0; k < posCount; k++)
+                    {
+                        prevPos += PostingsReader.ReadVarInt(posBr);
+                        positions[j][k] = prevPos;
+                    }
+                }
+            }
+
             if (!allPostings.TryGetValue(qualifiedTerm, out var mergedList))
             {
                 mergedList = new List<int>();
@@ -328,17 +395,24 @@ public sealed class SegmentMerger
                 allFreqs[qualifiedTerm] = mergedFreqs;
             }
 
+            if (!allPositions.TryGetValue(qualifiedTerm, out var mergedPositions))
+            {
+                mergedPositions = new Dictionary<int, int[]>();
+                allPositions[qualifiedTerm] = mergedPositions;
+            }
+
             for (int j = 0; j < count; j++)
             {
                 if (docIdMap.TryGetValue(oldIds[j], out int newId))
                 {
                     mergedList.Add(newId);
                     mergedFreqs[newId] = freqs[j];
+                    if (positions is not null)
+                        mergedPositions[newId] = positions[j];
                 }
             }
         }
 
-        // Sort each postings list
         foreach (var (_, list) in allPostings)
             list.Sort();
     }

@@ -41,7 +41,7 @@ public static class PostingsReader
     }
 
     /// <summary>Reads a variable-length encoded integer (LEB128).</summary>
-    private static int ReadVarInt(BinaryReader reader)
+    public static int ReadVarInt(BinaryReader reader)
     {
         uint result = 0;
         int shift = 0;

@@ -37,11 +37,16 @@ public struct PostingsEnum : IDisposable
         if (count <= 0)
             return Empty;
 
+        // Skip past skip pointer entries
+        int skipCount = input.ReadInt32();
+        if (skipCount > 0)
+            input.Seek(input.Position + skipCount * 8L);
+
         var docIds = ArrayPool<int>.Shared.Rent(count);
         int prev = 0;
         for (int i = 0; i < count; i++)
         {
-            prev += input.ReadInt32();
+            prev += input.ReadVarInt();
             docIds[i] = prev;
         }
 
@@ -51,7 +56,7 @@ public struct PostingsEnum : IDisposable
         {
             freqs = ArrayPool<int>.Shared.Rent(count);
             for (int i = 0; i < count; i++)
-                freqs[i] = input.ReadInt32();
+                freqs[i] = input.ReadVarInt();
         }
 
         return new PostingsEnum(docIds, freqs, count);
@@ -66,6 +71,42 @@ public struct PostingsEnum : IDisposable
     }
 
     public void Reset() => _index = -1;
+
+    /// <summary>
+    /// Advances to the first document >= targetDocId. Returns true if found.
+    /// Uses binary search on the pre-decoded docId array for O(log n) skip.
+    /// </summary>
+    public bool Advance(int targetDocId)
+    {
+        if (_docIds is null || _count == 0) return false;
+
+        int startIndex = Math.Max(0, _index);
+        int lo = startIndex, hi = _count - 1;
+        int best = _count; // sentinel: not found
+
+        while (lo <= hi)
+        {
+            int mid = lo + (hi - lo) / 2;
+            if (_docIds[mid] >= targetDocId)
+            {
+                best = mid;
+                hi = mid - 1;
+            }
+            else
+            {
+                lo = mid + 1;
+            }
+        }
+
+        if (best < _count)
+        {
+            _index = best;
+            return true;
+        }
+
+        _index = _count;
+        return false;
+    }
 
     public void Dispose()
     {

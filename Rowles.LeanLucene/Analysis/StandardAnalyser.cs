@@ -4,7 +4,7 @@ namespace Rowles.LeanLucene.Analysis;
 /// Default analyser combining tokenisation, lowercase normalisation,
 /// and stop-word removal into a single pipeline.
 /// </summary>
-public sealed class StandardAnalyser
+public sealed class StandardAnalyser : IAnalyser
 {
     private readonly Tokeniser _tokeniser = new();
     private readonly StopWordFilter _stopWordFilter = new();

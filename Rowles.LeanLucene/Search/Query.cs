@@ -6,6 +6,9 @@ namespace Rowles.LeanLucene.Search;
 public abstract class Query
 {
     public abstract string Field { get; }
+
+    /// <summary>Boost factor applied to this query's score. Default 1.0.</summary>
+    public float Boost { get; set; } = 1.0f;
 }
 
 /// <summary>
