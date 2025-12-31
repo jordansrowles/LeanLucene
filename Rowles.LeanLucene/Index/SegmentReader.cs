@@ -18,6 +18,8 @@ public sealed class SegmentReader : IDisposable
     private readonly int[] _fieldLengths;
     private readonly Dictionary<string, Dictionary<int, double>> _numericIndex = new();
     private readonly VectorReader? _vectorReader;
+    private readonly Dictionary<string, double[]> _numericDocValues;
+    private readonly Dictionary<string, string[]> _sortedDocValues;
     private LiveDocs? _liveDocs;
     private string? _lastQualifiedTerm;
     private long _lastPostingsOffset;
@@ -64,6 +66,9 @@ public sealed class SegmentReader : IDisposable
         var vecPath = basePath + ".vec";
         if (File.Exists(vecPath))
             _vectorReader = VectorReader.Open(vecPath);
+
+        _numericDocValues = NumericDocValuesReader.Read(basePath + ".dvn");
+        _sortedDocValues = SortedDocValuesReader.Read(basePath + ".dvs");
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -225,8 +230,36 @@ public sealed class SegmentReader : IDisposable
     public bool TryGetNumericValue(string field, int docId, out double value)
     {
         value = 0;
+        // Prefer column-stride DocValues (faster, no dict lookup per doc)
+        if (_numericDocValues.TryGetValue(field, out var dvArr) && (uint)docId < (uint)dvArr.Length)
+        {
+            value = dvArr[docId];
+            return true;
+        }
         return _numericIndex.TryGetValue(field, out var fieldMap) && fieldMap.TryGetValue(docId, out value);
     }
+
+    /// <summary>
+    /// Tries to get a string DocValues field value for a document.
+    /// </summary>
+    public bool TryGetSortedDocValue(string field, int docId, out string value)
+    {
+        value = string.Empty;
+        if (_sortedDocValues.TryGetValue(field, out var arr) && (uint)docId < (uint)arr.Length)
+        {
+            value = arr[docId];
+            return true;
+        }
+        return false;
+    }
+
+    /// <summary>Returns the NumericDocValues array for a field, or null if unavailable.</summary>
+    public double[]? GetNumericDocValues(string field)
+        => _numericDocValues.GetValueOrDefault(field);
+
+    /// <summary>Returns the SortedDocValues array for a field, or null if unavailable.</summary>
+    public string[]? GetSortedDocValues(string field)
+        => _sortedDocValues.GetValueOrDefault(field);
 
     /// <summary>
     /// Returns all document IDs that have a numeric value in the given field within the specified range.

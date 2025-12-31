@@ -7,4 +7,8 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="Rowles.LeanLucene.Tests" />
+  </ItemGroup>
+
 </Project>

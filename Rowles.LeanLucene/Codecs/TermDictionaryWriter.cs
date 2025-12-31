@@ -1,3 +1,5 @@
+using Rowles.LeanLucene.Store;
+
 namespace Rowles.LeanLucene.Codecs;
 
 /// <summary>
@@ -31,21 +33,20 @@ public static class TermDictionaryWriter
         // Second pass: compute header size, adjust skip offsets, then write the file.
         long headerSize = ComputeHeaderSize(skipEntries);
 
-        using var fs = new FileStream(filePath, FileMode.Create, FileAccess.Write, FileShare.None);
-        using var writer = new BinaryWriter(fs, System.Text.Encoding.UTF8, leaveOpen: false);
+        using var output = new IndexOutput(filePath);
 
         // Write skip index header.
-        writer.Write(skipEntries.Count);
+        output.WriteInt32(skipEntries.Count);
         foreach (var (term, offset) in skipEntries)
         {
-            writer.Write(term.Length);
-            writer.Write(term.ToCharArray());
-            writer.Write(headerSize + offset);
+            output.WriteInt32(term.Length);
+            var charBytes = System.Text.Encoding.UTF8.GetBytes(term.ToCharArray());
+            output.WriteBytes(charBytes);
+            output.WriteInt64(headerSize + offset);
         }
 
-        // Write term entries.
-        termBuffer.Position = 0;
-        termBuffer.CopyTo(fs);
+        // Write term entries from the pre-built buffer.
+        output.WriteBytes(termBuffer.GetBuffer().AsSpan(0, (int)termBuffer.Length));
     }
 
     private static void WriteTermEntry(BinaryWriter writer, string term, long postingsOffset)

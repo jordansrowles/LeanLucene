@@ -16,11 +16,24 @@ public sealed class IndexOutput : IDisposable
     private int _bufferPosition;
     private bool _disposed;
 
+    /// <summary>Current logical write position (buffered + flushed).</summary>
+    public long Position => _stream.Position + _bufferPosition;
+
     public IndexOutput(string filePath)
     {
         _stream = new FileStream(filePath, FileMode.Create, FileAccess.Write, FileShare.None);
         _buffer = ArrayPool<byte>.Shared.Rent(BufferSize);
         _bufferPosition = 0;
+    }
+
+    /// <summary>
+    /// Seeks to an absolute position. Flushes the buffer first to ensure consistency.
+    /// Use sparingly — this forces a buffer flush.
+    /// </summary>
+    public void Seek(long position)
+    {
+        FlushBuffer();
+        _stream.Seek(position, SeekOrigin.Begin);
     }
 
     public void WriteBytes(ReadOnlySpan<byte> data)
@@ -48,12 +61,21 @@ public sealed class IndexOutput : IDisposable
         WriteBytes(tmp);
     }
 
+    public void WriteInt64(long value)
+    {
+        Span<byte> tmp = stackalloc byte[sizeof(long)];
+        Unsafe.WriteUnaligned(ref tmp[0], value);
+        WriteBytes(tmp);
+    }
+
     public void WriteSingle(float value)
     {
         Span<byte> tmp = stackalloc byte[sizeof(float)];
         Unsafe.WriteUnaligned(ref tmp[0], value);
         WriteBytes(tmp);
     }
+
+    public void WriteBoolean(bool value) => WriteByte(value ? (byte)1 : (byte)0);
 
     public void WriteByte(byte value)
     {

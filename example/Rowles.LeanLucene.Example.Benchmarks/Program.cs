@@ -31,6 +31,34 @@ internal static class Program
             suiteArtifacts.Add(("index", indexArtifactsPath));
         }
 
+        if (suite is BenchmarkSuite.All or BenchmarkSuite.Analysis)
+        {
+            var analysisArtifactsPath = BuildArtifactsPath(dataDirectory, runId, "analysis");
+            BenchmarkRunner.Run<AnalysisBenchmarks>(BuildConfig(analysisArtifactsPath), benchmarkArgs);
+            suiteArtifacts.Add(("analysis", analysisArtifactsPath));
+        }
+
+        if (suite is BenchmarkSuite.All or BenchmarkSuite.Boolean)
+        {
+            var boolArtifactsPath = BuildArtifactsPath(dataDirectory, runId, "boolean");
+            BenchmarkRunner.Run<BooleanQueryBenchmarks>(BuildConfig(boolArtifactsPath), benchmarkArgs);
+            suiteArtifacts.Add(("boolean", boolArtifactsPath));
+        }
+
+        if (suite is BenchmarkSuite.All or BenchmarkSuite.Phrase)
+        {
+            var phraseArtifactsPath = BuildArtifactsPath(dataDirectory, runId, "phrase");
+            BenchmarkRunner.Run<PhraseQueryBenchmarks>(BuildConfig(phraseArtifactsPath), benchmarkArgs);
+            suiteArtifacts.Add(("phrase", phraseArtifactsPath));
+        }
+
+        if (suite is BenchmarkSuite.All or BenchmarkSuite.SmallIndex)
+        {
+            var smallArtifactsPath = BuildArtifactsPath(dataDirectory, runId, "smallindex");
+            BenchmarkRunner.Run<SmallIndexBenchmarks>(BuildConfig(smallArtifactsPath), benchmarkArgs);
+            suiteArtifacts.Add(("smallindex", smallArtifactsPath));
+        }
+
         if (suiteArtifacts.Count == 0)
         {
             Console.Error.WriteLine("No benchmark suite selected.");
@@ -79,14 +107,17 @@ internal static class Program
     private static BenchmarkSuite ParseSuite(string value)
     {
         if (value.Equals("index", StringComparison.OrdinalIgnoreCase))
-        {
             return BenchmarkSuite.Index;
-        }
-
         if (value.Equals("query", StringComparison.OrdinalIgnoreCase))
-        {
             return BenchmarkSuite.Query;
-        }
+        if (value.Equals("analysis", StringComparison.OrdinalIgnoreCase))
+            return BenchmarkSuite.Analysis;
+        if (value.Equals("boolean", StringComparison.OrdinalIgnoreCase))
+            return BenchmarkSuite.Boolean;
+        if (value.Equals("phrase", StringComparison.OrdinalIgnoreCase))
+            return BenchmarkSuite.Phrase;
+        if (value.Equals("smallindex", StringComparison.OrdinalIgnoreCase))
+            return BenchmarkSuite.SmallIndex;
 
         return BenchmarkSuite.All;
     }
@@ -113,6 +144,10 @@ internal static class Program
     {
         All,
         Index,
-        Query
+        Query,
+        Analysis,
+        Boolean,
+        Phrase,
+        SmallIndex
     }
 }

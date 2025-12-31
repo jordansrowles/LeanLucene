@@ -276,10 +276,18 @@ public sealed class SegmentMerger
         // Write .dic
         TermDictionaryWriter.Write(basePath + ".dic", sortedTerms, postingsOffsets);
 
-        // Write .nrm (simple: all docs get equal norm for now)
+        // Write .nrm — carry forward norms from source segments
         var norms = new float[totalDocs];
-        for (int i = 0; i < totalDocs; i++)
-            norms[i] = 1.0f / (1.0f + 1); // simplified
+        int normIdx = 0;
+        foreach (var segInfo in segments)
+        {
+            using var normReader = new SegmentReader(_directory, segInfo);
+            for (int oldDocId = 0; oldDocId < segInfo.DocCount; oldDocId++)
+            {
+                if (!normReader.IsLive(oldDocId)) continue;
+                norms[normIdx++] = normReader.GetNorm(oldDocId);
+            }
+        }
         NormsWriter.Write(basePath + ".nrm", norms);
 
         // Write .fdt + .fdx
@@ -325,6 +333,10 @@ public sealed class SegmentMerger
             dicBr.ReadInt64();
         }
 
+        // Open the .pos file once and reuse across all terms
+        using var posFs = new FileStream(posPath, FileMode.Open, FileAccess.Read, FileShare.Read);
+        using var posBr = new BinaryReader(posFs, System.Text.Encoding.UTF8, leaveOpen: false);
+
         while (dicFs.Position < dicFs.Length)
         {
             int termLen;
@@ -335,8 +347,6 @@ public sealed class SegmentMerger
             long postingsOffset = dicBr.ReadInt64();
             string qualifiedTerm = new string(chars);
 
-            using var posFs = new FileStream(posPath, FileMode.Open, FileAccess.Read, FileShare.Read);
-            using var posBr = new BinaryReader(posFs, System.Text.Encoding.UTF8, leaveOpen: false);
             posFs.Seek(postingsOffset, SeekOrigin.Begin);
 
             int count = posBr.ReadInt32();

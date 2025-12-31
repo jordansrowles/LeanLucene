@@ -16,8 +16,8 @@ public sealed class IndexWriter : IDisposable
     private readonly IndexWriterConfig _config;
     private readonly IAnalyser _defaultAnalyser;
 
-    // Buffered in-memory inverted index: field → term → list of doc IDs
-    private Dictionary<string, Dictionary<string, List<int>>> _invertedIndex = new();
+    // Unified posting accumulator keyed by qualified term ("field\0term")
+    private Dictionary<string, PostingAccumulator> _postings = new(StringComparer.Ordinal);
     // Buffered stored fields per document (local doc ID → field data)
     private List<Dictionary<string, string>> _storedFields = [];
     // Buffered numeric fields per document
@@ -25,12 +25,16 @@ public sealed class IndexWriter : IDisposable
     // Per-field numeric values for range indexing: field → docId → value
     private Dictionary<string, Dictionary<int, double>> _numericIndex = new();
     private Dictionary<int, (string FieldName, float[] Vector)> _bufferedVectors = new();
-    private Dictionary<string, Dictionary<string, Dictionary<int, int>>> _termFreqs = new();
-    // Term positions: field → term → docId → list of positions
-    private Dictionary<string, Dictionary<string, Dictionary<int, List<int>>>> _termPositions = new();
     private readonly HashSet<string> _termPool = new(StringComparer.Ordinal);
     // Per-doc token count for O(1) norm computation
     private int[] _docTokenCounts = new int[64];
+    // Track field names seen in this flush
+    private readonly HashSet<string> _fieldNames = new(StringComparer.Ordinal);
+    // Cache qualified term strings to avoid repeated string.Concat
+    private Dictionary<(string Field, string Term), string> _qualifiedTermPool = new();
+    // DocValues accumulators: field → per-doc values
+    private Dictionary<string, List<double>> _numericDocValues = new(StringComparer.Ordinal);
+    private Dictionary<string, List<string?>> _sortedDocValues = new(StringComparer.Ordinal);
 
     private int _bufferedDocCount;
     private long _estimatedRamBytes;
@@ -42,6 +46,7 @@ public sealed class IndexWriter : IDisposable
     private readonly Lock _writeLock = new();
     private readonly SemaphoreSlim? _backpressureSemaphore;
     private int _semaphoreSlotsHeld; // Track how many semaphore slots are currently held
+    private readonly List<IndexSnapshot> _heldSnapshots = [];
     private bool _disposed;
 
     public IndexWriter(MMapDirectory directory, IndexWriterConfig config)
@@ -103,11 +108,118 @@ public sealed class IndexWriter : IDisposable
         }
     }
 
+    /// <summary>
+    /// Indexes a batch of documents concurrently using per-thread buffers (DWPT-style).
+    /// Analysis and posting accumulation run in parallel; the merge into the writer's
+    /// buffer is serialised. Call <see cref="Commit"/> afterwards to persist.
+    /// </summary>
+    public void AddDocumentsConcurrent(IReadOnlyList<LeanDocument> documents)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        if (documents.Count == 0) return;
+
+        // Partition docs into per-thread chunks and process in parallel
+        var fieldAnalysers = _config.FieldAnalysers;
+        var perThreadResults = new System.Collections.Concurrent.ConcurrentBag<DocumentsWriterPerThread>();
+
+        Parallel.ForEach(
+            System.Collections.Concurrent.Partitioner.Create(0, documents.Count),
+            () => new DocumentsWriterPerThread(_defaultAnalyser, fieldAnalysers),
+            (range, _, dwpt) =>
+            {
+                for (int i = range.Item1; i < range.Item2; i++)
+                    dwpt.AddDocument(documents[i], i);
+                return dwpt;
+            },
+            dwpt => perThreadResults.Add(dwpt));
+
+        // Merge all per-thread results into the writer under the lock
+        lock (_writeLock)
+        {
+            foreach (var dwpt in perThreadResults)
+                MergeDwpt(dwpt);
+        }
+    }
+
+    private void MergeDwpt(DocumentsWriterPerThread dwpt)
+    {
+        int docBase = _bufferedDocCount;
+        // Merge postings with doc ID remapping
+        foreach (var (qt, srcAcc) in dwpt.Postings)
+        {
+            if (!_postings.TryGetValue(qt, out var dstAcc))
+            {
+                dstAcc = new PostingAccumulator();
+                _postings[qt] = dstAcc;
+            }
+            var srcIds = srcAcc.DocIds;
+            for (int i = 0; i < srcIds.Length; i++)
+            {
+                int remappedDocId = srcIds[i] + docBase;
+                if (srcAcc.HasPositions)
+                {
+                    var positions = srcAcc.GetPositions(i);
+                    foreach (var p in positions)
+                        dstAcc.Add(remappedDocId, p);
+                }
+                else
+                {
+                    dstAcc.AddDocOnly(remappedDocId);
+                }
+            }
+        }
+
+        // Merge stored fields
+        foreach (var storedDoc in dwpt.StoredFields)
+            _storedFields.Add(storedDoc);
+
+        // Merge token counts
+        int newTotal = docBase + dwpt.DocCount;
+        if (newTotal > _docTokenCounts.Length)
+            Array.Resize(ref _docTokenCounts, Math.Max(_docTokenCounts.Length * 2, newTotal));
+        for (int i = 0; i < dwpt.DocCount && i < dwpt.DocTokenCounts.Length; i++)
+            _docTokenCounts[docBase + i] = dwpt.DocTokenCounts[i];
+
+        // Merge field names
+        foreach (var fn in dwpt.FieldNames)
+            _fieldNames.Add(fn);
+
+        // Merge numeric index
+        foreach (var (field, map) in dwpt.NumericIndex)
+        {
+            if (!_numericIndex.TryGetValue(field, out var dstMap))
+            {
+                dstMap = new Dictionary<int, double>();
+                _numericIndex[field] = dstMap;
+            }
+            foreach (var (docId, val) in map)
+                dstMap[docId + docBase] = val;
+        }
+
+        // Merge numeric doc values
+        foreach (var (field, list) in dwpt.NumericDocValues)
+        {
+            if (!_numericDocValues.TryGetValue(field, out var dstList))
+            {
+                dstList = new List<double>();
+                _numericDocValues[field] = dstList;
+            }
+            while (dstList.Count < docBase) dstList.Add(0);
+            dstList.AddRange(list);
+        }
+
+        _bufferedDocCount += dwpt.DocCount;
+        _estimatedRamBytes += dwpt.DocCount * 200;
+
+        if (ShouldFlush())
+            FlushSegment();
+    }
+
     private void AddDocumentCore(LeanDocument doc)
     {
         int localDocId = _bufferedDocCount;
         var storedDoc = new Dictionary<string, string>();
-        var numericDoc = new Dictionary<string, double>();
+        Dictionary<string, double>? numericDoc = null;
 
         foreach (var field in doc.Fields)
         {
@@ -125,6 +237,7 @@ public sealed class IndexWriter : IDisposable
                     break;
                 case NumericField nf:
                     IndexNumericField(nf.Name, nf.Value, localDocId);
+                    numericDoc ??= new Dictionary<string, double>();
                     if (nf.IsStored)
                         storedDoc[nf.Name] = nf.Value.ToString(System.Globalization.CultureInfo.InvariantCulture);
                     break;
@@ -135,7 +248,8 @@ public sealed class IndexWriter : IDisposable
         }
 
         _storedFields.Add(storedDoc);
-        _numericFields.Add(numericDoc);
+        if (numericDoc is not null)
+            _numericFields.Add(numericDoc);
         _bufferedDocCount++;
 
         // Estimate RAM usage (rough: 100 bytes per token entry + stored field sizes)
@@ -224,6 +338,60 @@ public sealed class IndexWriter : IDisposable
         return _committedSegments.AsReadOnly();
     }
 
+    /// <summary>
+    /// Creates a point-in-time snapshot of the currently committed segments.
+    /// While held, segments referenced by the snapshot will not be deleted during merge.
+    /// Call <see cref="ReleaseSnapshot"/> when the snapshot is no longer needed.
+    /// </summary>
+    public IndexSnapshot CreateSnapshot()
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        lock (_writeLock)
+        {
+            // Flush any pending docs so the snapshot is up to date
+            if (_bufferedDocCount > 0)
+                FlushSegment();
+
+            var snapshot = new IndexSnapshot(
+                _commitGeneration,
+                _committedSegments.Select(s => new SegmentInfo
+                {
+                    SegmentId = s.SegmentId,
+                    DocCount = s.DocCount,
+                    LiveDocCount = s.LiveDocCount,
+                    CommitGeneration = s.CommitGeneration,
+                    FieldNames = [.. s.FieldNames]
+                }).ToList().AsReadOnly());
+
+            _heldSnapshots.Add(snapshot);
+            return snapshot;
+        }
+    }
+
+    /// <summary>
+    /// Releases a previously held snapshot, allowing its segments to be merged away.
+    /// </summary>
+    public void ReleaseSnapshot(IndexSnapshot snapshot)
+    {
+        ArgumentNullException.ThrowIfNull(snapshot);
+        lock (_writeLock)
+        {
+            _heldSnapshots.Remove(snapshot);
+        }
+    }
+
+    /// <summary>Returns the set of segment IDs protected by active snapshots.</summary>
+    internal HashSet<string> GetSnapshotProtectedSegments()
+    {
+        var ids = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var snap in _heldSnapshots)
+        {
+            foreach (var seg in snap.Segments)
+                ids.Add(seg.SegmentId);
+        }
+        return ids;
+    }
+
     private void IndexTextField(string fieldName, string value, int docId)
     {
         var analyser = _config.FieldAnalysers.GetValueOrDefault(fieldName, _defaultAnalyser);
@@ -234,63 +402,45 @@ public sealed class IndexWriter : IDisposable
             Array.Resize(ref _docTokenCounts, Math.Max(_docTokenCounts.Length * 2, docId + 1));
         _docTokenCounts[docId] += tokens.Count;
 
-        if (!_invertedIndex.ContainsKey(fieldName))
-            _invertedIndex[fieldName] = new Dictionary<string, List<int>>();
-        if (!_termFreqs.ContainsKey(fieldName))
-            _termFreqs[fieldName] = new Dictionary<string, Dictionary<int, int>>();
-        if (!_termPositions.ContainsKey(fieldName))
-            _termPositions[fieldName] = new Dictionary<string, Dictionary<int, List<int>>>();
-
-        var fieldIndex = _invertedIndex[fieldName];
-        var fieldFreqs = _termFreqs[fieldName];
-        var fieldPos = _termPositions[fieldName];
+        _fieldNames.Add(fieldName);
 
         for (int pos = 0; pos < tokens.Count; pos++)
         {
             var term = CanonicaliseTerm(tokens[pos].Text);
-            if (!fieldIndex.TryGetValue(term, out var docList))
-            {
-                docList = [];
-                fieldIndex[term] = docList;
-            }
-            if (docList.Count == 0 || docList[^1] != docId)
-                docList.Add(docId);
 
-            if (!fieldFreqs.TryGetValue(term, out var freqMap))
+            // Try direct lookup first to avoid allocating the qualified term string
+            if (!_qualifiedTermPool.TryGetValue((fieldName, term), out var qualifiedTerm))
             {
-                freqMap = new Dictionary<int, int>();
-                fieldFreqs[term] = freqMap;
+                qualifiedTerm = string.Concat(fieldName, "\x00", term);
+                _qualifiedTermPool[(fieldName, term)] = qualifiedTerm;
             }
-            freqMap[docId] = freqMap.GetValueOrDefault(docId) + 1;
 
-            if (!fieldPos.TryGetValue(term, out var posMap))
+            if (!_postings.TryGetValue(qualifiedTerm, out var acc))
             {
-                posMap = new Dictionary<int, List<int>>();
-                fieldPos[term] = posMap;
+                acc = new PostingAccumulator();
+                _postings[qualifiedTerm] = acc;
             }
-            if (!posMap.TryGetValue(docId, out var posList))
-            {
-                posList = [];
-                posMap[docId] = posList;
-            }
-            posList.Add(pos);
+            acc.Add(docId, pos);
         }
     }
 
     private void IndexStringField(string fieldName, string value, int docId)
     {
-        // String fields are indexed as a single exact term (not analysed)
-        if (!_invertedIndex.ContainsKey(fieldName))
-            _invertedIndex[fieldName] = new Dictionary<string, List<int>>();
-
-        var fieldIndex = _invertedIndex[fieldName];
+        _fieldNames.Add(fieldName);
         var term = CanonicaliseTerm(value);
-        if (!fieldIndex.TryGetValue(term, out var docList))
+
+        if (!_qualifiedTermPool.TryGetValue((fieldName, term), out var qualifiedTerm))
         {
-            docList = [];
-            fieldIndex[term] = docList;
+            qualifiedTerm = string.Concat(fieldName, "\x00", term);
+            _qualifiedTermPool[(fieldName, term)] = qualifiedTerm;
         }
-        docList.Add(docId);
+
+        if (!_postings.TryGetValue(qualifiedTerm, out var acc))
+        {
+            acc = new PostingAccumulator();
+            _postings[qualifiedTerm] = acc;
+        }
+        acc.AddDocOnly(docId);
     }
 
     private bool ShouldFlush()
@@ -313,7 +463,7 @@ public sealed class IndexWriter : IDisposable
         var basePath = Path.Combine(_directory.DirectoryPath, segId);
 
         // Collect all field names
-        var fieldNames = _invertedIndex.Keys.ToList();
+        var fieldNames = _fieldNames.ToList();
 
         // Write segment metadata (.seg)
         var segInfo = new SegmentInfo
@@ -327,48 +477,36 @@ public sealed class IndexWriter : IDisposable
         segInfo.WriteTo(basePath + ".seg");
 
         // Write term dictionary and postings per field
-        // Combine all fields into one .dic and .pos for simplicity
-        var allTerms = new SortedDictionary<string, long>(StringComparer.Ordinal);
-        var postingsData = new Dictionary<string, int[]>();
-
-        foreach (var (fieldName, terms) in _invertedIndex)
-        {
-            foreach (var (term, docIds) in terms)
-            {
-                // Prefix terms with field name to disambiguate
-                var qualifiedTerm = $"{fieldName}\x00{term}";
-                postingsData[qualifiedTerm] = docIds.ToArray();
-            }
-        }
-
-        // Write postings first to determine offsets
-        var sortedQualifiedTerms = postingsData.Keys.OrderBy(k => k, StringComparer.Ordinal).ToList();
+        // Sort qualified terms for the dictionary
+        var sortedQualifiedTerms = _postings.Keys.OrderBy(k => k, StringComparer.Ordinal).ToList();
         var postingsOffsets = new Dictionary<string, long>();
 
-        // Write all postings to a single .pos file
+        // Write all postings to a single .pos file using pooled IndexOutput
         const int SkipInterval = 128;
-        using (var posStream = new BinaryWriter(File.Create(basePath + ".pos")))
+        using (var posOutput = new IndexOutput(basePath + ".pos"))
         {
             foreach (var qt in sortedQualifiedTerms)
             {
-                postingsOffsets[qt] = posStream.BaseStream.Position;
-                var ids = postingsData[qt];
-                posStream.Write(ids.Length);
+                var acc = _postings[qt];
+                var ids = acc.DocIds;
+
+                postingsOffsets[qt] = posOutput.Position;
+                posOutput.WriteInt32(ids.Length);
 
                 // Write skip pointer entries (every SkipInterval docs)
                 int skipCount = ids.Length >= SkipInterval ? (ids.Length - 1) / SkipInterval : 0;
-                posStream.Write(skipCount);
+                posOutput.WriteInt32(skipCount);
 
                 if (skipCount > 0)
                 {
                     // Reserve space for skip entries, fill in after writing deltas
-                    long skipTablePos = posStream.BaseStream.Position;
+                    long skipTablePos = posOutput.Position;
                     for (int s = 0; s < skipCount; s++)
                     {
-                        posStream.Write(0); // placeholder docId
-                        posStream.Write(0); // placeholder byte offset
+                        posOutput.WriteInt32(0); // placeholder docId
+                        posOutput.WriteInt32(0); // placeholder byte offset
                     }
-                    long deltaStartPos = posStream.BaseStream.Position;
+                    long deltaStartPos = posOutput.Position;
 
                     int prev = 0;
                     for (int i = 0; i < ids.Length; i++)
@@ -376,13 +514,13 @@ public sealed class IndexWriter : IDisposable
                         if (i > 0 && i % SkipInterval == 0)
                         {
                             int skipIdx = (i / SkipInterval) - 1;
-                            long currentPos = posStream.BaseStream.Position;
-                            posStream.BaseStream.Seek(skipTablePos + skipIdx * 8, SeekOrigin.Begin);
-                            posStream.Write(ids[i - 1]); // docId at boundary
-                            posStream.Write((int)(currentPos - deltaStartPos)); // byte offset
-                            posStream.BaseStream.Seek(currentPos, SeekOrigin.Begin);
+                            long currentPos = posOutput.Position;
+                            posOutput.Seek(skipTablePos + skipIdx * 8);
+                            posOutput.WriteInt32(ids[i - 1]); // docId at boundary
+                            posOutput.WriteInt32((int)(currentPos - deltaStartPos)); // byte offset
+                            posOutput.Seek(currentPos);
                         }
-                        PostingsWriter.WriteVarInt(posStream, ids[i] - prev);
+                        posOutput.WriteVarInt(ids[i] - prev);
                         prev = ids[i];
                     }
                 }
@@ -392,38 +530,31 @@ public sealed class IndexWriter : IDisposable
                     int prev = 0;
                     foreach (var id in ids)
                     {
-                        PostingsWriter.WriteVarInt(posStream, id - prev);
+                        posOutput.WriteVarInt(id - prev);
                         prev = id;
                     }
                 }
 
-                var parts = qt.Split('\x00', 2);
-                Dictionary<int, int>? freqMap = null;
-                bool hasFreqs = parts.Length == 2 && _termFreqs.TryGetValue(parts[0], out var fieldFreqs)
-                    && fieldFreqs.TryGetValue(parts[1], out freqMap);
-
-                posStream.Write(hasFreqs);
+                bool hasFreqs = acc.HasFreqs;
+                posOutput.WriteBoolean(hasFreqs);
                 if (hasFreqs)
                 {
-                    foreach (var id in ids)
-                        PostingsWriter.WriteVarInt(posStream, freqMap!.GetValueOrDefault(id, 1));
+                    for (int i = 0; i < ids.Length; i++)
+                        posOutput.WriteVarInt(acc.GetFreq(i));
                 }
 
-                Dictionary<int, List<int>>? posMap = null;
-                bool hasPositions = parts.Length == 2 && _termPositions.TryGetValue(parts[0], out var fieldPositions)
-                    && fieldPositions.TryGetValue(parts[1], out posMap);
-
-                posStream.Write(hasPositions);
+                bool hasPositions = acc.HasPositions;
+                posOutput.WriteBoolean(hasPositions);
                 if (hasPositions)
                 {
-                    foreach (var id in ids)
+                    for (int i = 0; i < ids.Length; i++)
                     {
-                        var positions = posMap!.GetValueOrDefault(id, []);
-                        PostingsWriter.WriteVarInt(posStream, positions.Count);
+                        var positions = acc.GetPositions(i);
+                        posOutput.WriteVarInt(positions.Length);
                         int prevPos = 0;
                         foreach (var p in positions)
                         {
-                            PostingsWriter.WriteVarInt(posStream, p - prevPos);
+                            posOutput.WriteVarInt(p - prevPos);
                             prevPos = p;
                         }
                     }
@@ -457,6 +588,33 @@ public sealed class IndexWriter : IDisposable
                 vectors[i] = _bufferedVectors.TryGetValue(i, out var entry) ? entry.Vector : [];
 
             VectorWriter.Write(basePath + ".vec", vectors);
+        }
+
+        // Write DocValues column-stride files
+        if (_numericDocValues.Count > 0)
+        {
+            var dvn = new Dictionary<string, double[]>(_numericDocValues.Count, StringComparer.Ordinal);
+            foreach (var (field, list) in _numericDocValues)
+            {
+                var arr = new double[_bufferedDocCount];
+                for (int i = 0; i < Math.Min(list.Count, _bufferedDocCount); i++)
+                    arr[i] = list[i];
+                dvn[field] = arr;
+            }
+            NumericDocValuesWriter.Write(basePath + ".dvn", dvn, _bufferedDocCount);
+        }
+
+        if (_sortedDocValues.Count > 0)
+        {
+            var dvs = new Dictionary<string, string?[]>(_sortedDocValues.Count, StringComparer.Ordinal);
+            foreach (var (field, list) in _sortedDocValues)
+            {
+                var arr = new string?[_bufferedDocCount];
+                for (int i = 0; i < Math.Min(list.Count, _bufferedDocCount); i++)
+                    arr[i] = list[i];
+                dvs[field] = arr;
+            }
+            SortedDocValuesWriter.Write(basePath + ".dvs", dvs, _bufferedDocCount);
         }
 
         _committedSegments.Add(segInfo);
@@ -557,14 +715,16 @@ public sealed class IndexWriter : IDisposable
 
     private void ResetBuffer()
     {
-        _invertedIndex = new Dictionary<string, Dictionary<string, List<int>>>();
+        _postings = new Dictionary<string, PostingAccumulator>(StringComparer.Ordinal);
         _storedFields = [];
         _numericFields = [];
-        _termFreqs = new Dictionary<string, Dictionary<string, Dictionary<int, int>>>();
-        _termPositions = new Dictionary<string, Dictionary<string, Dictionary<int, List<int>>>>();
         _termPool.Clear();
+        _fieldNames.Clear();
+        _qualifiedTermPool = new();
         _numericIndex = new Dictionary<string, Dictionary<int, double>>();
         _bufferedVectors = new();
+        _numericDocValues = new(StringComparer.Ordinal);
+        _sortedDocValues = new(StringComparer.Ordinal);
         _bufferedDocCount = 0;
         _estimatedRamBytes = 0;
         Array.Clear(_docTokenCounts);
@@ -595,6 +755,17 @@ public sealed class IndexWriter : IDisposable
             _numericIndex[fieldName] = fieldMap;
         }
         fieldMap[docId] = value;
+
+        // Also accumulate for NumericDocValues column-stride storage
+        if (!_numericDocValues.TryGetValue(fieldName, out var dvList))
+        {
+            dvList = new List<double>();
+            _numericDocValues[fieldName] = dvList;
+        }
+        // Pad with 0 for any skipped docs
+        while (dvList.Count < docId)
+            dvList.Add(0);
+        dvList.Add(value);
     }
 
     private void WriteNumericIndex(string filePath)

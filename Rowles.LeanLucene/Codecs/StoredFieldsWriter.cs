@@ -20,16 +20,20 @@ public static class StoredFieldsWriter
         fdtWriter.Write(BlockSize);
 
         var blockOffsets = new List<long>();
-        var docOffsetsInBlock = new List<int>(); // relative offsets within decompressed block
+
+        // Reusable buffers across blocks
+        var rawStream = new MemoryStream(4096);
+        var rawWriter = new BinaryWriter(rawStream, System.Text.Encoding.UTF8, leaveOpen: true);
+        var compStream = new MemoryStream(4096);
 
         for (int blockStart = 0; blockStart < docs.Length; blockStart += BlockSize)
         {
             int blockEnd = Math.Min(blockStart + BlockSize, docs.Length);
             int blockCount = blockEnd - blockStart;
 
-            // Serialise the block's documents into a memory buffer
-            using var rawStream = new MemoryStream();
-            using var rawWriter = new BinaryWriter(rawStream, System.Text.Encoding.UTF8, leaveOpen: true);
+            // Reset reusable streams
+            rawStream.SetLength(0);
+            rawStream.Position = 0;
 
             var intraOffsets = new int[blockCount];
             for (int i = 0; i < blockCount; i++)
@@ -49,25 +53,30 @@ public static class StoredFieldsWriter
             }
             rawWriter.Flush();
 
-            var rawData = rawStream.ToArray();
+            int rawLength = (int)rawStream.Length;
 
-            // Compress with Brotli (quality 4 = fast)
-            using var compStream = new MemoryStream();
+            // Compress with Brotli (quality 4 = fast), reuse compStream
+            compStream.SetLength(0);
+            compStream.Position = 0;
             using (var brotli = new BrotliStream(compStream, CompressionLevel.Fastest, leaveOpen: true))
             {
-                brotli.Write(rawData);
+                brotli.Write(rawStream.GetBuffer().AsSpan(0, rawLength));
             }
-            var compData = compStream.ToArray();
+            int compLength = (int)compStream.Length;
 
             // Write block: [int: docCount][int: rawLength][int: compLength][int[]: intraOffsets][byte[]: compData]
             blockOffsets.Add(fdtStream.Position);
             fdtWriter.Write(blockCount);
-            fdtWriter.Write(rawData.Length);
-            fdtWriter.Write(compData.Length);
+            fdtWriter.Write(rawLength);
+            fdtWriter.Write(compLength);
             for (int i = 0; i < blockCount; i++)
                 fdtWriter.Write(intraOffsets[i]);
-            fdtWriter.Write(compData);
+            fdtWriter.Write(compStream.GetBuffer().AsSpan(0, compLength));
         }
+
+        rawWriter.Dispose();
+        rawStream.Dispose();
+        compStream.Dispose();
 
         fdtWriter.Flush();
 

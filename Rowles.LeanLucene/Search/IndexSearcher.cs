@@ -116,6 +116,188 @@ public sealed class IndexSearcher : IDisposable
         return Search(query, topN);
     }
 
+    /// <summary>
+    /// Searches with a custom sort order instead of relevance ranking.
+    /// First finds all matches, then sorts by the specified field.
+    /// </summary>
+    public TopDocs Search(Query query, int topN, SortField sort)
+    {
+        if (sort.Type == SortFieldType.Score)
+            return Search(query, topN);
+
+        // Collect all matching docs with scores
+        var allDocs = Search(query, int.MaxValue / 2 > 0 ? 10000 : 10000);
+        if (allDocs.TotalHits == 0) return TopDocs.Empty;
+
+        var sorted = sort.Type switch
+        {
+            SortFieldType.DocId => SortByDocId(allDocs.ScoreDocs, sort.Descending),
+            SortFieldType.Numeric => SortByNumericField(allDocs.ScoreDocs, sort.FieldName, sort.Descending),
+            SortFieldType.String => SortByStringField(allDocs.ScoreDocs, sort.FieldName, sort.Descending),
+            _ => allDocs.ScoreDocs
+        };
+
+        var results = sorted.Length > topN ? sorted[..topN] : sorted;
+        return new TopDocs(allDocs.TotalHits, results);
+    }
+
+    private static ScoreDoc[] SortByDocId(ScoreDoc[] docs, bool descending)
+    {
+        var copy = docs.ToArray();
+        Array.Sort(copy, descending
+            ? static (a, b) => b.DocId.CompareTo(a.DocId)
+            : static (a, b) => a.DocId.CompareTo(b.DocId));
+        return copy;
+    }
+
+    private ScoreDoc[] SortByNumericField(ScoreDoc[] docs, string fieldName, bool descending)
+    {
+        var withValues = new (ScoreDoc Doc, double Value)[docs.Length];
+        for (int i = 0; i < docs.Length; i++)
+        {
+            double val = 0;
+            int globalId = docs[i].DocId;
+            // Use DocValues (fast column-stride) with fallback to stored fields
+            bool found = false;
+            for (int r = 0; r < _readers.Count; r++)
+            {
+                int nextBase = r + 1 < _docBases.Length ? _docBases[r + 1] : _totalDocCount;
+                if (globalId >= _docBases[r] && globalId < nextBase)
+                {
+                    found = _readers[r].TryGetNumericValue(fieldName, globalId - _docBases[r], out val);
+                    break;
+                }
+            }
+            if (!found)
+            {
+                var stored = GetStoredFields(globalId);
+                if (stored.TryGetValue(fieldName, out var str))
+                    double.TryParse(str, System.Globalization.CultureInfo.InvariantCulture, out val);
+            }
+            withValues[i] = (docs[i], val);
+        }
+
+        Array.Sort(withValues, descending
+            ? static (a, b) => b.Value.CompareTo(a.Value)
+            : static (a, b) => a.Value.CompareTo(b.Value));
+
+        var result = new ScoreDoc[withValues.Length];
+        for (int i = 0; i < result.Length; i++)
+            result[i] = withValues[i].Doc;
+        return result;
+    }
+
+    private ScoreDoc[] SortByStringField(ScoreDoc[] docs, string fieldName, bool descending)
+    {
+        var withValues = new (ScoreDoc Doc, string Value)[docs.Length];
+        for (int i = 0; i < docs.Length; i++)
+        {
+            string val = string.Empty;
+            int globalId = docs[i].DocId;
+            // Try SortedDocValues first, fallback to stored fields
+            bool found = false;
+            for (int r = 0; r < _readers.Count; r++)
+            {
+                int nextBase = r + 1 < _docBases.Length ? _docBases[r + 1] : _totalDocCount;
+                if (globalId >= _docBases[r] && globalId < nextBase)
+                {
+                    found = _readers[r].TryGetSortedDocValue(fieldName, globalId - _docBases[r], out val);
+                    break;
+                }
+            }
+            if (!found)
+            {
+                var stored = GetStoredFields(globalId);
+                val = stored.GetValueOrDefault(fieldName, string.Empty);
+            }
+            withValues[i] = (docs[i], val);
+        }
+
+        Array.Sort(withValues, descending
+            ? static (a, b) => string.Compare(b.Value, a.Value, StringComparison.Ordinal)
+            : static (a, b) => string.Compare(a.Value, b.Value, StringComparison.Ordinal));
+
+        var result = new ScoreDoc[withValues.Length];
+        for (int i = 0; i < result.Length; i++)
+            result[i] = withValues[i].Doc;
+        return result;
+    }
+
+    /// <summary>Retrieves stored fields for a global document ID.</summary>
+    public Dictionary<string, string> GetStoredFields(int globalDocId)
+    {
+        for (int i = 0; i < _readers.Count; i++)
+        {
+            int nextBase = i + 1 < _docBases.Length ? _docBases[i + 1] : _totalDocCount;
+            if (globalDocId >= _docBases[i] && globalDocId < nextBase)
+                return _readers[i].GetStoredFields(globalDocId - _docBases[i]);
+        }
+        return new Dictionary<string, string>();
+    }
+
+    /// <summary>
+    /// Explains the score computation for a specific document and query.
+    /// Returns null if the document does not match the query.
+    /// </summary>
+    public Explanation? Explain(TermQuery query, int globalDocId)
+    {
+        // Find the segment containing this doc
+        int readerIndex = -1;
+        for (int i = 0; i < _docBases.Length; i++)
+        {
+            int nextBase = i + 1 < _docBases.Length ? _docBases[i + 1] : _totalDocCount;
+            if (globalDocId >= _docBases[i] && globalDocId < nextBase)
+            {
+                readerIndex = i;
+                break;
+            }
+        }
+        if (readerIndex < 0) return null;
+
+        var reader = _readers[readerIndex];
+        int localDocId = globalDocId - _docBases[readerIndex];
+
+        if (!reader.IsLive(localDocId)) return null;
+
+        var qt = string.Concat(query.Field, "\x00", query.Term);
+        using var postings = reader.GetPostingsEnum(qt);
+        if (postings.IsExhausted) return null;
+
+        // Find the doc in the postings
+        if (!postings.Advance(localDocId) || postings.DocId != localDocId)
+            return null;
+
+        int tf = postings.Freq;
+        int docLength = reader.GetFieldLength(localDocId);
+        float avgDocLength = _stats.GetAvgFieldLength(query.Field);
+
+        // Compute global DF
+        int globalDF = 0;
+        foreach (var r in _readers)
+        {
+            using var p = r.GetPostingsEnum(qt);
+            globalDF += p.DocFreq;
+        }
+
+        float idf = Bm25Scorer.Idf(_totalDocCount, globalDF);
+        float score = Bm25Scorer.Score(tf, docLength, avgDocLength, _totalDocCount, globalDF);
+        if (query.Boost != 1.0f) score *= query.Boost;
+
+        return new Explanation
+        {
+            Score = score,
+            Description = $"BM25 score for term '{query.Term}' in field '{query.Field}'",
+            Details =
+            [
+                new Explanation { Score = idf, Description = $"idf(docFreq={globalDF}, docCount={_totalDocCount})" },
+                new Explanation { Score = tf, Description = $"termFreq={tf}" },
+                new Explanation { Score = docLength, Description = $"fieldLength={docLength}" },
+                new Explanation { Score = avgDocLength, Description = $"avgFieldLength={avgDocLength:F2}" },
+                new Explanation { Score = query.Boost, Description = $"boost={query.Boost}" }
+            ]
+        };
+    }
+
     private TopDocs SearchTermQuery(TermQuery query, int topN)
     {
         var qt = query.CachedQualifiedTerm ??= string.Concat(query.Field, "\x00", query.Term);
@@ -241,57 +423,80 @@ public sealed class IndexSearcher : IDisposable
     private void ExecuteBooleanQuery(BooleanQuery query, SegmentReader reader,
         Dictionary<(string Field, string Term), int> globalDFs, ref TopNCollector collector)
     {
-        var mustSets = new List<HashSet<int>>();
-        var shouldSets = new List<HashSet<int>>();
-        var mustNotSets = new List<HashSet<int>>();
-        var scoreMap = new Dictionary<int, float>();
+        // Separate clauses by occur type
+        var mustQueries = new List<Query>();
+        var shouldQueries = new List<Query>();
+        var mustNotQueries = new List<Query>();
 
         foreach (var clause in query.Clauses)
         {
-            var subResults = ExecuteSubQuery(clause.Query, reader, globalDFs);
-            var idSet = new HashSet<int>(subResults.Count);
-
-            foreach (var sr in subResults)
-            {
-                idSet.Add(sr.DocId);
-                scoreMap[sr.DocId] = scoreMap.GetValueOrDefault(sr.DocId) + sr.Score;
-            }
-
             switch (clause.Occur)
             {
-                case Occur.Must:
-                    mustSets.Add(idSet);
-                    break;
-                case Occur.Should:
-                    shouldSets.Add(idSet);
-                    break;
-                case Occur.MustNot:
-                    mustNotSets.Add(idSet);
-                    break;
+                case Occur.Must: mustQueries.Add(clause.Query); break;
+                case Occur.Should: shouldQueries.Add(clause.Query); break;
+                case Occur.MustNot: mustNotQueries.Add(clause.Query); break;
             }
         }
 
+        // Build candidate set and score map using sub-query evaluation
+        var scoreMap = new Dictionary<int, float>();
         HashSet<int> candidates;
 
-        if (mustSets.Count > 0)
+        if (mustQueries.Count > 0)
         {
-            candidates = new HashSet<int>(mustSets[0]);
+            // Must: intersect all must clause result sets
+            var mustSets = new List<HashSet<int>>(mustQueries.Count);
+            foreach (var q in mustQueries)
+            {
+                var results = ExecuteSubQuery(q, reader, globalDFs);
+                var idSet = new HashSet<int>(results.Count);
+                foreach (var sr in results)
+                {
+                    idSet.Add(sr.DocId);
+                    scoreMap[sr.DocId] = scoreMap.GetValueOrDefault(sr.DocId) + sr.Score;
+                }
+                mustSets.Add(idSet);
+            }
+            candidates = mustSets[0];
             for (int i = 1; i < mustSets.Count; i++)
                 candidates.IntersectWith(mustSets[i]);
+
+            // Add should scores for candidates that match
+            foreach (var q in shouldQueries)
+            {
+                var results = ExecuteSubQuery(q, reader, globalDFs);
+                foreach (var sr in results)
+                {
+                    if (candidates.Contains(sr.DocId))
+                        scoreMap[sr.DocId] = scoreMap.GetValueOrDefault(sr.DocId) + sr.Score;
+                }
+            }
         }
-        else if (shouldSets.Count > 0)
+        else if (shouldQueries.Count > 0)
         {
             candidates = new HashSet<int>();
-            foreach (var s in shouldSets)
-                candidates.UnionWith(s);
+            foreach (var q in shouldQueries)
+            {
+                var results = ExecuteSubQuery(q, reader, globalDFs);
+                foreach (var sr in results)
+                {
+                    candidates.Add(sr.DocId);
+                    scoreMap[sr.DocId] = scoreMap.GetValueOrDefault(sr.DocId) + sr.Score;
+                }
+            }
         }
         else
         {
             return;
         }
 
-        foreach (var s in mustNotSets)
-            candidates.ExceptWith(s);
+        // Apply must-not exclusions
+        foreach (var q in mustNotQueries)
+        {
+            var results = ExecuteSubQuery(q, reader, globalDFs);
+            foreach (var sr in results)
+                candidates.Remove(sr.DocId);
+        }
 
         int docBase = reader.DocBase;
         foreach (var id in candidates)
@@ -375,15 +580,35 @@ public sealed class IndexSearcher : IDisposable
 
     private void ExecutePhraseQuery(PhraseQuery query, SegmentReader reader, ref TopNCollector collector)
     {
-        var termDocSets = new List<HashSet<int>>(query.Terms.Length);
-        foreach (var t in query.Terms)
-            termDocSets.Add(new HashSet<int>(reader.GetDocIds(query.Field, t)));
+        if (query.Terms.Length == 0) return;
 
-        if (termDocSets.Count == 0) return;
+        // Use PostingsEnum to gather candidate doc IDs efficiently
+        var qualifiedTerms = new string[query.Terms.Length];
+        for (int i = 0; i < query.Terms.Length; i++)
+            qualifiedTerms[i] = string.Concat(query.Field, "\x00", query.Terms[i]);
 
-        var candidates = new HashSet<int>(termDocSets[0]);
-        for (int i = 1; i < termDocSets.Count; i++)
-            candidates.IntersectWith(termDocSets[i]);
+        // Find intersection of doc IDs across all terms using PostingsEnum
+        using var firstPostings = reader.GetPostingsEnum(qualifiedTerms[0]);
+        if (firstPostings.IsExhausted) return;
+
+        var candidates = new List<int>();
+        while (firstPostings.MoveNext())
+            candidates.Add(firstPostings.DocId);
+
+        // Intersect with remaining terms
+        for (int t = 1; t < qualifiedTerms.Length && candidates.Count > 0; t++)
+        {
+            using var postings = reader.GetPostingsEnum(qualifiedTerms[t]);
+            if (postings.IsExhausted) { candidates.Clear(); break; }
+
+            int writeIdx = 0;
+            for (int i = 0; i < candidates.Count; i++)
+            {
+                if (postings.Advance(candidates[i]) && postings.DocId == candidates[i])
+                    candidates[writeIdx++] = candidates[i];
+            }
+            candidates.RemoveRange(writeIdx, candidates.Count - writeIdx);
+        }
 
         int docBase = reader.DocBase;
         float boost = query.Boost;
@@ -544,19 +769,50 @@ public sealed class IndexSearcher : IDisposable
 
     private static bool ContainsPhrase(string text, string[] terms)
     {
-        // Tokenise the text and look for consecutive matches
-        var words = text.Split(' ', StringSplitOptions.RemoveEmptyEntries)
-            .Select(w => w.Trim().ToLowerInvariant())
-            .ToArray();
+        // Tokenise the text and look for consecutive matches without LINQ
+        var textSpan = text.AsSpan();
+        // Count words first
+        int wordCount = 0;
+        int idx = 0;
+        while (idx < textSpan.Length)
+        {
+            while (idx < textSpan.Length && textSpan[idx] == ' ') idx++;
+            if (idx >= textSpan.Length) break;
+            wordCount++;
+            while (idx < textSpan.Length && textSpan[idx] != ' ') idx++;
+        }
 
-        var lowerTerms = terms.Select(t => t.ToLowerInvariant()).ToArray();
+        if (wordCount < terms.Length) return false;
 
-        for (int i = 0; i <= words.Length - lowerTerms.Length; i++)
+        // Extract word boundaries
+        var starts = new int[wordCount];
+        var lengths = new int[wordCount];
+        int wi = 0;
+        idx = 0;
+        while (idx < textSpan.Length)
+        {
+            while (idx < textSpan.Length && textSpan[idx] == ' ') idx++;
+            if (idx >= textSpan.Length) break;
+            int start = idx;
+            while (idx < textSpan.Length && textSpan[idx] != ' ') idx++;
+            starts[wi] = start;
+            lengths[wi] = idx - start;
+            wi++;
+        }
+
+        for (int i = 0; i <= wordCount - terms.Length; i++)
         {
             bool match = true;
-            for (int j = 0; j < lowerTerms.Length; j++)
+            for (int j = 0; j < terms.Length; j++)
             {
-                if (words[i + j] != lowerTerms[j])
+                var wordSpan = textSpan.Slice(starts[i + j], lengths[i + j]);
+                // Trim punctuation from word boundaries
+                while (wordSpan.Length > 0 && !char.IsLetterOrDigit(wordSpan[^1]))
+                    wordSpan = wordSpan[..^1];
+                while (wordSpan.Length > 0 && !char.IsLetterOrDigit(wordSpan[0]))
+                    wordSpan = wordSpan[1..];
+
+                if (!wordSpan.Equals(terms[j].AsSpan(), StringComparison.OrdinalIgnoreCase))
                 {
                     match = false;
                     break;
