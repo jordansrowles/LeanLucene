@@ -10,41 +10,35 @@ public sealed class StandardAnalyser : IAnalyser
     private readonly Tokeniser _tokeniser = new();
     private readonly StopWordFilter _stopWordFilter = new();
     private char[] _lowerBuf = new char[64];
+    private readonly List<(int Start, int End)> _offsetBuf = new();
 
     public List<Token> Analyse(ReadOnlySpan<char> input)
     {
-        var tokens = _tokeniser.Tokenise(input);
+        _tokeniser.TokeniseOffsets(input, _offsetBuf);
 
-        // Single pass: lowercase from original input offsets, filter stop words
-        int writeIndex = 0;
-        for (int i = 0; i < tokens.Count; i++)
+        var tokens = new List<Token>(_offsetBuf.Count);
+        for (int i = 0; i < _offsetBuf.Count; i++)
         {
-            var t = tokens[i];
+            var (start, end) = _offsetBuf[i];
+            var span = input.Slice(start, end - start);
 
-            if (_stopWordFilter.IsStopWord(t.Text))
+            // Zero-alloc stop word check using span overload
+            if (_stopWordFilter.IsStopWord(span))
                 continue;
 
-            // Lowercase directly from input offsets into reusable buffer
-            int len = t.EndOffset - t.StartOffset;
+            int len = end - start;
             if (len > _lowerBuf.Length)
                 _lowerBuf = new char[Math.Max(_lowerBuf.Length * 2, len)];
 
-            var span = input.Slice(t.StartOffset, len);
             span.ToLowerInvariant(_lowerBuf.AsSpan(0, len));
 
-            // Check if lowering actually changed anything
             bool changed = !span.SequenceEqual(_lowerBuf.AsSpan(0, len));
-            if (changed)
-                tokens[writeIndex] = new Token(new string(_lowerBuf.AsSpan(0, len)), t.StartOffset, t.EndOffset);
-            else
-                tokens[writeIndex] = t; // Reuse original token text — no extra alloc
+            var text = changed
+                ? new string(_lowerBuf.AsSpan(0, len))
+                : span.ToString();
 
-            writeIndex++;
+            tokens.Add(new Token(text, start, end));
         }
-
-        // Trim excess in place
-        if (writeIndex < tokens.Count)
-            tokens.RemoveRange(writeIndex, tokens.Count - writeIndex);
 
         return tokens;
     }

@@ -32,4 +32,29 @@ public sealed class Tokeniser : ITokeniser
 
         return tokens;
     }
+
+    /// <summary>
+    /// Emits token offsets without allocating any strings.
+    /// Used by StandardAnalyser to defer string materialisation until after filtering.
+    /// </summary>
+    public void TokeniseOffsets(ReadOnlySpan<char> input, List<(int Start, int End)> offsets)
+    {
+        offsets.Clear();
+        int i = 0;
+
+        while (i < input.Length)
+        {
+            if (!char.IsLetterOrDigit(input[i]))
+            {
+                i++;
+                continue;
+            }
+
+            int start = i;
+            while (i < input.Length && char.IsLetterOrDigit(input[i]))
+                i++;
+
+            offsets.Add((start, i));
+        }
+    }
 }

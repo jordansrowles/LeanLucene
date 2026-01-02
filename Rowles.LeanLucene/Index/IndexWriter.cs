@@ -35,6 +35,8 @@ public sealed class IndexWriter : IDisposable
     // DocValues accumulators: field → per-doc values
     private Dictionary<string, List<double>> _numericDocValues = new(StringComparer.Ordinal);
     private Dictionary<string, List<string?>> _sortedDocValues = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, IAnalyser> _analyserCache = new(StringComparer.Ordinal);
+    private readonly List<string> _sortedTermsBuffer = new();
 
     private int _bufferedDocCount;
     private long _estimatedRamBytes;
@@ -394,7 +396,11 @@ public sealed class IndexWriter : IDisposable
 
     private void IndexTextField(string fieldName, string value, int docId)
     {
-        var analyser = _config.FieldAnalysers.GetValueOrDefault(fieldName, _defaultAnalyser);
+        if (!_analyserCache.TryGetValue(fieldName, out var analyser))
+        {
+            analyser = _config.FieldAnalysers.GetValueOrDefault(fieldName, _defaultAnalyser);
+            _analyserCache[fieldName] = analyser;
+        }
         var tokens = analyser.Analyse(value.AsSpan());
 
         // Track token count for O(1) norm computation
@@ -478,14 +484,16 @@ public sealed class IndexWriter : IDisposable
 
         // Write term dictionary and postings per field
         // Sort qualified terms for the dictionary
-        var sortedQualifiedTerms = _postings.Keys.OrderBy(k => k, StringComparer.Ordinal).ToList();
+        _sortedTermsBuffer.Clear();
+        _sortedTermsBuffer.AddRange(_postings.Keys);
+        _sortedTermsBuffer.Sort(StringComparer.Ordinal);
         var postingsOffsets = new Dictionary<string, long>();
 
         // Write all postings to a single .pos file using pooled IndexOutput
         const int SkipInterval = 128;
         using (var posOutput = new IndexOutput(basePath + ".pos"))
         {
-            foreach (var qt in sortedQualifiedTerms)
+            foreach (var qt in _sortedTermsBuffer)
             {
                 var acc = _postings[qt];
                 var ids = acc.DocIds;
@@ -563,7 +571,7 @@ public sealed class IndexWriter : IDisposable
         }
 
         // Write term dictionary (.dic)
-        TermDictionaryWriter.Write(basePath + ".dic", sortedQualifiedTerms, postingsOffsets);
+        TermDictionaryWriter.Write(basePath + ".dic", _sortedTermsBuffer, postingsOffsets);
 
         // Write norms (.nrm) — use pre-tracked token counts (O(1) per doc)
         var norms = new float[_bufferedDocCount];
@@ -575,8 +583,7 @@ public sealed class IndexWriter : IDisposable
         NormsWriter.Write(basePath + ".nrm", norms);
 
         // Write stored fields (.fdt + .fdx)
-        StoredFieldsWriter.Write(basePath + ".fdt", basePath + ".fdx",
-            _storedFields.ToArray());
+        StoredFieldsWriter.Write(basePath + ".fdt", basePath + ".fdx", _storedFields);
 
         // Write numeric field index (.num)
         WriteNumericIndex(basePath + ".num");
@@ -715,16 +722,17 @@ public sealed class IndexWriter : IDisposable
 
     private void ResetBuffer()
     {
-        _postings = new Dictionary<string, PostingAccumulator>(StringComparer.Ordinal);
-        _storedFields = [];
-        _numericFields = [];
+        _postings.Clear();
+        _storedFields.Clear();
+        _numericFields.Clear();
         _termPool.Clear();
         _fieldNames.Clear();
-        _qualifiedTermPool = new();
-        _numericIndex = new Dictionary<string, Dictionary<int, double>>();
-        _bufferedVectors = new();
-        _numericDocValues = new(StringComparer.Ordinal);
-        _sortedDocValues = new(StringComparer.Ordinal);
+        _qualifiedTermPool.Clear();
+        _numericIndex.Clear();
+        _bufferedVectors.Clear();
+        _numericDocValues.Clear();
+        _sortedDocValues.Clear();
+        _sortedTermsBuffer.Clear();
         _bufferedDocCount = 0;
         _estimatedRamBytes = 0;
         Array.Clear(_docTokenCounts);

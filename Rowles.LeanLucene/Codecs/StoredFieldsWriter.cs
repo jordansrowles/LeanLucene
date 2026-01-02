@@ -10,7 +10,7 @@ public static class StoredFieldsWriter
 {
     private const int BlockSize = 16;
 
-    public static void Write(string fdtPath, string fdxPath, Dictionary<string, string>[] docs)
+    public static void Write(string fdtPath, string fdxPath, IReadOnlyList<Dictionary<string, string>> docs)
     {
         using var fdtStream = new FileStream(fdtPath, FileMode.Create, FileAccess.Write, FileShare.None);
         using var fdtWriter = new BinaryWriter(fdtStream, System.Text.Encoding.UTF8, leaveOpen: false);
@@ -26,9 +26,9 @@ public static class StoredFieldsWriter
         var rawWriter = new BinaryWriter(rawStream, System.Text.Encoding.UTF8, leaveOpen: true);
         var compStream = new MemoryStream(4096);
 
-        for (int blockStart = 0; blockStart < docs.Length; blockStart += BlockSize)
+        for (int blockStart = 0; blockStart < docs.Count; blockStart += BlockSize)
         {
-            int blockEnd = Math.Min(blockStart + BlockSize, docs.Length);
+            int blockEnd = Math.Min(blockStart + BlockSize, docs.Count);
             int blockCount = blockEnd - blockStart;
 
             // Reset reusable streams
@@ -86,7 +86,7 @@ public static class StoredFieldsWriter
 
         fdxWriter.Write((byte)2); // version
         fdxWriter.Write(BlockSize);
-        fdxWriter.Write(docs.Length);
+        fdxWriter.Write(docs.Count);
         fdxWriter.Write(blockOffsets.Count);
         foreach (var offset in blockOffsets)
             fdxWriter.Write(offset);

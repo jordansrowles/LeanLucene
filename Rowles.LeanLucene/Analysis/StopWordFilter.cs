@@ -19,6 +19,10 @@ public sealed class StopWordFilter : ITokenFilter
     /// <summary>Returns true if the given term is a stop word.</summary>
     public bool IsStopWord(string term) => StopWords.Contains(term);
 
+    /// <summary>Returns true if the given term span is a stop word (zero-alloc).</summary>
+    public bool IsStopWord(ReadOnlySpan<char> term)
+        => StopWords.GetAlternateLookup<ReadOnlySpan<char>>().Contains(term);
+
     public void Apply(List<Token> tokens)
     {
         tokens.RemoveAll(t => StopWords.Contains(t.Text));

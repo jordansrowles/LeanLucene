@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Text.Json;
 using Rowles.LeanLucene.Analysis;
 using Rowles.LeanLucene.Codecs;
@@ -591,32 +592,46 @@ public sealed class IndexSearcher : IDisposable
         using var firstPostings = reader.GetPostingsEnum(qualifiedTerms[0]);
         if (firstPostings.IsExhausted) return;
 
-        var candidates = new List<int>();
+        var candidateBuf = ArrayPool<int>.Shared.Rent(firstPostings.DocFreq);
+        int candidateCount = 0;
         while (firstPostings.MoveNext())
-            candidates.Add(firstPostings.DocId);
+            candidateBuf[candidateCount++] = firstPostings.DocId;
 
         // Intersect with remaining terms
-        for (int t = 1; t < qualifiedTerms.Length && candidates.Count > 0; t++)
+        for (int t = 1; t < qualifiedTerms.Length && candidateCount > 0; t++)
         {
             using var postings = reader.GetPostingsEnum(qualifiedTerms[t]);
-            if (postings.IsExhausted) { candidates.Clear(); break; }
+            if (postings.IsExhausted) { candidateCount = 0; break; }
 
             int writeIdx = 0;
-            for (int i = 0; i < candidates.Count; i++)
+            for (int i = 0; i < candidateCount; i++)
             {
-                if (postings.Advance(candidates[i]) && postings.DocId == candidates[i])
-                    candidates[writeIdx++] = candidates[i];
+                if (postings.Advance(candidateBuf[i]) && postings.DocId == candidateBuf[i])
+                    candidateBuf[writeIdx++] = candidateBuf[i];
             }
-            candidates.RemoveRange(writeIdx, candidates.Count - writeIdx);
+            candidateCount = writeIdx;
+        }
+
+        if (candidateCount == 0)
+        {
+            ArrayPool<int>.Shared.Return(candidateBuf);
+            return;
         }
 
         int docBase = reader.DocBase;
         float boost = query.Boost;
-        foreach (var docId in candidates)
+        float score = boost != 1.0f ? boost : 1.0f;
+        int termCount = query.Terms.Length;
+
+        // Reusable position list for phrase checking (avoids per-doc List<int[]> alloc)
+        var termPositions = new List<int[]>(termCount);
+
+        for (int c = 0; c < candidateCount; c++)
         {
+            int docId = candidateBuf[c];
             if (!reader.IsLive(docId)) continue;
 
-            var termPositions = new List<int[]>(query.Terms.Length);
+            termPositions.Clear();
             bool hasAllPositions = true;
             foreach (var term in query.Terms)
             {
@@ -631,7 +646,6 @@ public sealed class IndexSearcher : IDisposable
 
             if (hasAllPositions && HasPositionsWithinSlop(termPositions, query.Slop))
             {
-                float score = boost != 1.0f ? boost : 1.0f;
                 collector.Collect(docBase + docId, score);
                 continue;
             }
@@ -640,9 +654,11 @@ public sealed class IndexSearcher : IDisposable
             {
                 var stored = reader.GetStoredFields(docId);
                 if (stored.TryGetValue(query.Field, out var text) && ContainsPhrase(text, query.Terms))
-                    collector.Collect(docBase + docId, boost != 1.0f ? boost : 1.0f);
+                    collector.Collect(docBase + docId, score);
             }
         }
+
+        ArrayPool<int>.Shared.Return(candidateBuf);
     }
 
     private void ExecuteVectorQuery(VectorQuery query, SegmentReader reader, ref TopNCollector collector)

@@ -179,13 +179,16 @@ public sealed class SegmentReader : IDisposable
         if (skipCount > 0)
             _posInput.Seek(_posInput.Position + skipCount * 8L);
 
-        var ids = new int[count];
+        // Stream through doc IDs to find target index (zero alloc)
+        int targetIndex = -1;
         int prev = 0;
         for (int i = 0; i < count; i++)
         {
             prev = ReadNextDocId(_posInput, prev);
-            ids[i] = prev;
+            if (prev == docId && targetIndex < 0)
+                targetIndex = i;
         }
+        if (targetIndex < 0) return null;
 
         bool hasFreqs = _posInput.ReadBoolean();
         if (hasFreqs)
@@ -196,9 +199,6 @@ public sealed class SegmentReader : IDisposable
 
         bool hasPositions = _posInput.ReadBoolean();
         if (!hasPositions) return null;
-
-        int targetIndex = Array.IndexOf(ids, docId);
-        if (targetIndex < 0) return null;
 
         for (int i = 0; i < targetIndex; i++)
         {
