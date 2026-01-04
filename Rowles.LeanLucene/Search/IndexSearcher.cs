@@ -424,32 +424,229 @@ public sealed class IndexSearcher : IDisposable
     private void ExecuteBooleanQuery(BooleanQuery query, SegmentReader reader,
         Dictionary<(string Field, string Term), int> globalDFs, ref TopNCollector collector)
     {
-        // Separate clauses by occur type
-        var mustQueries = new List<Query>();
-        var shouldQueries = new List<Query>();
-        var mustNotQueries = new List<Query>();
+        var clauses = query.Clauses;
+        if (clauses.Count == 0) return;
 
-        foreach (var clause in query.Clauses)
+        // Single-pass clause counting + TermQuery check (no List<Query> allocs)
+        int mustCount = 0, shouldCount = 0, mustNotCount = 0;
+        bool allTermQueries = true;
+        foreach (var clause in clauses)
         {
             switch (clause.Occur)
             {
-                case Occur.Must: mustQueries.Add(clause.Query); break;
-                case Occur.Should: shouldQueries.Add(clause.Query); break;
-                case Occur.MustNot: mustNotQueries.Add(clause.Query); break;
+                case Occur.Must: mustCount++; break;
+                case Occur.Should: shouldCount++; break;
+                case Occur.MustNot: mustNotCount++; break;
             }
+            if (clause.Query is not TermQuery) allTermQueries = false;
         }
 
-        // Build candidate set and score map using sub-query evaluation
+        if (mustCount == 0 && shouldCount == 0) return;
+
+        // Fast path: all clauses are TermQuery → streaming PostingsEnum merge
+        if (allTermQueries)
+        {
+            ExecuteBooleanStreaming(clauses, reader, globalDFs, ref collector,
+                mustCount, shouldCount, mustNotCount);
+            return;
+        }
+
+        // Fallback for complex sub-queries (nested BooleanQuery, RangeQuery, etc.)
+        ExecuteBooleanFallback(query, reader, globalDFs, ref collector);
+    }
+
+    /// <summary>
+    /// Streaming BooleanQuery execution for all-TermQuery clauses.
+    /// Uses PostingsEnum merge instead of materialising HashSets and score maps.
+    /// </summary>
+    private void ExecuteBooleanStreaming(IReadOnlyList<BooleanClause> clauses,
+        SegmentReader reader, Dictionary<(string Field, string Term), int> globalDFs,
+        ref TopNCollector collector, int mustCount, int shouldCount, int mustNotCount)
+    {
+        var mustEnums = mustCount > 0 ? new PostingsEnum[mustCount] : null;
+        var mustFactors = mustCount > 0 ? new (float Idf, float K1BOverAvgDL)[mustCount] : null;
+        var shouldEnums = shouldCount > 0 ? new PostingsEnum[shouldCount] : null;
+        var shouldFactors = shouldCount > 0 ? new (float Idf, float K1BOverAvgDL)[shouldCount] : null;
+        var mustNotEnums = mustNotCount > 0 ? new PostingsEnum[mustNotCount] : null;
+
+        int mi = 0, si = 0, mni = 0;
+
+        try
+        {
+            foreach (var clause in clauses)
+            {
+                var tq = (TermQuery)clause.Query;
+                var qt = string.Concat(tq.Field, "\x00", tq.Term);
+                var postings = reader.GetPostingsEnum(qt);
+
+                int docFreq = globalDFs.GetValueOrDefault((tq.Field, tq.Term), postings.DocFreq);
+                float avgDocLength = _stats.GetAvgFieldLength(tq.Field);
+                var factors = Bm25Scorer.PrecomputeFactors(_totalDocCount, docFreq, avgDocLength);
+
+                switch (clause.Occur)
+                {
+                    case Occur.Must:
+                        mustEnums![mi] = postings;
+                        mustFactors![mi] = factors;
+                        mi++;
+                        break;
+                    case Occur.Should:
+                        shouldEnums![si] = postings;
+                        shouldFactors![si] = factors;
+                        si++;
+                        break;
+                    case Occur.MustNot:
+                        mustNotEnums![mni] = postings;
+                        mni++;
+                        break;
+                }
+            }
+
+            int docBase = reader.DocBase;
+            bool hasDeletions = reader.HasDeletions;
+
+            if (mustCount > 0)
+            {
+                // Sort Must enums by DocFreq ascending — rarest term leads
+                int leaderIdx = 0;
+                for (int i = 1; i < mustCount; i++)
+                {
+                    if (mustEnums![i].DocFreq < mustEnums[leaderIdx].DocFreq)
+                        leaderIdx = i;
+                }
+                if (leaderIdx != 0)
+                {
+                    (mustEnums![0], mustEnums[leaderIdx]) = (mustEnums[leaderIdx], mustEnums[0]);
+                    (mustFactors![0], mustFactors[leaderIdx]) = (mustFactors[leaderIdx], mustFactors[0]);
+                }
+
+                // Stream through leader, advance followers
+                while (mustEnums![0].MoveNext())
+                {
+                    int docId = mustEnums[0].DocId;
+                    if (hasDeletions && !reader.IsLive(docId)) continue;
+
+                    // Check all followers match this doc
+                    bool allMatch = true;
+                    for (int i = 1; i < mustCount; i++)
+                    {
+                        if (!mustEnums[i].Advance(docId) || mustEnums[i].DocId != docId)
+                        {
+                            allMatch = false;
+                            break;
+                        }
+                    }
+                    if (!allMatch) continue;
+
+                    // Check MustNot exclusions
+                    bool excluded = false;
+                    for (int i = 0; i < mustNotCount; i++)
+                    {
+                        if (mustNotEnums![i].Advance(docId) && mustNotEnums[i].DocId == docId)
+                        {
+                            excluded = true;
+                            break;
+                        }
+                    }
+                    if (excluded) continue;
+
+                    // Compute BM25 score summed across Must terms
+                    int docLength = reader.GetFieldLength(docId);
+                    float score = 0f;
+                    for (int i = 0; i < mustCount; i++)
+                    {
+                        score += Bm25Scorer.ScorePrecomputed(
+                            mustFactors![i].Idf, mustFactors[i].K1BOverAvgDL,
+                            mustEnums[i].Freq, docLength);
+                    }
+
+                    // Add Should bonus
+                    for (int i = 0; i < shouldCount; i++)
+                    {
+                        if (shouldEnums![i].Advance(docId) && shouldEnums[i].DocId == docId)
+                        {
+                            score += Bm25Scorer.ScorePrecomputed(
+                                shouldFactors![i].Idf, shouldFactors[i].K1BOverAvgDL,
+                                shouldEnums[i].Freq, docLength);
+                        }
+                    }
+
+                    collector.Collect(docBase + docId, score);
+                }
+            }
+            else
+            {
+                // Should-only: need score accumulation for docs matching multiple terms
+                var scoreMap = new Dictionary<int, float>();
+                for (int i = 0; i < shouldCount; i++)
+                {
+                    while (shouldEnums![i].MoveNext())
+                    {
+                        int docId = shouldEnums[i].DocId;
+                        if (hasDeletions && !reader.IsLive(docId)) continue;
+
+                        int docLength = reader.GetFieldLength(docId);
+                        float termScore = Bm25Scorer.ScorePrecomputed(
+                            shouldFactors![i].Idf, shouldFactors[i].K1BOverAvgDL,
+                            shouldEnums[i].Freq, docLength);
+                        scoreMap[docId] = scoreMap.GetValueOrDefault(docId) + termScore;
+                    }
+                }
+
+                // Build exclusion set if MustNot present
+                HashSet<int>? exclusions = null;
+                if (mustNotCount > 0)
+                {
+                    exclusions = new HashSet<int>();
+                    for (int i = 0; i < mustNotCount; i++)
+                    {
+                        while (mustNotEnums![i].MoveNext())
+                            exclusions.Add(mustNotEnums[i].DocId);
+                    }
+                }
+
+                foreach (var (docId, score) in scoreMap)
+                {
+                    if (exclusions?.Contains(docId) == true) continue;
+                    collector.Collect(docBase + docId, score);
+                }
+            }
+        }
+        finally
+        {
+            if (mustEnums != null)
+                for (int i = 0; i < mi; i++) mustEnums[i].Dispose();
+            if (shouldEnums != null)
+                for (int i = 0; i < si; i++) shouldEnums[i].Dispose();
+            if (mustNotEnums != null)
+                for (int i = 0; i < mni; i++) mustNotEnums[i].Dispose();
+        }
+    }
+
+    /// <summary>
+    /// Fallback BooleanQuery execution for mixed clause types (nested BooleanQuery, RangeQuery, etc.).
+    /// Uses the original materialisation approach via ExecuteSubQuery.
+    /// </summary>
+    private void ExecuteBooleanFallback(BooleanQuery query, SegmentReader reader,
+        Dictionary<(string Field, string Term), int> globalDFs, ref TopNCollector collector)
+    {
         var scoreMap = new Dictionary<int, float>();
         HashSet<int> candidates;
 
-        if (mustQueries.Count > 0)
+        // Inline categorisation: iterate clauses by Occur without building separate lists
+        bool hasMust = false;
+        foreach (var clause in query.Clauses)
         {
-            // Must: intersect all must clause result sets
-            var mustSets = new List<HashSet<int>>(mustQueries.Count);
-            foreach (var q in mustQueries)
+            if (clause.Occur == Occur.Must) { hasMust = true; break; }
+        }
+
+        if (hasMust)
+        {
+            var mustSets = new List<HashSet<int>>();
+            foreach (var clause in query.Clauses)
             {
-                var results = ExecuteSubQuery(q, reader, globalDFs);
+                if (clause.Occur != Occur.Must) continue;
+                var results = ExecuteSubQuery(clause.Query, reader, globalDFs);
                 var idSet = new HashSet<int>(results.Count);
                 foreach (var sr in results)
                 {
@@ -462,10 +659,10 @@ public sealed class IndexSearcher : IDisposable
             for (int i = 1; i < mustSets.Count; i++)
                 candidates.IntersectWith(mustSets[i]);
 
-            // Add should scores for candidates that match
-            foreach (var q in shouldQueries)
+            foreach (var clause in query.Clauses)
             {
-                var results = ExecuteSubQuery(q, reader, globalDFs);
+                if (clause.Occur != Occur.Should) continue;
+                var results = ExecuteSubQuery(clause.Query, reader, globalDFs);
                 foreach (var sr in results)
                 {
                     if (candidates.Contains(sr.DocId))
@@ -473,28 +670,27 @@ public sealed class IndexSearcher : IDisposable
                 }
             }
         }
-        else if (shouldQueries.Count > 0)
+        else
         {
             candidates = new HashSet<int>();
-            foreach (var q in shouldQueries)
+            foreach (var clause in query.Clauses)
             {
-                var results = ExecuteSubQuery(q, reader, globalDFs);
+                if (clause.Occur != Occur.Should) continue;
+                var results = ExecuteSubQuery(clause.Query, reader, globalDFs);
                 foreach (var sr in results)
                 {
                     candidates.Add(sr.DocId);
                     scoreMap[sr.DocId] = scoreMap.GetValueOrDefault(sr.DocId) + sr.Score;
                 }
             }
-        }
-        else
-        {
-            return;
+
+            if (candidates.Count == 0) return;
         }
 
-        // Apply must-not exclusions
-        foreach (var q in mustNotQueries)
+        foreach (var clause in query.Clauses)
         {
-            var results = ExecuteSubQuery(q, reader, globalDFs);
+            if (clause.Occur != Occur.MustNot) continue;
+            var results = ExecuteSubQuery(clause.Query, reader, globalDFs);
             foreach (var sr in results)
                 candidates.Remove(sr.DocId);
         }
