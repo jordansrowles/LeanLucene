@@ -321,4 +321,70 @@ public sealed class BooleanQueryStreamingTests : IClassFixture<TestDirectoryFixt
 
         Assert.Equal(0, results.TotalHits);
     }
+
+    [Fact]
+    public void ShouldWithMustNot_StreamingMerge_ExcludesCorrectly()
+    {
+        var dir = new MMapDirectory(SubDir("bool_stream_should_mustnot"));
+        using var writer = new IndexWriter(dir, new IndexWriterConfig());
+
+        var texts = new[] { "alpha beta", "gamma delta", "alpha gamma", "beta delta" };
+        foreach (var text in texts)
+        {
+            var doc = new LeanDocument();
+            doc.Add(new TextField("body", text));
+            writer.AddDocument(doc);
+        }
+        writer.Commit();
+
+        using var searcher = new IndexSearcher(dir);
+        var query = new BooleanQuery();
+        query.Add(new TermQuery("body", "alpha"), Occur.Should);
+        query.Add(new TermQuery("body", "beta"), Occur.Should);
+        query.Add(new TermQuery("body", "gamma"), Occur.MustNot);
+        var results = searcher.Search(query, 10);
+
+        // Docs: 0 (alpha beta), 1 (gamma delta), 2 (alpha gamma), 3 (beta delta)
+        // Should matches: alpha→[0,2], beta→[0,3] → union [0,2,3]
+        // MustNot gamma→[1,2] → exclude doc 2
+        // Expected: docs 0 and 3
+        Assert.Equal(2, results.TotalHits);
+    }
+
+    [Fact]
+    public void Should_ThreeTerms_ScoresMultiMatchHigher()
+    {
+        var dir = new MMapDirectory(SubDir("bool_stream_should_three"));
+        using var writer = new IndexWriter(dir, new IndexWriterConfig());
+
+        // Doc 0 matches all three Should terms
+        var doc1 = new LeanDocument();
+        doc1.Add(new TextField("body", "red green blue"));
+        writer.AddDocument(doc1);
+
+        // Doc 1 matches two
+        var doc2 = new LeanDocument();
+        doc2.Add(new TextField("body", "red green yellow"));
+        writer.AddDocument(doc2);
+
+        // Doc 2 matches one
+        var doc3 = new LeanDocument();
+        doc3.Add(new TextField("body", "red yellow purple"));
+        writer.AddDocument(doc3);
+
+        writer.Commit();
+
+        using var searcher = new IndexSearcher(dir);
+        var query = new BooleanQuery();
+        query.Add(new TermQuery("body", "red"), Occur.Should);
+        query.Add(new TermQuery("body", "green"), Occur.Should);
+        query.Add(new TermQuery("body", "blue"), Occur.Should);
+        var results = searcher.Search(query, 10);
+
+        Assert.Equal(3, results.TotalHits);
+        // Doc matching most terms should rank highest
+        Assert.Equal(0, results.ScoreDocs[0].DocId);
+        Assert.True(results.ScoreDocs[0].Score > results.ScoreDocs[1].Score);
+        Assert.True(results.ScoreDocs[1].Score > results.ScoreDocs[2].Score);
+    }
 }

@@ -576,39 +576,59 @@ public sealed class IndexSearcher : IDisposable
             }
             else
             {
-                // Should-only: need score accumulation for docs matching multiple terms
-                var scoreMap = new Dictionary<int, float>();
+                // Should-only: streaming OR merge across all Should PostingsEnums.
+                // Uses stackalloc to track current docId per enum — no heap allocation.
+                Span<int> currentDocs = stackalloc int[shouldCount];
                 for (int i = 0; i < shouldCount; i++)
+                    currentDocs[i] = shouldEnums![i].MoveNext() ? shouldEnums[i].DocId : int.MaxValue;
+
+                while (true)
                 {
-                    while (shouldEnums![i].MoveNext())
+                    // Find minimum docId across all enums
+                    int minDoc = int.MaxValue;
+                    for (int i = 0; i < shouldCount; i++)
                     {
-                        int docId = shouldEnums[i].DocId;
-                        if (hasDeletions && !reader.IsLive(docId)) continue;
-
-                        int docLength = reader.GetFieldLength(docId);
-                        float termScore = Bm25Scorer.ScorePrecomputed(
-                            shouldFactors![i].Idf, shouldFactors[i].K1BOverAvgDL,
-                            shouldEnums[i].Freq, docLength);
-                        scoreMap[docId] = scoreMap.GetValueOrDefault(docId) + termScore;
+                        if (currentDocs[i] < minDoc)
+                            minDoc = currentDocs[i];
                     }
-                }
+                    if (minDoc == int.MaxValue) break;
 
-                // Build exclusion set if MustNot present
-                HashSet<int>? exclusions = null;
-                if (mustNotCount > 0)
-                {
-                    exclusions = new HashSet<int>();
+                    if (hasDeletions && !reader.IsLive(minDoc))
+                    {
+                        for (int i = 0; i < shouldCount; i++)
+                        {
+                            if (currentDocs[i] == minDoc)
+                                currentDocs[i] = shouldEnums![i].MoveNext() ? shouldEnums[i].DocId : int.MaxValue;
+                        }
+                        continue;
+                    }
+
+                    // Sum scores for all enums positioned at minDoc
+                    int docLength = reader.GetFieldLength(minDoc);
+                    float score = 0f;
+                    for (int i = 0; i < shouldCount; i++)
+                    {
+                        if (currentDocs[i] == minDoc)
+                        {
+                            score += Bm25Scorer.ScorePrecomputed(
+                                shouldFactors![i].Idf, shouldFactors[i].K1BOverAvgDL,
+                                shouldEnums![i].Freq, docLength);
+                            currentDocs[i] = shouldEnums[i].MoveNext() ? shouldEnums[i].DocId : int.MaxValue;
+                        }
+                    }
+
+                    // Check MustNot exclusion (Advance is forward-only; minDoc is monotonic)
+                    bool excluded = false;
                     for (int i = 0; i < mustNotCount; i++)
                     {
-                        while (mustNotEnums![i].MoveNext())
-                            exclusions.Add(mustNotEnums[i].DocId);
+                        if (mustNotEnums![i].Advance(minDoc) && mustNotEnums[i].DocId == minDoc)
+                        {
+                            excluded = true;
+                            break;
+                        }
                     }
-                }
-
-                foreach (var (docId, score) in scoreMap)
-                {
-                    if (exclusions?.Contains(docId) == true) continue;
-                    collector.Collect(docBase + docId, score);
+                    if (!excluded)
+                        collector.Collect(docBase + minDoc, score);
                 }
             }
         }
