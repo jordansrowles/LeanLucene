@@ -12,6 +12,9 @@ namespace Rowles.LeanLucene.Example.Benchmarks;
 /// Measures full roundtrip: index 100 docs + TermQuery. Tests startup/small-scale overhead.
 /// </summary>
 [MemoryDiagnoser]
+[HtmlExporter]
+[JsonExporterAttribute.Full]
+[MarkdownExporterAttribute.GitHub]
 [SimpleJob]
 public class SmallIndexBenchmarks
 {

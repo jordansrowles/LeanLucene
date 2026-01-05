@@ -13,6 +13,9 @@ namespace Rowles.LeanLucene.Example.Benchmarks;
 /// Measures PhraseQuery performance: exact phrase matching on 2K docs.
 /// </summary>
 [MemoryDiagnoser]
+[HtmlExporter]
+[JsonExporterAttribute.Full]
+[MarkdownExporterAttribute.GitHub]
 [SimpleJob]
 public class PhraseQueryBenchmarks
 {

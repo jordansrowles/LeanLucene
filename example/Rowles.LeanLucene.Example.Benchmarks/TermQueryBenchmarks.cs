@@ -24,6 +24,7 @@ namespace Rowles.LeanLucene.Example.Benchmarks;
 [MemoryDiagnoser]
 [HtmlExporter]
 [JsonExporterAttribute.Full]
+[MarkdownExporterAttribute.GitHub]
 [KeepBenchmarkFiles]
 [SimpleJob]
 public class TermQueryBenchmarks

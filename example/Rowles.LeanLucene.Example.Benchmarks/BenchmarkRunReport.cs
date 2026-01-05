@@ -12,6 +12,7 @@ internal sealed class BenchmarkRunReport
     public string GeneratedAtUtc { get; set; } = string.Empty;
     public string[] CommandLineArgs { get; set; } = [];
     public string HostMachineName { get; set; } = Environment.MachineName;
+    public string CommitHash { get; set; } = string.Empty;
     public string DotnetVersion { get; set; } = Environment.Version.ToString();
     public int TotalBenchmarkCount { get; set; }
     public List<BenchmarkSuiteReport> Suites { get; set; } = [];
@@ -65,6 +66,7 @@ internal sealed class BenchmarkRunIndexEntry
 {
     public string RunId { get; set; } = string.Empty;
     public string GeneratedAtUtc { get; set; } = string.Empty;
+    public string CommitHash { get; set; } = string.Empty;
     public string File { get; set; } = string.Empty;
     public int BenchmarkCount { get; set; }
     public string[] Suites { get; set; } = [];
@@ -255,6 +257,7 @@ internal static class BenchmarkRunReportWriter
         {
             RunId = report.RunId,
             GeneratedAtUtc = report.GeneratedAtUtc,
+            CommitHash = report.CommitHash,
             File = reportFileName,
             BenchmarkCount = report.TotalBenchmarkCount,
             Suites = report.Suites.Select(s => s.SuiteName).ToArray()

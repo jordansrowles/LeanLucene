@@ -13,6 +13,9 @@ namespace Rowles.LeanLucene.Example.Benchmarks;
 /// Measures BooleanQuery performance: +term1 +term2 intersection on 2K docs.
 /// </summary>
 [MemoryDiagnoser]
+[HtmlExporter]
+[JsonExporterAttribute.Full]
+[MarkdownExporterAttribute.GitHub]
 [SimpleJob]
 public class BooleanQueryBenchmarks
 {

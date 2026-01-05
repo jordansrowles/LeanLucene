@@ -7,6 +7,9 @@ namespace Rowles.LeanLucene.Example.Benchmarks;
 /// Measures analysis pipeline throughput: tokenisation + lowercase + stop-word removal.
 /// </summary>
 [MemoryDiagnoser]
+[HtmlExporter]
+[JsonExporterAttribute.Full]
+[MarkdownExporterAttribute.GitHub]
 [SimpleJob]
 public class AnalysisBenchmarks
 {

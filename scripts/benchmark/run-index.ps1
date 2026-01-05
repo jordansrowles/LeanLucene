@@ -1,8 +1,8 @@
+# Delegates to the unified benchmark script. See .\scripts\benchmark.ps1 --help
 param(
     [Parameter(ValueFromRemainingArguments = $true)]
     [string[]]$BenchmarkArgs
 )
 
-$projectPath = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot "..\..\example\Rowles.LeanLucene.Example.Benchmarks\Rowles.LeanLucene.Example.Benchmarks.csproj"))
-
-dotnet run -c Release --project $projectPath -- --suite index @BenchmarkArgs
+$unified = Join-Path $PSScriptRoot "..\benchmark.ps1"
+& $unified --suite index @BenchmarkArgs
