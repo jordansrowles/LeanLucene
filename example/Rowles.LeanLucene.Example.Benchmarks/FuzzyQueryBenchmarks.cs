@@ -19,14 +19,14 @@ using LuceneTextField = Lucene.Net.Documents.TextField;
 namespace Rowles.LeanLucene.Example.Benchmarks;
 
 /// <summary>
-/// Measures BooleanQuery performance: Must / Should / MustNot across all 3 libraries.
+/// Measures FuzzyQuery performance across all 3 libraries.
 /// </summary>
 [MemoryDiagnoser]
 [HtmlExporter]
 [JsonExporterAttribute.Full]
 [MarkdownExporterAttribute.GitHub]
 [SimpleJob]
-public class BooleanQueryBenchmarks
+public class FuzzyQueryBenchmarks
 {
     private const int TopN = 25;
 
@@ -34,6 +34,9 @@ public class BooleanQueryBenchmarks
 
     [ParamsSource(nameof(DocCounts))]
     public int DocumentCount { get; set; }
+
+    [Params("serch", "vectr", "banchmark")]
+    public string QueryTerm { get; set; } = "serch";
 
     private string _leanIndexPath = string.Empty;
     private LeanMMapDirectory? _leanDirectory;
@@ -67,95 +70,29 @@ public class BooleanQueryBenchmarks
         _luceneDirectory?.Dispose();
     }
 
-    // --- Must (AND) ---
-
     [Benchmark(Baseline = true)]
-    public int LeanLucene_Must()
+    public int LeanLucene_FuzzyQuery()
     {
-        var bq = new Rowles.LeanLucene.Search.BooleanQuery();
-        bq.Add(new Rowles.LeanLucene.Search.TermQuery("body", "search"), Rowles.LeanLucene.Search.Occur.Must);
-        bq.Add(new Rowles.LeanLucene.Search.TermQuery("body", "benchmark"), Rowles.LeanLucene.Search.Occur.Must);
-        return _leanSearcher!.Search(bq, TopN).TotalHits;
+        var query = new Rowles.LeanLucene.Search.FuzzyQuery("body", QueryTerm, maxEdits: 2);
+        return _leanSearcher!.Search(query, TopN).TotalHits;
     }
 
     [Benchmark]
-    public int LuceneNet_Must()
+    public int LuceneNet_FuzzyQuery()
     {
-        var bq = new Lucene.Net.Search.BooleanQuery
-        {
-            { new Lucene.Net.Search.TermQuery(new Term("body", "search")), Occur.MUST },
-            { new Lucene.Net.Search.TermQuery(new Term("body", "benchmark")), Occur.MUST }
-        };
-        return _luceneSearcher!.Search(bq, TopN).TotalHits;
+        var query = new Lucene.Net.Search.FuzzyQuery(new Term("body", QueryTerm), 2);
+        return _luceneSearcher!.Search(query, TopN).TotalHits;
     }
 
     [Benchmark]
-    public int Lifti_Must()
+    public int Lifti_FuzzyQuery()
     {
-        return _liftiIndex!.Search("search & benchmark").Count();
+        return _liftiIndex!.Search($"?{QueryTerm}~2").Count();
     }
-
-    // --- Should (OR) ---
-
-    [Benchmark]
-    public int LeanLucene_Should()
-    {
-        var bq = new Rowles.LeanLucene.Search.BooleanQuery();
-        bq.Add(new Rowles.LeanLucene.Search.TermQuery("body", "search"), Rowles.LeanLucene.Search.Occur.Should);
-        bq.Add(new Rowles.LeanLucene.Search.TermQuery("body", "vector"), Rowles.LeanLucene.Search.Occur.Should);
-        return _leanSearcher!.Search(bq, TopN).TotalHits;
-    }
-
-    [Benchmark]
-    public int LuceneNet_Should()
-    {
-        var bq = new Lucene.Net.Search.BooleanQuery
-        {
-            { new Lucene.Net.Search.TermQuery(new Term("body", "search")), Occur.SHOULD },
-            { new Lucene.Net.Search.TermQuery(new Term("body", "vector")), Occur.SHOULD }
-        };
-        return _luceneSearcher!.Search(bq, TopN).TotalHits;
-    }
-
-    [Benchmark]
-    public int Lifti_Should()
-    {
-        return _liftiIndex!.Search("search | vector").Count();
-    }
-
-    // --- MustNot ---
-
-    [Benchmark]
-    public int LeanLucene_MustNot()
-    {
-        var bq = new Rowles.LeanLucene.Search.BooleanQuery();
-        bq.Add(new Rowles.LeanLucene.Search.TermQuery("body", "benchmark"), Rowles.LeanLucene.Search.Occur.Must);
-        bq.Add(new Rowles.LeanLucene.Search.TermQuery("body", "vector"), Rowles.LeanLucene.Search.Occur.MustNot);
-        return _leanSearcher!.Search(bq, TopN).TotalHits;
-    }
-
-    [Benchmark]
-    public int LuceneNet_MustNot()
-    {
-        var bq = new Lucene.Net.Search.BooleanQuery
-        {
-            { new Lucene.Net.Search.TermQuery(new Term("body", "benchmark")), Occur.MUST },
-            { new Lucene.Net.Search.TermQuery(new Term("body", "vector")), Occur.MUST_NOT }
-        };
-        return _luceneSearcher!.Search(bq, TopN).TotalHits;
-    }
-
-    [Benchmark]
-    public int Lifti_MustNot()
-    {
-        return _liftiIndex!.Search("benchmark & -vector").Count();
-    }
-
-    // --- Index builders ---
 
     private void BuildLeanIndex(string[] documents)
     {
-        _leanIndexPath = Path.Combine(Path.GetTempPath(), $"leanlucene-bench-bool-{Guid.NewGuid():N}");
+        _leanIndexPath = Path.Combine(Path.GetTempPath(), $"leanlucene-bench-fuzzy-{Guid.NewGuid():N}");
         IODirectory.CreateDirectory(_leanIndexPath);
 
         _leanDirectory = new LeanMMapDirectory(_leanIndexPath);

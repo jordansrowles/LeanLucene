@@ -1,3 +1,5 @@
+using System.Globalization;
+
 namespace Rowles.LeanLucene.Example.Benchmarks;
 
 internal static class BenchmarkData
@@ -25,6 +27,19 @@ internal static class BenchmarkData
         "security",
         "monitoring"
     ];
+
+    /// <summary>
+    /// Returns the document count to use for benchmarks. When the BENCH_DOC_COUNT
+    /// environment variable is set (e.g. via --doccount in benchmark.ps1), that
+    /// value is used; otherwise the per-suite default is returned.
+    /// </summary>
+    public static IEnumerable<int> GetDocCounts(int defaultCount)
+    {
+        var env = Environment.GetEnvironmentVariable("BENCH_DOC_COUNT");
+        if (int.TryParse(env, NumberStyles.Integer, CultureInfo.InvariantCulture, out var n) && n > 0)
+            return [n];
+        return [defaultCount];
+    }
 
     public static string[] BuildDocuments(int count)
     {

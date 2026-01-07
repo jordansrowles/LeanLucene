@@ -10,13 +10,17 @@ internal static class Program
 {
     public static int Main(string[] args)
     {
-        var (suite, benchmarkArgs, showHelp) = ParseArguments(args);
+        var (suite, benchmarkArgs, showHelp, docCount) = ParseArguments(args);
 
         if (showHelp)
         {
             PrintHelp();
             return 0;
         }
+
+        // Expose doc count override as env var for [GlobalSetup] to read
+        if (docCount is not null)
+            Environment.SetEnvironmentVariable("BENCH_DOC_COUNT", docCount.Value.ToString(CultureInfo.InvariantCulture));
 
         var repoRoot = FindRepositoryRoot();
         var benchRoot = Path.Combine(repoRoot, "bench");
@@ -48,6 +52,18 @@ internal static class Program
 
         if (suite is BenchmarkSuite.All or BenchmarkSuite.SmallIndex)
             RunSuite<SmallIndexBenchmarks>("smallindex", dataDirectory, runId, benchmarkArgs, suiteSummaries);
+
+        if (suite is BenchmarkSuite.All or BenchmarkSuite.Prefix)
+            RunSuite<PrefixQueryBenchmarks>("prefix", dataDirectory, runId, benchmarkArgs, suiteSummaries);
+
+        if (suite is BenchmarkSuite.All or BenchmarkSuite.Fuzzy)
+            RunSuite<FuzzyQueryBenchmarks>("fuzzy", dataDirectory, runId, benchmarkArgs, suiteSummaries);
+
+        if (suite is BenchmarkSuite.All or BenchmarkSuite.Wildcard)
+            RunSuite<WildcardQueryBenchmarks>("wildcard", dataDirectory, runId, benchmarkArgs, suiteSummaries);
+
+        if (suite is BenchmarkSuite.All or BenchmarkSuite.Deletion)
+            RunSuite<DeletionBenchmarks>("deletion", dataDirectory, runId, benchmarkArgs, suiteSummaries);
 
         if (suiteSummaries.Count == 0)
         {
@@ -124,6 +140,7 @@ internal static class Program
 
             Options:
               --suite <name>   Run a specific benchmark suite (default: all)
+              --doccount <n>   Override document count for all suites (env: BENCH_DOC_COUNT)
               --help, -h       Show this help message
 
             Suites:
@@ -133,6 +150,10 @@ internal static class Program
               analysis         AnalysisBenchmarks — tokenisation pipeline throughput
               boolean          BooleanQueryBenchmarks — Must/Should/MustNot queries
               phrase           PhraseQueryBenchmarks — exact and slop phrase matching
+              prefix           PrefixQueryBenchmarks — prefix matching (vs Lucene.NET + Lifti)
+              fuzzy            FuzzyQueryBenchmarks — fuzzy/edit-distance matching
+              wildcard         WildcardQueryBenchmarks — wildcard pattern matching
+              deletion         DeletionBenchmarks — delete throughput (vs Lucene.NET + Lifti)
               smallindex       SmallIndexBenchmarks — 100-doc roundtrip overhead
 
             Output:
@@ -158,11 +179,12 @@ internal static class Program
             """);
     }
 
-    private static (BenchmarkSuite Suite, string[] BenchmarkArgs, bool ShowHelp) ParseArguments(string[] args)
+    private static (BenchmarkSuite Suite, string[] BenchmarkArgs, bool ShowHelp, int? DocCount) ParseArguments(string[] args)
     {
         var suite = BenchmarkSuite.All;
         var benchmarkArgs = new List<string>(args.Length);
         var showHelp = false;
+        int? docCount = null;
 
         for (var i = 0; i < args.Length; i++)
         {
@@ -179,10 +201,17 @@ internal static class Program
                 continue;
             }
 
+            if (string.Equals(args[i], "--doccount", StringComparison.OrdinalIgnoreCase) && i + 1 < args.Length)
+            {
+                if (int.TryParse(args[++i], NumberStyles.Integer, CultureInfo.InvariantCulture, out var dc))
+                    docCount = dc;
+                continue;
+            }
+
             benchmarkArgs.Add(args[i]);
         }
 
-        return (suite, [.. benchmarkArgs], showHelp);
+        return (suite, [.. benchmarkArgs], showHelp, docCount);
     }
 
     private static BenchmarkSuite ParseSuite(string value)
@@ -199,6 +228,14 @@ internal static class Program
             return BenchmarkSuite.Phrase;
         if (value.Equals("smallindex", StringComparison.OrdinalIgnoreCase))
             return BenchmarkSuite.SmallIndex;
+        if (value.Equals("prefix", StringComparison.OrdinalIgnoreCase))
+            return BenchmarkSuite.Prefix;
+        if (value.Equals("fuzzy", StringComparison.OrdinalIgnoreCase))
+            return BenchmarkSuite.Fuzzy;
+        if (value.Equals("wildcard", StringComparison.OrdinalIgnoreCase))
+            return BenchmarkSuite.Wildcard;
+        if (value.Equals("deletion", StringComparison.OrdinalIgnoreCase))
+            return BenchmarkSuite.Deletion;
 
         return BenchmarkSuite.All;
     }
@@ -229,6 +266,10 @@ internal static class Program
         Analysis,
         Boolean,
         Phrase,
-        SmallIndex
+        SmallIndex,
+        Prefix,
+        Fuzzy,
+        Wildcard,
+        Deletion
     }
 }

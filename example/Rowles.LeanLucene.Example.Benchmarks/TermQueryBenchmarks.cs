@@ -31,7 +31,9 @@ public class TermQueryBenchmarks
 {
     private const int TopN = 25;
 
-    [Params(2_000)]
+    public static IEnumerable<int> DocCounts => BenchmarkData.GetDocCounts(2_000);
+
+    [ParamsSource(nameof(DocCounts))]
     public int DocumentCount { get; set; }
 
     [Params("search", "vector", "performance")]

@@ -1,10 +1,14 @@
 using BenchmarkDotNet.Attributes;
+using Lucene.Net.Analysis;
+using Lucene.Net.Analysis.Standard;
+using Lucene.Net.Util;
 using Rowles.LeanLucene.Analysis;
 
 namespace Rowles.LeanLucene.Example.Benchmarks;
 
 /// <summary>
 /// Measures analysis pipeline throughput: tokenisation + lowercase + stop-word removal.
+/// Compares LeanLucene StandardAnalyser against Lucene.NET StandardAnalyzer.
 /// </summary>
 [MemoryDiagnoser]
 [HtmlExporter]
@@ -13,27 +17,53 @@ namespace Rowles.LeanLucene.Example.Benchmarks;
 [SimpleJob]
 public class AnalysisBenchmarks
 {
-    [Params(1_000)]
+    public static IEnumerable<int> DocCounts => BenchmarkData.GetDocCounts(1_000);
+
+    [ParamsSource(nameof(DocCounts))]
     public int DocumentCount { get; set; }
 
     private string[] _documents = [];
-    private StandardAnalyser _analyser = null!;
+    private StandardAnalyser _leanAnalyser = null!;
+    private StandardAnalyzer _luceneAnalyzer = null!;
 
     [GlobalSetup]
     public void Setup()
     {
         _documents = BenchmarkData.BuildDocuments(DocumentCount);
-        _analyser = new StandardAnalyser();
+        _leanAnalyser = new StandardAnalyser();
+        _luceneAnalyzer = new StandardAnalyzer(LuceneVersion.LUCENE_48);
     }
 
-    [Benchmark]
+    [GlobalCleanup]
+    public void Cleanup()
+    {
+        _luceneAnalyzer?.Dispose();
+    }
+
+    [Benchmark(Baseline = true)]
     public int LeanLucene_Analyse()
     {
         int totalTokens = 0;
         for (int i = 0; i < _documents.Length; i++)
         {
-            var tokens = _analyser.Analyse(_documents[i].AsSpan());
+            var tokens = _leanAnalyser.Analyse(_documents[i].AsSpan());
             totalTokens += tokens.Count;
+        }
+        return totalTokens;
+    }
+
+    [Benchmark]
+    public int LuceneNet_Analyse()
+    {
+        int totalTokens = 0;
+        for (int i = 0; i < _documents.Length; i++)
+        {
+            using var reader = new System.IO.StringReader(_documents[i]);
+            using var stream = _luceneAnalyzer.GetTokenStream("body", reader);
+            stream.Reset();
+            while (stream.IncrementToken())
+                totalTokens++;
+            stream.End();
         }
         return totalTokens;
     }

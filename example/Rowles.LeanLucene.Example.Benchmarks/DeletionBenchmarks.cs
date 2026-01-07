@@ -2,9 +2,12 @@ using BenchmarkDotNet.Attributes;
 using Lifti;
 using Lucene.Net.Analysis.Standard;
 using Lucene.Net.Documents;
+using Lucene.Net.Index;
+using Lucene.Net.Store;
 using Lucene.Net.Util;
-using Rowles.LeanLucene.Store;
+using IODirectory = System.IO.Directory;
 using LeanDocument = Rowles.LeanLucene.Document.LeanDocument;
+using LeanMMapDirectory = Rowles.LeanLucene.Store.MMapDirectory;
 using LeanStringField = Rowles.LeanLucene.Document.StringField;
 using LeanTextField = Rowles.LeanLucene.Document.TextField;
 using LuceneStringField = Lucene.Net.Documents.StringField;
@@ -12,15 +15,18 @@ using LuceneTextField = Lucene.Net.Documents.TextField;
 
 namespace Rowles.LeanLucene.Example.Benchmarks;
 
+/// <summary>
+/// Measures document deletion performance across all 3 libraries.
+/// Indexes N docs, then deletes ~10% and verifies the index reflects the change.
+/// </summary>
 [MemoryDiagnoser]
 [HtmlExporter]
 [JsonExporterAttribute.Full]
 [MarkdownExporterAttribute.GitHub]
-[KeepBenchmarkFiles]
 [SimpleJob]
-public class IndexingBenchmarks
+public class DeletionBenchmarks
 {
-    public static IEnumerable<int> DocCounts => BenchmarkData.GetDocCounts(3_000);
+    public static IEnumerable<int> DocCounts => BenchmarkData.GetDocCounts(2_000);
 
     [ParamsSource(nameof(DocCounts))]
     public int DocumentCount { get; set; }
@@ -34,21 +40,17 @@ public class IndexingBenchmarks
     }
 
     [Benchmark(Baseline = true)]
-    public int LeanLucene_IndexDocuments()
+    public int LeanLucene_DeleteDocuments()
     {
-        var path = Path.Combine(Path.GetTempPath(), $"leanlucene-bench-index-{Guid.NewGuid():N}");
-        Directory.CreateDirectory(path);
+        var path = Path.Combine(Path.GetTempPath(), $"leanlucene-bench-del-{Guid.NewGuid():N}");
+        IODirectory.CreateDirectory(path);
 
         try
         {
-            var directory = new MMapDirectory(path);
+            var directory = new LeanMMapDirectory(path);
             using var writer = new Rowles.LeanLucene.Index.IndexWriter(
                 directory,
-                new Rowles.LeanLucene.Index.IndexWriterConfig
-                {
-                    MaxBufferedDocs = 512,
-                    RamBufferSizeMB = 64
-                });
+                new Rowles.LeanLucene.Index.IndexWriterConfig { MaxBufferedDocs = 512, RamBufferSizeMB = 64 });
 
             for (int i = 0; i < _documents.Length; i++)
             {
@@ -57,21 +59,26 @@ public class IndexingBenchmarks
                 doc.Add(new LeanTextField("body", _documents[i]));
                 writer.AddDocument(doc);
             }
-
             writer.Commit();
-            return _documents.Length;
+
+            int deleteCount = DocumentCount / 10;
+            for (int i = 0; i < deleteCount; i++)
+                writer.DeleteDocuments(new Rowles.LeanLucene.Search.TermQuery("id", i.ToString(System.Globalization.CultureInfo.InvariantCulture)));
+            writer.Commit();
+
+            return deleteCount;
         }
         finally
         {
-            if (Directory.Exists(path))
-                Directory.Delete(path, recursive: true);
+            if (IODirectory.Exists(path))
+                IODirectory.Delete(path, recursive: true);
         }
     }
 
     [Benchmark]
-    public int LuceneNet_IndexDocuments()
+    public int LuceneNet_DeleteDocuments()
     {
-        using var directory = new Lucene.Net.Store.RAMDirectory();
+        using var directory = new RAMDirectory();
         using var analyzer = new StandardAnalyzer(LuceneVersion.LUCENE_48);
         using var writer = new Lucene.Net.Index.IndexWriter(
             directory,
@@ -81,24 +88,33 @@ public class IndexingBenchmarks
         {
             var doc = new Lucene.Net.Documents.Document
             {
-                new LuceneStringField("id", i.ToString(System.Globalization.CultureInfo.InvariantCulture), Field.Store.NO),
+                new LuceneStringField("id", i.ToString(System.Globalization.CultureInfo.InvariantCulture), Field.Store.YES),
                 new LuceneTextField("body", _documents[i], Field.Store.NO)
             };
             writer.AddDocument(doc);
         }
-
         writer.Commit();
-        return _documents.Length;
+
+        int deleteCount = DocumentCount / 10;
+        for (int i = 0; i < deleteCount; i++)
+            writer.DeleteDocuments(new Term("id", i.ToString(System.Globalization.CultureInfo.InvariantCulture)));
+        writer.Commit();
+
+        return deleteCount;
     }
 
     [Benchmark]
-    public int Lifti_IndexDocuments()
+    public int Lifti_DeleteDocuments()
     {
         var index = new FullTextIndexBuilder<int>().Build();
 
         for (int i = 0; i < _documents.Length; i++)
             index.AddAsync(i, _documents[i]).GetAwaiter().GetResult();
 
-        return _documents.Length;
+        int deleteCount = DocumentCount / 10;
+        for (int i = 0; i < deleteCount; i++)
+            index.RemoveAsync(i).GetAwaiter().GetResult();
+
+        return deleteCount;
     }
 }

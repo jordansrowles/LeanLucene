@@ -20,7 +20,9 @@ public class SmallIndexBenchmarks
 {
     private const int TopN = 10;
 
-    [Params(100)]
+    public static IEnumerable<int> DocCounts => BenchmarkData.GetDocCounts(100);
+
+    [ParamsSource(nameof(DocCounts))]
     public int DocumentCount { get; set; }
 
     private string[] _documents = [];

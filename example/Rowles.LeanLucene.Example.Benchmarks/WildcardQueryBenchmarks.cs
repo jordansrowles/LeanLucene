@@ -1,5 +1,4 @@
 using BenchmarkDotNet.Attributes;
-using Lifti;
 using Lucene.Net.Analysis.Standard;
 using Lucene.Net.Documents;
 using Lucene.Net.Index;
@@ -19,14 +18,15 @@ using LuceneTextField = Lucene.Net.Documents.TextField;
 namespace Rowles.LeanLucene.Example.Benchmarks;
 
 /// <summary>
-/// Measures BooleanQuery performance: Must / Should / MustNot across all 3 libraries.
+/// Measures WildcardQuery performance: LeanLucene vs Lucene.NET.
+/// Lifti only supports prefix wildcard, so it is excluded.
 /// </summary>
 [MemoryDiagnoser]
 [HtmlExporter]
 [JsonExporterAttribute.Full]
 [MarkdownExporterAttribute.GitHub]
 [SimpleJob]
-public class BooleanQueryBenchmarks
+public class WildcardQueryBenchmarks
 {
     private const int TopN = 25;
 
@@ -34,6 +34,9 @@ public class BooleanQueryBenchmarks
 
     [ParamsSource(nameof(DocCounts))]
     public int DocumentCount { get; set; }
+
+    [Params("sea*", "bench*k", "vec?or")]
+    public string WildcardPattern { get; set; } = "sea*";
 
     private string _leanIndexPath = string.Empty;
     private LeanMMapDirectory? _leanDirectory;
@@ -44,15 +47,12 @@ public class BooleanQueryBenchmarks
     private DirectoryReader? _luceneReader;
     private LuceneIndexSearcher? _luceneSearcher;
 
-    private IFullTextIndex<int>? _liftiIndex;
-
     [GlobalSetup]
     public void Setup()
     {
         var documents = BenchmarkData.BuildDocuments(DocumentCount);
         BuildLeanIndex(documents);
         BuildLuceneIndex(documents);
-        BuildLiftiIndex(documents);
     }
 
     [GlobalCleanup]
@@ -67,95 +67,23 @@ public class BooleanQueryBenchmarks
         _luceneDirectory?.Dispose();
     }
 
-    // --- Must (AND) ---
-
     [Benchmark(Baseline = true)]
-    public int LeanLucene_Must()
+    public int LeanLucene_WildcardQuery()
     {
-        var bq = new Rowles.LeanLucene.Search.BooleanQuery();
-        bq.Add(new Rowles.LeanLucene.Search.TermQuery("body", "search"), Rowles.LeanLucene.Search.Occur.Must);
-        bq.Add(new Rowles.LeanLucene.Search.TermQuery("body", "benchmark"), Rowles.LeanLucene.Search.Occur.Must);
-        return _leanSearcher!.Search(bq, TopN).TotalHits;
+        var query = new Rowles.LeanLucene.Search.WildcardQuery("body", WildcardPattern);
+        return _leanSearcher!.Search(query, TopN).TotalHits;
     }
 
     [Benchmark]
-    public int LuceneNet_Must()
+    public int LuceneNet_WildcardQuery()
     {
-        var bq = new Lucene.Net.Search.BooleanQuery
-        {
-            { new Lucene.Net.Search.TermQuery(new Term("body", "search")), Occur.MUST },
-            { new Lucene.Net.Search.TermQuery(new Term("body", "benchmark")), Occur.MUST }
-        };
-        return _luceneSearcher!.Search(bq, TopN).TotalHits;
+        var query = new Lucene.Net.Search.WildcardQuery(new Term("body", WildcardPattern));
+        return _luceneSearcher!.Search(query, TopN).TotalHits;
     }
-
-    [Benchmark]
-    public int Lifti_Must()
-    {
-        return _liftiIndex!.Search("search & benchmark").Count();
-    }
-
-    // --- Should (OR) ---
-
-    [Benchmark]
-    public int LeanLucene_Should()
-    {
-        var bq = new Rowles.LeanLucene.Search.BooleanQuery();
-        bq.Add(new Rowles.LeanLucene.Search.TermQuery("body", "search"), Rowles.LeanLucene.Search.Occur.Should);
-        bq.Add(new Rowles.LeanLucene.Search.TermQuery("body", "vector"), Rowles.LeanLucene.Search.Occur.Should);
-        return _leanSearcher!.Search(bq, TopN).TotalHits;
-    }
-
-    [Benchmark]
-    public int LuceneNet_Should()
-    {
-        var bq = new Lucene.Net.Search.BooleanQuery
-        {
-            { new Lucene.Net.Search.TermQuery(new Term("body", "search")), Occur.SHOULD },
-            { new Lucene.Net.Search.TermQuery(new Term("body", "vector")), Occur.SHOULD }
-        };
-        return _luceneSearcher!.Search(bq, TopN).TotalHits;
-    }
-
-    [Benchmark]
-    public int Lifti_Should()
-    {
-        return _liftiIndex!.Search("search | vector").Count();
-    }
-
-    // --- MustNot ---
-
-    [Benchmark]
-    public int LeanLucene_MustNot()
-    {
-        var bq = new Rowles.LeanLucene.Search.BooleanQuery();
-        bq.Add(new Rowles.LeanLucene.Search.TermQuery("body", "benchmark"), Rowles.LeanLucene.Search.Occur.Must);
-        bq.Add(new Rowles.LeanLucene.Search.TermQuery("body", "vector"), Rowles.LeanLucene.Search.Occur.MustNot);
-        return _leanSearcher!.Search(bq, TopN).TotalHits;
-    }
-
-    [Benchmark]
-    public int LuceneNet_MustNot()
-    {
-        var bq = new Lucene.Net.Search.BooleanQuery
-        {
-            { new Lucene.Net.Search.TermQuery(new Term("body", "benchmark")), Occur.MUST },
-            { new Lucene.Net.Search.TermQuery(new Term("body", "vector")), Occur.MUST_NOT }
-        };
-        return _luceneSearcher!.Search(bq, TopN).TotalHits;
-    }
-
-    [Benchmark]
-    public int Lifti_MustNot()
-    {
-        return _liftiIndex!.Search("benchmark & -vector").Count();
-    }
-
-    // --- Index builders ---
 
     private void BuildLeanIndex(string[] documents)
     {
-        _leanIndexPath = Path.Combine(Path.GetTempPath(), $"leanlucene-bench-bool-{Guid.NewGuid():N}");
+        _leanIndexPath = Path.Combine(Path.GetTempPath(), $"leanlucene-bench-wildcard-{Guid.NewGuid():N}");
         IODirectory.CreateDirectory(_leanIndexPath);
 
         _leanDirectory = new LeanMMapDirectory(_leanIndexPath);
@@ -199,12 +127,5 @@ public class BooleanQueryBenchmarks
 
         _luceneReader = DirectoryReader.Open(_luceneDirectory);
         _luceneSearcher = new LuceneIndexSearcher(_luceneReader);
-    }
-
-    private void BuildLiftiIndex(string[] documents)
-    {
-        _liftiIndex = new FullTextIndexBuilder<int>().Build();
-        for (int i = 0; i < documents.Length; i++)
-            _liftiIndex.AddAsync(i, documents[i]).GetAwaiter().GetResult();
     }
 }
