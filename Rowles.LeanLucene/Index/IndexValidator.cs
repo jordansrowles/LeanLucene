@@ -115,16 +115,16 @@ public static class IndexValidator
                 }
             }
 
-            // Verify .nrm length matches DocCount (NormsWriter writes 1 byte per document, no header)
+            // Verify .nrm is readable (per-field format: 4-byte field count header minimum)
             var nrmPath = basePath + ".nrm";
             if (File.Exists(nrmPath))
             {
                 try
                 {
                     long nrmLen = new FileInfo(nrmPath).Length;
-                    if (nrmLen < info.DocCount)
+                    if (nrmLen < 4)
                     {
-                        result.AddIssue($"Segment '{segId}': .nrm has {nrmLen} bytes but DocCount={info.DocCount}.");
+                        result.AddIssue($"Segment '{segId}': .nrm has {nrmLen} bytes, expected at least 4.");
                     }
                 }
                 catch (Exception ex)

@@ -5,7 +5,7 @@ namespace Rowles.LeanLucene.Codecs;
 /// <summary>
 /// Writes stored field data (.fdt) with Brotli block compression and a parallel offset index (.fdx).
 /// Documents are grouped into blocks of 16 and compressed together.
-/// Version 3: supports multi-valued fields (each field can have multiple values).
+/// Each field supports multiple values.
 /// </summary>
 public static class StoredFieldsWriter
 {

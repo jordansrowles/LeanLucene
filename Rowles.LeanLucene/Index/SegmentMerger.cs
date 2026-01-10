@@ -296,7 +296,6 @@ public sealed class SegmentMerger
                 for (int oldDocId = 0; oldDocId < segInfo.DocCount; oldDocId++)
                 {
                     if (!normReader.IsLive(oldDocId)) continue;
-                    // Get per-field norm (with fallback to combined for legacy segments)
                     fieldNormsArray[normIdx++] = normReader.GetNorm(oldDocId, fieldName);
                 }
             }

@@ -17,8 +17,6 @@ public sealed class SegmentReader : IDisposable
     private readonly StoredFieldsReader? _storedReader;
     private readonly Dictionary<string, float[]> _fieldNorms;
     private readonly Dictionary<string, int[]> _fieldLengthsPerField;
-    private readonly float[] _norms; // Combined fallback for legacy segments or non-field-specific queries
-    private readonly int[] _fieldLengths; // Combined fallback
     private readonly Dictionary<string, Dictionary<int, double>> _numericIndex = new();
     private readonly VectorReader? _vectorReader;
     private readonly Dictionary<string, double[]> _numericDocValues;
@@ -52,16 +50,13 @@ public sealed class SegmentReader : IDisposable
         if (File.Exists(delPath))
             _liveDocs = LiveDocs.Deserialise(delPath, info.DocCount);
 
-        // Load per-field norms (or combined for legacy segments)
+        // Load per-field norms
         _fieldNorms = NormsReader.Read(basePath + ".nrm");
 
         // Precompute per-field lengths from norms to avoid per-doc float division in scoring
         _fieldLengthsPerField = new Dictionary<string, int[]>(_fieldNorms.Count, StringComparer.Ordinal);
         foreach (var (fieldName, norms) in _fieldNorms)
         {
-            if (fieldName == "_combined")
-                continue; // Handle combined separately
-                
             var fieldLengths = new int[norms.Length];
             for (int i = 0; i < norms.Length; i++)
             {
@@ -69,25 +64,6 @@ public sealed class SegmentReader : IDisposable
                 fieldLengths[i] = n <= 0f ? 1 : Math.Max(1, (int)MathF.Round(1.0f / n - 1.0f));
             }
             _fieldLengthsPerField[fieldName] = fieldLengths;
-        }
-
-        // Setup combined norms fallback for legacy segments or non-field-specific queries
-        if (_fieldNorms.TryGetValue("_combined", out var combinedNorms))
-        {
-            _norms = combinedNorms;
-        }
-        else
-        {
-            // For new per-field segments, use first field or empty as fallback
-            _norms = _fieldNorms.Values.FirstOrDefault() ?? [];
-        }
-
-        // Precompute combined field lengths from combined norms
-        _fieldLengths = new int[_norms.Length];
-        for (int i = 0; i < _norms.Length; i++)
-        {
-            float n = _norms[i];
-            _fieldLengths[i] = n <= 0f ? 1 : Math.Max(1, (int)MathF.Round(1.0f / n - 1.0f));
         }
 
         var numPath = basePath + ".num";
@@ -108,45 +84,48 @@ public sealed class SegmentReader : IDisposable
     /// <summary>True when this segment has no deleted documents, allowing callers to skip per-doc IsLive checks.</summary>
     public bool HasDeletions => _liveDocs is not null;
 
-    /// <summary>Returns the quantised norm value for a document (0..1 range).</summary>
-    public float GetNorm(int docId)
-    {
-        if (docId < 0 || docId >= _norms.Length)
-            return 0f;
-        return _norms[docId];
-    }
-
     /// <summary>Returns the quantised norm value for a document in a specific field (0..1 range).</summary>
     public float GetNorm(int docId, string field)
     {
         if (_fieldNorms.TryGetValue(field, out var norms) && (uint)docId < (uint)norms.Length)
             return norms[docId];
-        
-        // Fallback to combined for legacy segments
-        return GetNorm(docId);
+        return 0f;
+    }
+
+    /// <summary>Returns the quantised norm value for a document using the first available field.</summary>
+    public float GetNorm(int docId)
+    {
+        foreach (var norms in _fieldNorms.Values)
+        {
+            if ((uint)docId < (uint)norms.Length)
+                return norms[docId];
+        }
+        return 0f;
     }
 
     /// <summary>
     /// Returns an approximate field length for BM25 for a specific field, derived from the stored norm.
-    /// Norm was stored as 1/(1+tokenCount), so fieldLength ≈ (1/norm) - 1.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public int GetFieldLength(int docId, string field)
     {
         if (_fieldLengthsPerField.TryGetValue(field, out var fieldLengths))
             return (uint)docId < (uint)fieldLengths.Length ? fieldLengths[docId] : 1;
-        
-        // Fallback to combined for legacy segments or unknown fields
-        return (uint)docId < (uint)_fieldLengths.Length ? _fieldLengths[docId] : 1;
+        return 1;
     }
 
     /// <summary>
-    /// Returns an approximate combined field length for BM25 (for backward compatibility and non-field queries).
+    /// Returns an approximate field length using the first available field (for non-field-specific queries).
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public int GetFieldLength(int docId)
     {
-        return (uint)docId < (uint)_fieldLengths.Length ? _fieldLengths[docId] : 1;
+        foreach (var fieldLengths in _fieldLengthsPerField.Values)
+        {
+            if ((uint)docId < (uint)fieldLengths.Length)
+                return fieldLengths[docId];
+        }
+        return 1;
     }
 
     /// <summary>
@@ -484,12 +463,10 @@ public sealed class SegmentReader : IDisposable
             throw new InvalidDataException($"Segment dictionary file is truncated: '{basePath}.dic'.");
 
         var nrmLength = new FileInfo(basePath + ".nrm").Length;
-        // New format (v2): 1 version byte + 4-byte field count = minimum 5 bytes.
-        // Old format (v1): 1 byte per doc.
-        long nrmMin = nrmLength >= 1 && File.ReadAllBytes(basePath + ".nrm")[0] == 2 ? 5 : docCount;
-        if (nrmLength < nrmMin)
+        // Per-field format: 4-byte field count header = minimum 4 bytes
+        if (nrmLength < 4)
             throw new InvalidDataException(
-                $"Segment norms file '{basePath}.nrm' is truncated: expected at least {nrmMin} bytes, found {nrmLength}.");
+                $"Segment norms file '{basePath}.nrm' is truncated: expected at least 4 bytes, found {nrmLength}.");
     }
 
     private static void ValidateExistingFile(string path)
