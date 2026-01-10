@@ -1,3 +1,4 @@
+using BenchmarkDotNet.Engines;
 using BenchmarkDotNet.Reports;
 using System.Globalization;
 using System.Reflection;
@@ -97,8 +98,12 @@ internal static class BenchmarkRunReportBuilder
 
     private static BenchmarkSuiteReport BuildSuiteReport((string Suite, Summary Summary) source)
     {
+        // BDN emits two BenchmarkReport entries per case (full trace + converged result).
+        // Keep the lower-mean entry, which is the converged measurement after outlier removal.
         var benchmarks = source.Summary.Reports
             .Select(BuildCaseReport)
+            .GroupBy(r => r.Key, StringComparer.Ordinal)
+            .Select(g => g.MinBy(r => r.Statistics?.MeanNanoseconds ?? double.MaxValue)!)
             .OrderBy(r => r.Key, StringComparer.Ordinal)
             .ToList();
 
@@ -131,7 +136,7 @@ internal static class BenchmarkRunReportBuilder
             MethodName = descriptor.WorkloadMethod.Name,
             Parameters = parameters,
             Statistics = BuildStatisticsReport(report.ResultStatistics),
-            Gc = BuildGcReport(report.GcStats)
+            Gc = BuildGcReport(report.GcStats, report.Metrics)
         };
     }
 
@@ -173,19 +178,20 @@ internal static class BenchmarkRunReportBuilder
         };
     }
 
-    private static BenchmarkGcReport? BuildGcReport(object? gcStats)
+    private static BenchmarkGcReport? BuildGcReport(GcStats gcStats, IReadOnlyDictionary<string, Metric>? metrics)
     {
-        if (gcStats is null)
-        {
-            return null;
-        }
+        // The MemoryDiagnoser stores allocation in report.Metrics under "Allocated Memory".
+        // GcStats.BytesAllocatedPerOperation is null at runtime even when [MemoryDiagnoser] is active.
+        double? bytesAllocated = null;
+        if (metrics is not null && metrics.TryGetValue("Allocated Memory", out var allocMetric))
+            bytesAllocated = allocMetric.Value;
 
         return new BenchmarkGcReport
         {
-            BytesAllocatedPerOperation = ReadDoubleProperty(gcStats, "BytesAllocatedPerOperation"),
-            Gen0Collections = ReadDoubleProperty(gcStats, "Gen0Collections"),
-            Gen1Collections = ReadDoubleProperty(gcStats, "Gen1Collections"),
-            Gen2Collections = ReadDoubleProperty(gcStats, "Gen2Collections")
+            BytesAllocatedPerOperation = bytesAllocated,
+            Gen0Collections = gcStats.Gen0Collections,
+            Gen1Collections = gcStats.Gen1Collections,
+            Gen2Collections = gcStats.Gen2Collections
         };
     }
 

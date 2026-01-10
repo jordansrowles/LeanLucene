@@ -5,18 +5,19 @@ namespace Rowles.LeanLucene.Codecs;
 /// <summary>
 /// Writes stored field data (.fdt) with Brotli block compression and a parallel offset index (.fdx).
 /// Documents are grouped into blocks of 16 and compressed together.
+/// Version 3: supports multi-valued fields (each field can have multiple values).
 /// </summary>
 public static class StoredFieldsWriter
 {
     private const int BlockSize = 16;
 
-    public static void Write(string fdtPath, string fdxPath, IReadOnlyList<Dictionary<string, string>> docs)
+    public static void Write(string fdtPath, string fdxPath, IReadOnlyList<Dictionary<string, List<string>>> docs)
     {
         using var fdtStream = new FileStream(fdtPath, FileMode.Create, FileAccess.Write, FileShare.None);
         using var fdtWriter = new BinaryWriter(fdtStream, System.Text.Encoding.UTF8, leaveOpen: false);
 
         // Header: version + block size
-        fdtWriter.Write((byte)2); // version 2 = compressed
+        fdtWriter.Write((byte)3); // version 3 = compressed + multi-valued
         fdtWriter.Write(BlockSize);
 
         var blockOffsets = new List<long>();
@@ -25,6 +26,7 @@ public static class StoredFieldsWriter
         var rawStream = new MemoryStream(4096);
         var rawWriter = new BinaryWriter(rawStream, System.Text.Encoding.UTF8, leaveOpen: true);
         var compStream = new MemoryStream(4096);
+        Span<byte> encodeBuf = stackalloc byte[512];
 
         for (int blockStart = 0; blockStart < docs.Count; blockStart += BlockSize)
         {
@@ -41,14 +43,24 @@ public static class StoredFieldsWriter
                 intraOffsets[i] = (int)rawStream.Position;
                 var fields = docs[blockStart + i];
                 rawWriter.Write(fields.Count);
-                foreach (var (name, value) in fields)
+                foreach (var (name, values) in fields)
                 {
-                    var nameBytes = System.Text.Encoding.UTF8.GetBytes(name);
-                    rawWriter.Write(nameBytes.Length);
-                    rawWriter.Write(nameBytes);
-                    var valueBytes = System.Text.Encoding.UTF8.GetBytes(value);
-                    rawWriter.Write(valueBytes.Length);
-                    rawWriter.Write(valueBytes);
+                    int nameByteCount = System.Text.Encoding.UTF8.GetByteCount(name);
+                    Span<byte> nameBuf = nameByteCount <= encodeBuf.Length ? encodeBuf : new byte[nameByteCount];
+                    System.Text.Encoding.UTF8.GetBytes(name, nameBuf);
+                    rawWriter.Write(nameByteCount);
+                    rawWriter.Write(nameBuf[..nameByteCount]);
+
+                    // Write value count, then each value
+                    rawWriter.Write(values.Count);
+                    foreach (var value in values)
+                    {
+                        int valueByteCount = System.Text.Encoding.UTF8.GetByteCount(value);
+                        Span<byte> valueBuf = valueByteCount <= encodeBuf.Length ? encodeBuf : new byte[valueByteCount];
+                        System.Text.Encoding.UTF8.GetBytes(value, valueBuf);
+                        rawWriter.Write(valueByteCount);
+                        rawWriter.Write(valueBuf[..valueByteCount]);
+                    }
                 }
             }
             rawWriter.Flush();
@@ -84,7 +96,7 @@ public static class StoredFieldsWriter
         using var fdxStream = new FileStream(fdxPath, FileMode.Create, FileAccess.Write, FileShare.None);
         using var fdxWriter = new BinaryWriter(fdxStream, System.Text.Encoding.UTF8, leaveOpen: false);
 
-        fdxWriter.Write((byte)2); // version
+        fdxWriter.Write((byte)3); // version
         fdxWriter.Write(BlockSize);
         fdxWriter.Write(docs.Count);
         fdxWriter.Write(blockOffsets.Count);

@@ -30,7 +30,7 @@ public class FuzzyQueryBenchmarks
 {
     private const int TopN = 25;
 
-    public static IEnumerable<int> DocCounts => BenchmarkData.GetDocCounts(2_000);
+    public static IEnumerable<int> DocCounts => BenchmarkData.GetDocCounts(BenchmarkData.DefaultDocCount);
 
     [ParamsSource(nameof(DocCounts))]
     public int DocumentCount { get; set; }

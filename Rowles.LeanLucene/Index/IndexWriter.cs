@@ -19,15 +19,15 @@ public sealed class IndexWriter : IDisposable
     // Unified posting accumulator keyed by qualified term ("field\0term")
     private Dictionary<string, PostingAccumulator> _postings = new(StringComparer.Ordinal);
     // Buffered stored fields per document (local doc ID → field data)
-    private List<Dictionary<string, string>> _storedFields = [];
+    private List<Dictionary<string, List<string>>> _storedFields = [];
     // Buffered numeric fields per document
     private List<Dictionary<string, double>> _numericFields = [];
     // Per-field numeric values for range indexing: field → docId → value
     private Dictionary<string, Dictionary<int, double>> _numericIndex = new();
     private Dictionary<int, (string FieldName, float[] Vector)> _bufferedVectors = new();
     private readonly HashSet<string> _termPool = new(StringComparer.Ordinal);
-    // Per-doc token count for O(1) norm computation
-    private int[] _docTokenCounts = new int[64];
+    // Per-field per-doc token counts for O(1) per-field norm computation
+    private Dictionary<string, int[]> _docTokenCounts = new(StringComparer.Ordinal);
     // Track field names seen in this flush
     private readonly HashSet<string> _fieldNames = new(StringComparer.Ordinal);
     // Cache qualified term strings to avoid repeated string.Concat
@@ -50,12 +50,24 @@ public sealed class IndexWriter : IDisposable
     private int _semaphoreSlotsHeld; // Track how many semaphore slots are currently held
     private readonly List<IndexSnapshot> _heldSnapshots = [];
     private bool _disposed;
+    private readonly FileStream _writeLockFile;
 
     public IndexWriter(MMapDirectory directory, IndexWriterConfig config)
     {
         _directory = directory;
         _config = config;
         _defaultAnalyser = config.DefaultAnalyser;
+
+        // Acquire exclusive write lock for this directory
+        var lockPath = Path.Combine(directory.DirectoryPath, "write.lock");
+        try
+        {
+            _writeLockFile = new FileStream(lockPath, FileMode.OpenOrCreate, FileAccess.Write, FileShare.None);
+        }
+        catch (IOException)
+        {
+            throw new WriteLockException(directory.DirectoryPath);
+        }
 
         // Initialize backpressure semaphore if MaxQueuedDocs > 0
         if (config.MaxQueuedDocs > 0)
@@ -175,12 +187,25 @@ public sealed class IndexWriter : IDisposable
         foreach (var storedDoc in dwpt.StoredFields)
             _storedFields.Add(storedDoc);
 
-        // Merge token counts
-        int newTotal = docBase + dwpt.DocCount;
-        if (newTotal > _docTokenCounts.Length)
-            Array.Resize(ref _docTokenCounts, Math.Max(_docTokenCounts.Length * 2, newTotal));
-        for (int i = 0; i < dwpt.DocCount && i < dwpt.DocTokenCounts.Length; i++)
-            _docTokenCounts[docBase + i] = dwpt.DocTokenCounts[i];
+        // Merge per-field token counts
+        foreach (var (fieldName, counts) in dwpt.DocTokenCounts)
+        {
+            if (!_docTokenCounts.TryGetValue(fieldName, out var dstCounts))
+            {
+                dstCounts = new int[Math.Max(_config.MaxBufferedDocs, 64)];
+                _docTokenCounts[fieldName] = dstCounts;
+            }
+            
+            int newTotal = docBase + dwpt.DocCount;
+            if (newTotal > dstCounts.Length)
+            {
+                Array.Resize(ref dstCounts, Math.Max(dstCounts.Length * 2, newTotal));
+                _docTokenCounts[fieldName] = dstCounts;
+            }
+            
+            for (int i = 0; i < dwpt.DocCount && i < counts.Length; i++)
+                dstCounts[docBase + i] = counts[i];
+        }
 
         // Merge field names
         foreach (var fn in dwpt.FieldNames)
@@ -220,7 +245,7 @@ public sealed class IndexWriter : IDisposable
     private void AddDocumentCore(LeanDocument doc)
     {
         int localDocId = _bufferedDocCount;
-        var storedDoc = new Dictionary<string, string>();
+        var storedDoc = new Dictionary<string, List<string>>();
         Dictionary<string, double>? numericDoc = null;
 
         foreach (var field in doc.Fields)
@@ -230,18 +255,39 @@ public sealed class IndexWriter : IDisposable
                 case TextField tf:
                     IndexTextField(tf.Name, tf.Value, localDocId);
                     if (tf.IsStored)
-                        storedDoc[tf.Name] = tf.Value;
+                    {
+                        if (!storedDoc.TryGetValue(tf.Name, out var list))
+                        {
+                            list = new List<string>();
+                            storedDoc[tf.Name] = list;
+                        }
+                        list.Add(tf.Value);
+                    }
                     break;
                 case StringField sf:
                     IndexStringField(sf.Name, sf.Value, localDocId);
                     if (sf.IsStored)
-                        storedDoc[sf.Name] = sf.Value;
+                    {
+                        if (!storedDoc.TryGetValue(sf.Name, out var list))
+                        {
+                            list = new List<string>();
+                            storedDoc[sf.Name] = list;
+                        }
+                        list.Add(sf.Value);
+                    }
                     break;
                 case NumericField nf:
                     IndexNumericField(nf.Name, nf.Value, localDocId);
                     numericDoc ??= new Dictionary<string, double>();
                     if (nf.IsStored)
-                        storedDoc[nf.Name] = nf.Value.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                    {
+                        if (!storedDoc.TryGetValue(nf.Name, out var list))
+                        {
+                            list = new List<string>();
+                            storedDoc[nf.Name] = list;
+                        }
+                        list.Add(nf.Value.ToString(System.Globalization.CultureInfo.InvariantCulture));
+                    }
                     break;
                 case VectorField vf:
                     _bufferedVectors[localDocId] = (vf.Name, vf.Value.ToArray());
@@ -257,7 +303,11 @@ public sealed class IndexWriter : IDisposable
         // Estimate RAM usage (rough: 100 bytes per token entry + stored field sizes)
         _estimatedRamBytes += 200;
         foreach (var kvp in storedDoc)
-            _estimatedRamBytes += kvp.Key.Length * 2 + kvp.Value.Length * 2;
+        {
+            _estimatedRamBytes += kvp.Key.Length * 2;
+            foreach (var value in kvp.Value)
+                _estimatedRamBytes += value.Length * 2;
+        }
 
         // Check flush thresholds
         if (ShouldFlush())
@@ -314,7 +364,9 @@ public sealed class IndexWriter : IDisposable
         _commitGeneration++;
         var commitFile = Path.Combine(_directory.DirectoryPath, $"segments_{_commitGeneration}");
         var tempFile = commitFile + ".tmp";
-        var segmentIds = _committedSegments.Select(s => s.SegmentId).ToList();
+        var segmentIds = new List<string>(_committedSegments.Count);
+        foreach (var seg in _committedSegments)
+            segmentIds.Add(seg.SegmentId);
         var commitData = JsonSerializer.Serialize(new CommitData { Segments = segmentIds, Generation = _commitGeneration });
         File.WriteAllText(tempFile, commitData);
         File.Move(tempFile, commitFile, overwrite: true);
@@ -326,6 +378,11 @@ public sealed class IndexWriter : IDisposable
         _disposed = true;
 
         _backpressureSemaphore?.Dispose();
+
+        // Release the directory write lock
+        _writeLockFile.Dispose();
+        var lockPath = Path.Combine(_directory.DirectoryPath, "write.lock");
+        try { File.Delete(lockPath); } catch { /* best-effort */ }
     }
 
     /// <summary>
@@ -403,10 +460,18 @@ public sealed class IndexWriter : IDisposable
         }
         var tokens = analyser.Analyse(value.AsSpan());
 
-        // Track token count for O(1) norm computation
-        if (docId >= _docTokenCounts.Length)
-            Array.Resize(ref _docTokenCounts, Math.Max(_docTokenCounts.Length * 2, docId + 1));
-        _docTokenCounts[docId] += tokens.Count;
+        // Track per-field token count for O(1) per-field norm computation
+        if (!_docTokenCounts.TryGetValue(fieldName, out var counts))
+        {
+            counts = new int[Math.Max(_config.MaxBufferedDocs, 64)];
+            _docTokenCounts[fieldName] = counts;
+        }
+        if (docId >= counts.Length)
+        {
+            Array.Resize(ref counts, Math.Max(counts.Length * 2, docId + 1));
+            _docTokenCounts[fieldName] = counts;
+        }
+        counts[docId] += tokens.Count;
 
         _fieldNames.Add(fieldName);
 
@@ -573,14 +638,19 @@ public sealed class IndexWriter : IDisposable
         // Write term dictionary (.dic)
         TermDictionaryWriter.Write(basePath + ".dic", _sortedTermsBuffer, postingsOffsets);
 
-        // Write norms (.nrm) — use pre-tracked token counts (O(1) per doc)
-        var norms = new float[_bufferedDocCount];
-        for (int i = 0; i < _bufferedDocCount; i++)
+        // Write per-field norms (.nrm) — use pre-tracked per-field token counts (O(1) per doc)
+        var fieldNorms = new Dictionary<string, float[]>(_docTokenCounts.Count, StringComparer.Ordinal);
+        foreach (var (fieldName, counts) in _docTokenCounts)
         {
-            int totalTokens = i < _docTokenCounts.Length ? _docTokenCounts[i] : 0;
-            norms[i] = 1.0f / (1.0f + Math.Max(1, totalTokens));
+            var norms = new float[_bufferedDocCount];
+            for (int i = 0; i < _bufferedDocCount; i++)
+            {
+                int tokenCount = i < counts.Length ? counts[i] : 0;
+                norms[i] = 1.0f / (1.0f + Math.Max(1, tokenCount));
+            }
+            fieldNorms[fieldName] = norms;
         }
-        NormsWriter.Write(basePath + ".nrm", norms);
+        NormsWriter.Write(basePath + ".nrm", fieldNorms);
 
         // Write stored fields (.fdt + .fdx)
         StoredFieldsWriter.Write(basePath + ".fdt", basePath + ".fdx", _storedFields);
@@ -663,23 +733,16 @@ public sealed class IndexWriter : IDisposable
                 liveDocs = LiveDocs.Deserialise(delPath, seg.DocCount);
 
             bool changed = false;
+            // Open .pos file ONCE per segment for all delete terms
+            using var posReader = new BinaryReader(File.OpenRead(posPath));
             foreach (var (field, term) in _pendingDeletes)
             {
-                // Look up the qualified term in the dictionary
                 var qualifiedTerm = $"{field}\x00{term}";
                 if (!dicReader.TryGetPostingsOffset(qualifiedTerm, out long offset))
                     continue;
 
-                // Read doc IDs from postings at that offset
-                var docIds = ReadPostingsAtOffset(posPath, offset);
-                foreach (var docId in docIds)
-                {
-                    if (liveDocs.IsLive(docId))
-                    {
-                        liveDocs.Delete(docId);
-                        changed = true;
-                    }
-                }
+                // Seek within the already-open stream
+                ReadPostingsAtOffsetInto(posReader, offset, liveDocs, ref changed);
             }
 
             if (changed)
@@ -692,15 +755,18 @@ public sealed class IndexWriter : IDisposable
         _pendingDeletes.Clear();
     }
 
-    private static int[] ReadPostingsAtOffset(string posPath, long offset)
+    /// <summary>
+    /// Reads doc IDs from postings at the given offset using an already-open reader,
+    /// and marks matching live docs as deleted. Zero allocation for the common case.
+    /// </summary>
+    private static void ReadPostingsAtOffsetInto(BinaryReader reader, long offset, LiveDocs liveDocs, ref bool changed)
     {
-        using var reader = new BinaryReader(File.OpenRead(posPath));
         reader.BaseStream.Seek(offset, SeekOrigin.Begin);
         int count = reader.ReadInt32();
         int skipCount = reader.ReadInt32();
-        // Skip past skip entries (each is 2 × int32 = 8 bytes)
-        reader.BaseStream.Seek(skipCount * 8L, SeekOrigin.Current);
-        var ids = new int[count];
+        if (skipCount > 0)
+            reader.BaseStream.Seek(skipCount * 8L, SeekOrigin.Current);
+
         int prev = 0;
         for (int i = 0; i < count; i++)
         {
@@ -715,9 +781,12 @@ public sealed class IndexWriter : IDisposable
             {
                 throw new InvalidDataException("Postings data is corrupt: doc ID delta overflow.", ex);
             }
-            ids[i] = prev;
+            if (liveDocs.IsLive(prev))
+            {
+                liveDocs.Delete(prev);
+                changed = true;
+            }
         }
-        return ids;
     }
 
     private void ResetBuffer()
@@ -735,7 +804,7 @@ public sealed class IndexWriter : IDisposable
         _sortedTermsBuffer.Clear();
         _bufferedDocCount = 0;
         _estimatedRamBytes = 0;
-        Array.Clear(_docTokenCounts);
+        _docTokenCounts.Clear();
     }
 
     private string CanonicaliseTerm(string term)

@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using Rowles.LeanLucene.Search;
 using Rowles.LeanLucene.Store;
 
@@ -174,19 +175,132 @@ public sealed class TermDictionaryReader : IDisposable
 
     /// <summary>
     /// Enumerates all terms matching a wildcard pattern for a given field.
-    /// The qualifiedPrefix should be "field\0" to scope to a specific field.
+    /// Scans the dictionary directly, only allocating strings for matching terms.
     /// </summary>
     public List<(string Term, long Offset)> GetTermsMatching(string fieldPrefix, ReadOnlySpan<char> pattern)
     {
         var results = new List<(string, long)>();
-        var allTerms = GetAllTermsForField(fieldPrefix);
 
-        foreach (var (qualifiedTerm, offset) in allTerms)
+        Span<byte> prefixUtf8Buf = fieldPrefix.Length <= 128
+            ? stackalloc byte[fieldPrefix.Length * 3]
+            : new byte[fieldPrefix.Length * 3];
+        int prefixUtf8Len = System.Text.Encoding.UTF8.GetBytes(fieldPrefix.AsSpan(), prefixUtf8Buf);
+        var prefixUtf8 = prefixUtf8Buf[..prefixUtf8Len];
+
+        int lo = 0, hi = _skipIndex.Length - 1;
+        int bestBlock = -1;
+        while (lo <= hi)
         {
-            // Extract the term part after the field\0 prefix
-            var term = qualifiedTerm.AsSpan(fieldPrefix.Length);
-            if (WildcardQuery.Matches(term, pattern))
-                results.Add((qualifiedTerm, offset));
+            int mid = lo + (hi - lo) / 2;
+            int cmp = _skipIndex[mid].Term.AsSpan().SequenceCompareTo(fieldPrefix.AsSpan());
+            if (cmp <= 0) { bestBlock = mid; lo = mid + 1; }
+            else hi = mid - 1;
+        }
+
+        long scanStart = bestBlock >= 0 ? _skipIndex[bestBlock].Offset : (_skipIndex.Length > 0 ? _skipIndex[0].Offset : 0);
+        _input.Seek(scanStart);
+
+        Span<char> charBuf = stackalloc char[256];
+        bool foundAny = false;
+        while (_input.Position < _dataEnd)
+        {
+            int termLen = _input.ReadInt32();
+            var termSpan = _input.ReadSpan(termLen);
+            long postingsOffset = _input.ReadInt64();
+
+            if (termSpan.Length < prefixUtf8Len ||
+                !termSpan[..prefixUtf8Len].SequenceEqual(prefixUtf8))
+            {
+                if (foundAny || termSpan.SequenceCompareTo(prefixUtf8) > 0)
+                    break;
+                continue;
+            }
+
+            foundAny = true;
+            var termPartUtf8 = termSpan[prefixUtf8Len..];
+            int maxChars = termPartUtf8.Length;
+            if (maxChars > charBuf.Length)
+                charBuf = new char[maxChars];
+            int charCount = System.Text.Encoding.UTF8.GetChars(termPartUtf8, charBuf);
+
+            if (WildcardQuery.Matches(charBuf[..charCount], pattern))
+            {
+                string qualifiedTerm = System.Text.Encoding.UTF8.GetString(termSpan);
+                results.Add((qualifiedTerm, postingsOffset));
+            }
+        }
+
+        return results;
+    }
+
+    /// <summary>
+    /// Enumerates terms for a field that are within <paramref name="maxEdits"/> Levenshtein distance
+    /// of <paramref name="queryTerm"/>. Uses length-difference pre-filter to skip most terms
+    /// without computing edit distance.
+    /// </summary>
+    public List<(string Term, long Offset)> GetFuzzyMatches(string fieldPrefix, ReadOnlySpan<char> queryTerm, int maxEdits)
+    {
+        var results = new List<(string, long)>();
+
+        Span<byte> prefixUtf8Buf = fieldPrefix.Length <= 128
+            ? stackalloc byte[fieldPrefix.Length * 3]
+            : new byte[fieldPrefix.Length * 3];
+        int prefixUtf8Len = System.Text.Encoding.UTF8.GetBytes(fieldPrefix.AsSpan(), prefixUtf8Buf);
+        var prefixUtf8 = prefixUtf8Buf[..prefixUtf8Len];
+
+        int lo = 0, hi = _skipIndex.Length - 1;
+        int bestBlock = -1;
+        while (lo <= hi)
+        {
+            int mid = lo + (hi - lo) / 2;
+            int cmp = _skipIndex[mid].Term.AsSpan().SequenceCompareTo(fieldPrefix.AsSpan());
+            if (cmp <= 0) { bestBlock = mid; lo = mid + 1; }
+            else hi = mid - 1;
+        }
+
+        long scanStart = bestBlock >= 0 ? _skipIndex[bestBlock].Offset : (_skipIndex.Length > 0 ? _skipIndex[0].Offset : 0);
+        _input.Seek(scanStart);
+
+        int queryTermLen = queryTerm.Length;
+        Span<char> charBuf = stackalloc char[256];
+        bool foundAny = false;
+        while (_input.Position < _dataEnd)
+        {
+            int termLen = _input.ReadInt32();
+            var termSpan = _input.ReadSpan(termLen);
+            long postingsOffset = _input.ReadInt64();
+
+            if (termSpan.Length < prefixUtf8Len ||
+                !termSpan[..prefixUtf8Len].SequenceEqual(prefixUtf8))
+            {
+                if (foundAny || termSpan.SequenceCompareTo(prefixUtf8) > 0)
+                    break;
+                continue;
+            }
+
+            foundAny = true;
+            var termPartUtf8 = termSpan[prefixUtf8Len..];
+            int maxChars = termPartUtf8.Length;
+
+            // Length-difference heuristic: UTF-8 byte count >= char count,
+            // so if byte count difference already exceeds maxEdits, skip expensive decode
+            if (Math.Abs(maxChars - queryTermLen) > maxEdits)
+                continue;
+
+            if (maxChars > charBuf.Length)
+                charBuf = new char[maxChars];
+            int charCount = System.Text.Encoding.UTF8.GetChars(termPartUtf8, charBuf);
+
+            // Exact char-length check after decode
+            if (Math.Abs(charCount - queryTermLen) > maxEdits)
+                continue;
+
+            int distance = LevenshteinDistance.Compute(queryTerm, charBuf[..charCount]);
+            if (distance <= maxEdits)
+            {
+                string qualifiedTerm = System.Text.Encoding.UTF8.GetString(termSpan);
+                results.Add((qualifiedTerm, postingsOffset));
+            }
         }
 
         return results;
@@ -198,5 +312,133 @@ public sealed class TermDictionaryReader : IDisposable
     public List<(string Term, long Offset)> GetAllTermsForField(string fieldPrefix)
     {
         return GetTermsWithPrefix(fieldPrefix.AsSpan());
+    }
+
+    /// <summary>
+    /// Enumerates all terms for a field whose bare term value is within a lexicographic range.
+    /// <paramref name="fieldPrefix"/> must be of the form "field\0" (include the null separator).
+    /// </summary>
+    public List<(string Term, long Offset)> GetTermsInRange(
+        string fieldPrefix,
+        string? lower, string? upper,
+        bool includeLower = true, bool includeUpper = true)
+    {
+        var results = new List<(string, long)>();
+
+        // Encode field prefix as UTF-8 for byte-level comparison
+        Span<byte> prefixUtf8Buf = fieldPrefix.Length <= 128
+            ? stackalloc byte[fieldPrefix.Length * 3]
+            : new byte[fieldPrefix.Length * 3];
+        int prefixUtf8Len = System.Text.Encoding.UTF8.GetBytes(fieldPrefix.AsSpan(), prefixUtf8Buf);
+        var prefixUtf8 = prefixUtf8Buf[..prefixUtf8Len];
+
+        // Build qualified lower bound for skip-index entry point search
+        string scanKey = lower is not null ? fieldPrefix + lower : fieldPrefix;
+        int lo = 0, hi = _skipIndex.Length - 1;
+        int bestBlock = -1;
+        while (lo <= hi)
+        {
+            int mid = lo + (hi - lo) / 2;
+            int cmp = _skipIndex[mid].Term.AsSpan().SequenceCompareTo(scanKey.AsSpan());
+            if (cmp <= 0) { bestBlock = mid; lo = mid + 1; }
+            else hi = mid - 1;
+        }
+        long scanStart = bestBlock >= 0 ? _skipIndex[bestBlock].Offset : (_skipIndex.Length > 0 ? _skipIndex[0].Offset : 0);
+        _input.Seek(scanStart);
+
+        Span<char> charBuf = stackalloc char[256];
+        while (_input.Position < _dataEnd)
+        {
+            int termLen = _input.ReadInt32();
+            var termSpan = _input.ReadSpan(termLen);
+            long postingsOffset = _input.ReadInt64();
+
+            // Must start with fieldPrefix
+            if (termSpan.Length < prefixUtf8Len || !termSpan[..prefixUtf8Len].SequenceEqual(prefixUtf8))
+            {
+                if (termSpan.SequenceCompareTo(prefixUtf8) > 0)
+                    break;
+                continue;
+            }
+
+            // Decode bare term
+            var termPartUtf8 = termSpan[prefixUtf8Len..];
+            int maxChars = termPartUtf8.Length;
+            Span<char> termCharBuf = maxChars <= charBuf.Length ? charBuf[..maxChars] : new char[maxChars];
+            int charCount = System.Text.Encoding.UTF8.GetChars(termPartUtf8, termCharBuf);
+            var termPart = termCharBuf[..charCount];
+
+            // Lower bound check
+            if (lower is not null)
+            {
+                int cmp = termPart.SequenceCompareTo(lower.AsSpan());
+                if (cmp < 0 || (cmp == 0 && !includeLower)) continue;
+            }
+
+            // Upper bound check
+            if (upper is not null)
+            {
+                int cmp = termPart.SequenceCompareTo(upper.AsSpan());
+                if (cmp > 0 || (cmp == 0 && !includeUpper)) break;
+            }
+
+            results.Add((System.Text.Encoding.UTF8.GetString(termSpan), postingsOffset));
+        }
+
+        return results;
+    }
+
+    /// <summary>
+    /// Enumerates all terms for a field whose bare term text matches the given compiled <paramref name="regex"/>.
+    /// <paramref name="fieldPrefix"/> must be of the form "field\0" (include the null separator).
+    /// </summary>
+    public List<(string Term, long Offset)> GetTermsMatchingRegex(string fieldPrefix, Regex regex)
+    {
+        var results = new List<(string, long)>();
+
+        Span<byte> prefixUtf8Buf = fieldPrefix.Length <= 128
+            ? stackalloc byte[fieldPrefix.Length * 3]
+            : new byte[fieldPrefix.Length * 3];
+        int prefixUtf8Len = System.Text.Encoding.UTF8.GetBytes(fieldPrefix.AsSpan(), prefixUtf8Buf);
+        var prefixUtf8 = prefixUtf8Buf[..prefixUtf8Len];
+
+        int lo = 0, hi = _skipIndex.Length - 1;
+        int bestBlock = -1;
+        while (lo <= hi)
+        {
+            int mid = lo + (hi - lo) / 2;
+            int cmp = _skipIndex[mid].Term.AsSpan().SequenceCompareTo(fieldPrefix.AsSpan());
+            if (cmp <= 0) { bestBlock = mid; lo = mid + 1; }
+            else hi = mid - 1;
+        }
+        long scanStart = bestBlock >= 0 ? _skipIndex[bestBlock].Offset : (_skipIndex.Length > 0 ? _skipIndex[0].Offset : 0);
+        _input.Seek(scanStart);
+
+        bool foundAny = false;
+        Span<char> charBuf = stackalloc char[256];
+        while (_input.Position < _dataEnd)
+        {
+            int termLen = _input.ReadInt32();
+            var termSpan = _input.ReadSpan(termLen);
+            long postingsOffset = _input.ReadInt64();
+
+            if (termSpan.Length < prefixUtf8Len || !termSpan[..prefixUtf8Len].SequenceEqual(prefixUtf8))
+            {
+                if (foundAny || termSpan.SequenceCompareTo(prefixUtf8) > 0)
+                    break;
+                continue;
+            }
+
+            foundAny = true;
+            var termPartUtf8 = termSpan[prefixUtf8Len..];
+            int maxChars = termPartUtf8.Length;
+            Span<char> termCharBuf = maxChars <= charBuf.Length ? charBuf[..maxChars] : new char[maxChars];
+            int charCount = System.Text.Encoding.UTF8.GetChars(termPartUtf8, termCharBuf);
+
+            if (regex.IsMatch(termCharBuf[..charCount]))
+                results.Add((System.Text.Encoding.UTF8.GetString(termSpan), postingsOffset));
+        }
+
+        return results;
     }
 }

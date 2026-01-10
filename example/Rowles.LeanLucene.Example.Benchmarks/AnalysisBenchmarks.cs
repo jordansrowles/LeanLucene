@@ -17,7 +17,7 @@ namespace Rowles.LeanLucene.Example.Benchmarks;
 [SimpleJob]
 public class AnalysisBenchmarks
 {
-    public static IEnumerable<int> DocCounts => BenchmarkData.GetDocCounts(1_000);
+    public static IEnumerable<int> DocCounts => BenchmarkData.GetDocCounts(BenchmarkData.DefaultDocCount);
 
     [ParamsSource(nameof(DocCounts))]
     public int DocumentCount { get; set; }

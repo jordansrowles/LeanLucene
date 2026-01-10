@@ -12,12 +12,13 @@ internal sealed class DocumentsWriterPerThread
     private readonly IAnalyser _analyser;
     private readonly Dictionary<string, IAnalyser> _fieldAnalysers;
     internal readonly Dictionary<string, PostingAccumulator> Postings = new(StringComparer.Ordinal);
-    internal readonly List<Dictionary<string, string>> StoredFields = [];
+    internal readonly List<Dictionary<string, List<string>>> StoredFields = [];
     internal readonly Dictionary<string, Dictionary<int, double>> NumericIndex = new();
     internal readonly Dictionary<string, List<double>> NumericDocValues = new(StringComparer.Ordinal);
     internal readonly Dictionary<string, List<string?>> SortedDocValues = new(StringComparer.Ordinal);
     internal readonly HashSet<string> FieldNames = new(StringComparer.Ordinal);
-    internal int[] DocTokenCounts = new int[16];
+    // Per-field token counts: field → docId → count
+    internal Dictionary<string, int[]> DocTokenCounts = new(StringComparer.Ordinal);
     internal int DocCount;
     private readonly Dictionary<(string, string), string> _qualifiedTermPool = new();
     private readonly HashSet<string> _termPool = new(StringComparer.Ordinal);
@@ -35,7 +36,7 @@ internal sealed class DocumentsWriterPerThread
     public void AddDocument(LeanDocument doc, int globalDocId)
     {
         int localDocId = DocCount;
-        var storedDoc = new Dictionary<string, string>();
+        var storedDoc = new Dictionary<string, List<string>>();
 
         foreach (var field in doc.Fields)
         {
@@ -43,16 +44,39 @@ internal sealed class DocumentsWriterPerThread
             {
                 case TextField tf:
                     IndexTextField(tf.Name, tf.Value, localDocId);
-                    if (tf.IsStored) storedDoc[tf.Name] = tf.Value;
+                    if (tf.IsStored)
+                    {
+                        if (!storedDoc.TryGetValue(tf.Name, out var list))
+                        {
+                            list = new List<string>();
+                            storedDoc[tf.Name] = list;
+                        }
+                        list.Add(tf.Value);
+                    }
                     break;
                 case StringField sf:
                     IndexStringField(sf.Name, sf.Value, localDocId);
-                    if (sf.IsStored) storedDoc[sf.Name] = sf.Value;
+                    if (sf.IsStored)
+                    {
+                        if (!storedDoc.TryGetValue(sf.Name, out var list))
+                        {
+                            list = new List<string>();
+                            storedDoc[sf.Name] = list;
+                        }
+                        list.Add(sf.Value);
+                    }
                     break;
                 case NumericField nf:
                     IndexNumericField(nf.Name, nf.Value, localDocId);
                     if (nf.IsStored)
-                        storedDoc[nf.Name] = nf.Value.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                    {
+                        if (!storedDoc.TryGetValue(nf.Name, out var list))
+                        {
+                            list = new List<string>();
+                            storedDoc[nf.Name] = list;
+                        }
+                        list.Add(nf.Value.ToString(System.Globalization.CultureInfo.InvariantCulture));
+                    }
                     break;
             }
         }
@@ -66,9 +90,17 @@ internal sealed class DocumentsWriterPerThread
         var analyser = _fieldAnalysers.GetValueOrDefault(fieldName, _analyser);
         var tokens = analyser.Analyse(value.AsSpan());
 
-        if (docId >= DocTokenCounts.Length)
-            Array.Resize(ref DocTokenCounts, Math.Max(DocTokenCounts.Length * 2, docId + 1));
-        DocTokenCounts[docId] += tokens.Count;
+        // Track per-field token counts
+        if (!DocTokenCounts.TryGetValue(fieldName, out var counts))
+        {
+            counts = new int[16];
+            DocTokenCounts[fieldName] = counts;
+        }
+        if (docId >= counts.Length)
+            Array.Resize(ref counts, Math.Max(counts.Length * 2, docId + 1));
+        counts[docId] += tokens.Count;
+        DocTokenCounts[fieldName] = counts; // Update reference in case of resize
+        
         FieldNames.Add(fieldName);
 
         for (int pos = 0; pos < tokens.Count; pos++)

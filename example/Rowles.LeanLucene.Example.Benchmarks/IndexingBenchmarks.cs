@@ -1,5 +1,4 @@
 using BenchmarkDotNet.Attributes;
-using Lifti;
 using Lucene.Net.Analysis.Standard;
 using Lucene.Net.Documents;
 using Lucene.Net.Util;
@@ -20,7 +19,7 @@ namespace Rowles.LeanLucene.Example.Benchmarks;
 [SimpleJob]
 public class IndexingBenchmarks
 {
-    public static IEnumerable<int> DocCounts => BenchmarkData.GetDocCounts(3_000);
+    public static IEnumerable<int> DocCounts => BenchmarkData.GetDocCounts(BenchmarkData.DefaultDocCount);
 
     [ParamsSource(nameof(DocCounts))]
     public int DocumentCount { get; set; }
@@ -91,14 +90,4 @@ public class IndexingBenchmarks
         return _documents.Length;
     }
 
-    [Benchmark]
-    public int Lifti_IndexDocuments()
-    {
-        var index = new FullTextIndexBuilder<int>().Build();
-
-        for (int i = 0; i < _documents.Length; i++)
-            index.AddAsync(i, _documents[i]).GetAwaiter().GetResult();
-
-        return _documents.Length;
-    }
 }

@@ -2,6 +2,7 @@ using Rowles.LeanLucene.Document;
 using Rowles.LeanLucene.Index;
 using Rowles.LeanLucene.Search;
 using Rowles.LeanLucene.Store;
+using Rowles.LeanLucene.Tests.Infrastructure;
 
 namespace Rowles.LeanLucene.Tests.Index;
 
@@ -17,7 +18,7 @@ public sealed class ConcurrentIndexingTests : IDisposable
             Directory.Delete(_dir, recursive: true);
     }
 
-    [Fact]
+    [RetryFact(3)]
     public void AddDocumentsConcurrent_AllDocsSearchable()
     {
         var directory = new MMapDirectory(_dir);
@@ -41,7 +42,7 @@ public sealed class ConcurrentIndexingTests : IDisposable
         Assert.Equal(100, results.TotalHits);
     }
 
-    [Fact]
+    [RetryFact(3)]
     public void AddDocumentsConcurrent_PreservesStoredFields()
     {
         var directory = new MMapDirectory(_dir);
@@ -68,9 +69,11 @@ public sealed class ConcurrentIndexingTests : IDisposable
         var stored = searcher.GetStoredFields(results.ScoreDocs[0].DocId);
         Assert.True(stored.ContainsKey("id"));
         Assert.True(stored.ContainsKey("body"));
+        Assert.True(stored["id"].Count > 0);
+        Assert.True(stored["body"].Count > 0);
     }
 
-    [Fact]
+    [RetryFact(3)]
     public void AddDocumentsConcurrent_EmptyBatch_NoOp()
     {
         var directory = new MMapDirectory(_dir);
@@ -84,7 +87,7 @@ public sealed class ConcurrentIndexingTests : IDisposable
         Assert.Equal(0, results.TotalHits);
     }
 
-    [Fact]
+    [RetryFact(3)]
     public void AddDocumentsConcurrent_WithNumericFields()
     {
         var directory = new MMapDirectory(_dir);

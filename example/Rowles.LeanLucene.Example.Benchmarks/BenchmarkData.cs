@@ -28,6 +28,9 @@ internal static class BenchmarkData
         "monitoring"
     ];
 
+    /// <summary>Default document count used by all benchmark suites when <c>BENCH_DOC_COUNT</c> is not set.</summary>
+    public const int DefaultDocCount = 1_000;
+
     /// <summary>
     /// Returns the document count to use for benchmarks. When the BENCH_DOC_COUNT
     /// environment variable is set (e.g. via --doccount in benchmark.ps1), that

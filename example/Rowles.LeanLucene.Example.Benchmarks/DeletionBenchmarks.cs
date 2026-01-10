@@ -1,5 +1,4 @@
 using BenchmarkDotNet.Attributes;
-using Lifti;
 using Lucene.Net.Analysis.Standard;
 using Lucene.Net.Documents;
 using Lucene.Net.Index;
@@ -26,7 +25,7 @@ namespace Rowles.LeanLucene.Example.Benchmarks;
 [SimpleJob]
 public class DeletionBenchmarks
 {
-    public static IEnumerable<int> DocCounts => BenchmarkData.GetDocCounts(2_000);
+    public static IEnumerable<int> DocCounts => BenchmarkData.GetDocCounts(BenchmarkData.DefaultDocCount);
 
     [ParamsSource(nameof(DocCounts))]
     public int DocumentCount { get; set; }
@@ -103,18 +102,4 @@ public class DeletionBenchmarks
         return deleteCount;
     }
 
-    [Benchmark]
-    public int Lifti_DeleteDocuments()
-    {
-        var index = new FullTextIndexBuilder<int>().Build();
-
-        for (int i = 0; i < _documents.Length; i++)
-            index.AddAsync(i, _documents[i]).GetAwaiter().GetResult();
-
-        int deleteCount = DocumentCount / 10;
-        for (int i = 0; i < deleteCount; i++)
-            index.RemoveAsync(i).GetAwaiter().GetResult();
-
-        return deleteCount;
-    }
 }

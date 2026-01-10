@@ -80,6 +80,21 @@ public sealed unsafe class IndexInput : IDisposable
         return result;
     }
 
+    /// <summary>
+    /// Returns a read-only span over the memory-mapped buffer at the current position
+    /// without allocating. Advances the position by <paramref name="count"/> bytes.
+    /// The span is only valid while the <see cref="IndexInput"/> is not disposed.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public ReadOnlySpan<byte> ReadSpan(int count)
+    {
+        if (_position + count > _length)
+            ThrowEndOfStream();
+        var span = new ReadOnlySpan<byte>(_ptr + _position, count);
+        _position += count;
+        return span;
+    }
+
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public int ReadInt32()
     {

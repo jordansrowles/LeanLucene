@@ -1,4 +1,5 @@
 using System.Runtime.CompilerServices;
+using System.Text.RegularExpressions;
 using Rowles.LeanLucene.Codecs;
 using Rowles.LeanLucene.Store;
 
@@ -14,8 +15,10 @@ public sealed class SegmentReader : IDisposable
     private readonly TermDictionaryReader _dicReader;
     private readonly IndexInput _posInput;
     private readonly StoredFieldsReader? _storedReader;
-    private readonly float[] _norms;
-    private readonly int[] _fieldLengths;
+    private readonly Dictionary<string, float[]> _fieldNorms;
+    private readonly Dictionary<string, int[]> _fieldLengthsPerField;
+    private readonly float[] _norms; // Combined fallback for legacy segments or non-field-specific queries
+    private readonly int[] _fieldLengths; // Combined fallback
     private readonly Dictionary<string, Dictionary<int, double>> _numericIndex = new();
     private readonly VectorReader? _vectorReader;
     private readonly Dictionary<string, double[]> _numericDocValues;
@@ -49,9 +52,37 @@ public sealed class SegmentReader : IDisposable
         if (File.Exists(delPath))
             _liveDocs = LiveDocs.Deserialise(delPath, info.DocCount);
 
-        _norms = NormsReader.Read(basePath + ".nrm");
+        // Load per-field norms (or combined for legacy segments)
+        _fieldNorms = NormsReader.Read(basePath + ".nrm");
 
-        // Precompute field lengths from norms to avoid per-doc float division in scoring
+        // Precompute per-field lengths from norms to avoid per-doc float division in scoring
+        _fieldLengthsPerField = new Dictionary<string, int[]>(_fieldNorms.Count, StringComparer.Ordinal);
+        foreach (var (fieldName, norms) in _fieldNorms)
+        {
+            if (fieldName == "_combined")
+                continue; // Handle combined separately
+                
+            var fieldLengths = new int[norms.Length];
+            for (int i = 0; i < norms.Length; i++)
+            {
+                float n = norms[i];
+                fieldLengths[i] = n <= 0f ? 1 : Math.Max(1, (int)MathF.Round(1.0f / n - 1.0f));
+            }
+            _fieldLengthsPerField[fieldName] = fieldLengths;
+        }
+
+        // Setup combined norms fallback for legacy segments or non-field-specific queries
+        if (_fieldNorms.TryGetValue("_combined", out var combinedNorms))
+        {
+            _norms = combinedNorms;
+        }
+        else
+        {
+            // For new per-field segments, use first field or empty as fallback
+            _norms = _fieldNorms.Values.FirstOrDefault() ?? [];
+        }
+
+        // Precompute combined field lengths from combined norms
         _fieldLengths = new int[_norms.Length];
         for (int i = 0; i < _norms.Length; i++)
         {
@@ -85,9 +116,32 @@ public sealed class SegmentReader : IDisposable
         return _norms[docId];
     }
 
+    /// <summary>Returns the quantised norm value for a document in a specific field (0..1 range).</summary>
+    public float GetNorm(int docId, string field)
+    {
+        if (_fieldNorms.TryGetValue(field, out var norms) && (uint)docId < (uint)norms.Length)
+            return norms[docId];
+        
+        // Fallback to combined for legacy segments
+        return GetNorm(docId);
+    }
+
     /// <summary>
-    /// Returns an approximate field length for BM25, derived from the stored norm.
+    /// Returns an approximate field length for BM25 for a specific field, derived from the stored norm.
     /// Norm was stored as 1/(1+tokenCount), so fieldLength ≈ (1/norm) - 1.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public int GetFieldLength(int docId, string field)
+    {
+        if (_fieldLengthsPerField.TryGetValue(field, out var fieldLengths))
+            return (uint)docId < (uint)fieldLengths.Length ? fieldLengths[docId] : 1;
+        
+        // Fallback to combined for legacy segments or unknown fields
+        return (uint)docId < (uint)_fieldLengths.Length ? _fieldLengths[docId] : 1;
+    }
+
+    /// <summary>
+    /// Returns an approximate combined field length for BM25 (for backward compatibility and non-field queries).
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public int GetFieldLength(int docId)
@@ -146,6 +200,17 @@ public sealed class SegmentReader : IDisposable
             return PostingsEnum.Empty;
 
         return PostingsEnum.Create(_posInput, offset);
+    }
+
+    /// <summary>
+    /// Returns a PostingsEnum with decoded positions for phrase queries.
+    /// </summary>
+    public PostingsEnum GetPostingsEnumWithPositions(string qualifiedTerm)
+    {
+        if (!TryGetCachedOffset(qualifiedTerm, out long offset))
+            return PostingsEnum.Empty;
+
+        return PostingsEnum.CreateWithPositions(_posInput, offset);
     }
 
     /// <summary>Single-entry cache for the most recent term lookup.</summary>
@@ -219,9 +284,16 @@ public sealed class SegmentReader : IDisposable
         return positions;
     }
 
-    public Dictionary<string, string> GetStoredFields(int docId)
+    public IReadOnlyDictionary<string, IReadOnlyList<string>> GetStoredFields(int docId)
     {
-        return _storedReader?.ReadDocument(docId) ?? new Dictionary<string, string>();
+        if (_storedReader is null)
+            return new Dictionary<string, IReadOnlyList<string>>();
+        
+        var raw = _storedReader.ReadDocument(docId);
+        // Convert to read-only types
+        return raw.ToDictionary(
+            kvp => kvp.Key, 
+            kvp => (IReadOnlyList<string>)kvp.Value.AsReadOnly());
     }
 
     /// <summary>
@@ -303,6 +375,25 @@ public sealed class SegmentReader : IDisposable
     public List<(string Term, long Offset)> GetAllTermsForField(string fieldPrefix)
     {
         return _dicReader.GetAllTermsForField(fieldPrefix);
+    }
+
+    /// <summary>Returns terms within Levenshtein distance of queryTerm.</summary>
+    public List<(string Term, long Offset)> GetFuzzyMatches(string fieldPrefix, ReadOnlySpan<char> queryTerm, int maxEdits)
+    {
+        return _dicReader.GetFuzzyMatches(fieldPrefix, queryTerm, maxEdits);
+    }
+
+    /// <summary>Returns terms in lexicographic range [lower, upper] for a field.</summary>
+    public List<(string Term, long Offset)> GetTermsInRange(string fieldPrefix,
+        string? lower, string? upper, bool includeLower = true, bool includeUpper = true)
+    {
+        return _dicReader.GetTermsInRange(fieldPrefix, lower, upper, includeLower, includeUpper);
+    }
+
+    /// <summary>Returns terms for a field matching the compiled regex.</summary>
+    public List<(string Term, long Offset)> GetTermsMatchingRegex(string fieldPrefix, Regex regex)
+    {
+        return _dicReader.GetTermsMatchingRegex(fieldPrefix, regex);
     }
 
     private int[] ReadPostingsAtOffset(long offset)
@@ -393,9 +484,12 @@ public sealed class SegmentReader : IDisposable
             throw new InvalidDataException($"Segment dictionary file is truncated: '{basePath}.dic'.");
 
         var nrmLength = new FileInfo(basePath + ".nrm").Length;
-        if (nrmLength < docCount)
+        // New format (v2): 1 version byte + 4-byte field count = minimum 5 bytes.
+        // Old format (v1): 1 byte per doc.
+        long nrmMin = nrmLength >= 1 && File.ReadAllBytes(basePath + ".nrm")[0] == 2 ? 5 : docCount;
+        if (nrmLength < nrmMin)
             throw new InvalidDataException(
-                $"Segment norms file '{basePath}.nrm' is truncated: expected at least {docCount} bytes, found {nrmLength}.");
+                $"Segment norms file '{basePath}.nrm' is truncated: expected at least {nrmMin} bytes, found {nrmLength}.");
     }
 
     private static void ValidateExistingFile(string path)

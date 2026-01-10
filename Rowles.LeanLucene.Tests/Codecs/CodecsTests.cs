@@ -110,12 +110,19 @@ public sealed class CodecsTests : IClassFixture<TestDirectoryFixture>
         for (int i = 0; i < norms.Length; i++)
             norms[i] = 1.0f / (1.0f + i);
 
-        NormsWriter.Write(filePath + ".nrm", norms);
+        // Write as per-field format (version 2)
+        var fieldNorms = new Dictionary<string, float[]>(StringComparer.Ordinal)
+        {
+            ["testfield"] = norms
+        };
+        NormsWriter.Write(filePath + ".nrm", fieldNorms);
         var restored = NormsReader.Read(filePath + ".nrm");
 
-        Assert.Equal(norms.Length, restored.Length);
+        Assert.True(restored.ContainsKey("testfield"));
+        var restoredNorms = restored["testfield"];
+        Assert.Equal(norms.Length, restoredNorms.Length);
         for (int i = 0; i < norms.Length; i++)
-            Assert.InRange(restored[i], norms[i] - 0.01f, norms[i] + 0.01f);
+            Assert.InRange(restoredNorms[i], norms[i] - 0.01f, norms[i] + 0.01f);
     }
 
     [Fact]
@@ -124,9 +131,9 @@ public sealed class CodecsTests : IClassFixture<TestDirectoryFixture>
         var filePath = System.IO.Path.Combine(_fixture.Path, "fdtfile");
         var docs = new[]
         {
-            new Dictionary<string, string> { ["title"] = "First Document" },
-            new Dictionary<string, string> { ["title"] = "Second Document" },
-            new Dictionary<string, string> { ["title"] = "Third Document" }
+            new Dictionary<string, List<string>> { ["title"] = new List<string> { "First Document" } },
+            new Dictionary<string, List<string>> { ["title"] = new List<string> { "Second Document" } },
+            new Dictionary<string, List<string>> { ["title"] = new List<string> { "Third Document" } }
         };
 
         StoredFieldsWriter.Write(filePath + ".fdt", filePath + ".fdx", docs);
@@ -135,7 +142,7 @@ public sealed class CodecsTests : IClassFixture<TestDirectoryFixture>
         for (int i = 0; i < docs.Length; i++)
         {
             var stored = reader.ReadDocument(i);
-            Assert.Equal(docs[i]["title"], stored["title"]);
+            Assert.Equal(docs[i]["title"][0], stored["title"][0]);
         }
     }
 

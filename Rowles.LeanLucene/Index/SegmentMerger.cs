@@ -79,7 +79,7 @@ public sealed class SegmentMerger
         // Collect all postings from all segments, re-mapping doc IDs
         var allPostings = new SortedDictionary<string, List<int>>(StringComparer.Ordinal);
         var allFreqs = new Dictionary<string, Dictionary<int, int>>();
-        var allStoredFields = new List<Dictionary<string, string>>();
+        var allStoredFields = new List<Dictionary<string, List<string>>>();
         var allNumericFields = new Dictionary<string, Dictionary<int, double>>();
         var allVectors = new List<float[]>();
         var fieldNames = new HashSet<string>();
@@ -98,8 +98,12 @@ public sealed class SegmentMerger
                 if (!reader.IsLive(oldDocId))
                     continue;
 
-                // Copy stored fields
-                allStoredFields.Add(reader.GetStoredFields(oldDocId));
+                // Copy stored fields - convert from IReadOnlyDictionary to Dictionary
+                var fields = reader.GetStoredFields(oldDocId);
+                var mutableFields = new Dictionary<string, List<string>>();
+                foreach (var kvp in fields)
+                    mutableFields[kvp.Key] = kvp.Value.ToList();
+                allStoredFields.Add(mutableFields);
 
                 // Copy vectors if present
                 if (reader.HasVectors)
@@ -158,7 +162,11 @@ public sealed class SegmentMerger
             for (int oldDocId = 0; oldDocId < segInfo.DocCount; oldDocId++)
             {
                 if (!reader.IsLive(oldDocId)) continue;
-                allStoredFields.Add(reader.GetStoredFields(oldDocId));
+                var fields = reader.GetStoredFields(oldDocId);
+                var mutableFields = new Dictionary<string, List<string>>();
+                foreach (var kvp in fields)
+                    mutableFields[kvp.Key] = kvp.Value.ToList();
+                allStoredFields.Add(mutableFields);
 
                 foreach (var field in segInfo.FieldNames)
                 {
@@ -276,19 +284,25 @@ public sealed class SegmentMerger
         // Write .dic
         TermDictionaryWriter.Write(basePath + ".dic", sortedTerms, postingsOffsets);
 
-        // Write .nrm — carry forward norms from source segments
-        var norms = new float[totalDocs];
-        int normIdx = 0;
-        foreach (var segInfo in segments)
+        // Write per-field .nrm — carry forward per-field norms from source segments
+        var fieldNorms = new Dictionary<string, float[]>(StringComparer.Ordinal);
+        foreach (var fieldName in fieldNames)
         {
-            using var normReader = new SegmentReader(_directory, segInfo);
-            for (int oldDocId = 0; oldDocId < segInfo.DocCount; oldDocId++)
+            var fieldNormsArray = new float[totalDocs];
+            int normIdx = 0;
+            foreach (var segInfo in segments)
             {
-                if (!normReader.IsLive(oldDocId)) continue;
-                norms[normIdx++] = normReader.GetNorm(oldDocId);
+                using var normReader = new SegmentReader(_directory, segInfo);
+                for (int oldDocId = 0; oldDocId < segInfo.DocCount; oldDocId++)
+                {
+                    if (!normReader.IsLive(oldDocId)) continue;
+                    // Get per-field norm (with fallback to combined for legacy segments)
+                    fieldNormsArray[normIdx++] = normReader.GetNorm(oldDocId, fieldName);
+                }
             }
+            fieldNorms[fieldName] = fieldNormsArray;
         }
-        NormsWriter.Write(basePath + ".nrm", norms);
+        NormsWriter.Write(basePath + ".nrm", fieldNorms);
 
         // Write .fdt + .fdx
         StoredFieldsWriter.Write(basePath + ".fdt", basePath + ".fdx", allStoredFields.ToArray());

@@ -71,7 +71,7 @@ public sealed class SortedSearchTests : IClassFixture<TestDirectoryFixture>
         foreach (var sd in results.ScoreDocs)
         {
             var stored = searcher.GetStoredFields(sd.DocId);
-            sortedPrices.Add(double.Parse(stored["price"], System.Globalization.CultureInfo.InvariantCulture));
+            sortedPrices.Add(double.Parse(stored["price"][0], System.Globalization.CultureInfo.InvariantCulture));
         }
         for (int i = 1; i < sortedPrices.Count; i++)
             Assert.True(sortedPrices[i] >= sortedPrices[i - 1],
@@ -102,7 +102,7 @@ public sealed class SortedSearchTests : IClassFixture<TestDirectoryFixture>
         // Assert — highest rank first
         Assert.Equal(5, results.TotalHits);
         var stored0 = searcher.GetStoredFields(results.ScoreDocs[0].DocId);
-        Assert.Equal("5", stored0["rank"]);
+        Assert.Equal("5", stored0["rank"][0]);
     }
 
     [Fact]

@@ -9,7 +9,7 @@ namespace Rowles.LeanLucene.Store;
 /// </summary>
 public sealed class IndexOutput : IDisposable
 {
-    private const int BufferSize = 8192;
+    private const int BufferSize = 65536;
 
     private readonly FileStream _stream;
     private readonly byte[] _buffer;
