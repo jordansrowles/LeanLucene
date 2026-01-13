@@ -17,15 +17,17 @@ public sealed class IndexSearcher : IDisposable
     private readonly int[] _docBases;
     private readonly int _totalDocCount;
     private readonly IndexStats _stats;
+    private readonly ISimilarity _similarity;
     private PostingsEnum[]? _postingsBuffer;
     private ScoreDoc[]? _collectorHeapCache;
 
     /// <summary>Corpus-wide statistics computed at construction.</summary>
     public IndexStats Stats => _stats;
 
-    public IndexSearcher(MMapDirectory directory)
+    public IndexSearcher(MMapDirectory directory, ISimilarity? similarity = null)
     {
         _directory = directory;
+        _similarity = similarity ?? Bm25Similarity.Instance;
 
         var segmentIds = LoadLatestCommit();
         foreach (var segId in segmentIds)
@@ -43,9 +45,10 @@ public sealed class IndexSearcher : IDisposable
         _stats = ComputeStats();
     }
 
-    public IndexSearcher(MMapDirectory directory, IReadOnlyList<SegmentInfo> segments)
+    public IndexSearcher(MMapDirectory directory, IReadOnlyList<SegmentInfo> segments, ISimilarity? similarity = null)
     {
         _directory = directory;
+        _similarity = similarity ?? Bm25Similarity.Instance;
         foreach (var info in segments)
             _readers.Add(new SegmentReader(directory, info));
 
@@ -358,7 +361,7 @@ public sealed class IndexSearcher : IDisposable
         }
 
         float idf = Bm25Scorer.Idf(_totalDocCount, globalDF);
-        float score = Bm25Scorer.Score(tf, docLength, avgDocLength, _totalDocCount, globalDF);
+        float score = _similarity.Score(tf, docLength, avgDocLength, _totalDocCount, globalDF);
         if (query.Boost != 1.0f) score *= query.Boost;
 
         return new Explanation
@@ -401,7 +404,7 @@ public sealed class IndexSearcher : IDisposable
 
         // Phase 2: score using already-decoded postings
         float avgDocLength = _stats.GetAvgFieldLength(query.Field);
-        var (idf, k1BOverAvgDL) = Bm25Scorer.PrecomputeFactors(_totalDocCount, globalDF, avgDocLength);
+        var (idf, k1BOverAvgDL) = _similarity.PrecomputeFactors(_totalDocCount, globalDF, avgDocLength);
         float boost = query.Boost;
 
         // Reuse the backing ScoreDoc[] across queries to avoid per-query allocation
@@ -427,7 +430,7 @@ public sealed class IndexSearcher : IDisposable
 
                     int tf = postings.Freq;
                     int docLength = reader.GetFieldLength(docId, query.Field);
-                    float score = Bm25Scorer.ScorePrecomputed(idf, k1BOverAvgDL, tf, docLength);
+                    float score = _similarity.ScorePrecomputed(idf, k1BOverAvgDL, tf, docLength);
                     if (boost != 1.0f) score *= boost;
                     collector.Collect(docBase + docId, score);
                 }
@@ -483,6 +486,18 @@ public sealed class IndexSearcher : IDisposable
             case RegexpQuery rxq:
                 ExecuteRegexpQuery(rxq, reader, globalDFs, ref collector);
                 break;
+            case FunctionScoreQuery fsq:
+                ExecuteFunctionScoreQuery(fsq, reader, globalDFs, ref collector);
+                break;
+            case SpanNearQuery snq:
+                ExecuteSpanNearQuery(snq, reader, globalDFs, ref collector);
+                break;
+            case SpanOrQuery soq:
+                ExecuteSpanOrQuery(soq, reader, globalDFs, ref collector);
+                break;
+            case SpanNotQuery snotq:
+                ExecuteSpanNotQuery(snotq, reader, globalDFs, ref collector);
+                break;
         }
     }
 
@@ -504,7 +519,7 @@ public sealed class IndexSearcher : IDisposable
 
             int tf = postings.Freq;
             int docLength = reader.GetFieldLength(docId, query.Field);
-            float score = Bm25Scorer.Score(tf, docLength, avgDocLength, _totalDocCount, docFreq);
+            float score = _similarity.Score(tf, docLength, avgDocLength, _totalDocCount, docFreq);
             if (query.Boost != 1.0f) score *= query.Boost;
             collector.Collect(docBase + docId, score);
         }
@@ -572,7 +587,7 @@ public sealed class IndexSearcher : IDisposable
 
                 int docFreq = globalDFs.GetValueOrDefault((tq.Field, tq.Term), postings.DocFreq);
                 float avgDocLength = _stats.GetAvgFieldLength(tq.Field);
-                var factors = Bm25Scorer.PrecomputeFactors(_totalDocCount, docFreq, avgDocLength);
+                var factors = _similarity.PrecomputeFactors(_totalDocCount, docFreq, avgDocLength);
 
                 switch (clause.Occur)
                 {
@@ -649,7 +664,7 @@ public sealed class IndexSearcher : IDisposable
                     for (int i = 0; i < mustCount; i++)
                     {
                         int docLength = reader.GetFieldLength(docId, mustFields![i]);
-                        score += Bm25Scorer.ScorePrecomputed(
+                        score += _similarity.ScorePrecomputed(
                             mustFactors![i].Idf, mustFactors[i].K1BOverAvgDL,
                             mustEnums[i].Freq, docLength);
                     }
@@ -660,7 +675,7 @@ public sealed class IndexSearcher : IDisposable
                         if (shouldEnums![i].Advance(docId) && shouldEnums[i].DocId == docId)
                         {
                             int docLength = reader.GetFieldLength(docId, shouldFields![i]);
-                            score += Bm25Scorer.ScorePrecomputed(
+                            score += _similarity.ScorePrecomputed(
                                 shouldFactors![i].Idf, shouldFactors[i].K1BOverAvgDL,
                                 shouldEnums[i].Freq, docLength);
                         }
@@ -705,7 +720,7 @@ public sealed class IndexSearcher : IDisposable
                         if (currentDocs[i] == minDoc)
                         {
                             int docLength = reader.GetFieldLength(minDoc, shouldFields![i]);
-                            score += Bm25Scorer.ScorePrecomputed(
+                            score += _similarity.ScorePrecomputed(
                                 shouldFactors![i].Idf, shouldFactors[i].K1BOverAvgDL,
                                 shouldEnums![i].Freq, docLength);
                             currentDocs[i] = shouldEnums[i].MoveNext() ? shouldEnums[i].DocId : int.MaxValue;
@@ -838,7 +853,7 @@ public sealed class IndexSearcher : IDisposable
                     if (!reader.IsLive(docId)) continue;
                     int tf = postings.Freq;
                     int docLength = reader.GetFieldLength(docId, tq.Field);
-                    float score = Bm25Scorer.Score(tf, docLength, avgDocLength, _totalDocCount, docFreq);
+                    float score = _similarity.Score(tf, docLength, avgDocLength, _totalDocCount, docFreq);
                     results.Add(new ScoreDoc(docId, score));
                 }
                 break;
@@ -892,6 +907,42 @@ public sealed class IndexSearcher : IDisposable
             {
                 var subCollector = new TopNCollector(10000);
                 ExecuteRegexpQuery(rxq, reader, globalDFs, ref subCollector);
+                var subDocs = subCollector.ToTopDocs();
+                foreach (var sd in subDocs.ScoreDocs)
+                    results.Add(new ScoreDoc(sd.DocId - reader.DocBase, sd.Score));
+                break;
+            }
+            case FunctionScoreQuery fsq:
+            {
+                var subCollector = new TopNCollector(10000);
+                ExecuteFunctionScoreQuery(fsq, reader, globalDFs, ref subCollector);
+                var subDocs = subCollector.ToTopDocs();
+                foreach (var sd in subDocs.ScoreDocs)
+                    results.Add(new ScoreDoc(sd.DocId - reader.DocBase, sd.Score));
+                break;
+            }
+            case SpanNearQuery snq:
+            {
+                var subCollector = new TopNCollector(10000);
+                ExecuteSpanNearQuery(snq, reader, globalDFs, ref subCollector);
+                var subDocs = subCollector.ToTopDocs();
+                foreach (var sd in subDocs.ScoreDocs)
+                    results.Add(new ScoreDoc(sd.DocId - reader.DocBase, sd.Score));
+                break;
+            }
+            case SpanOrQuery soq:
+            {
+                var subCollector = new TopNCollector(10000);
+                ExecuteSpanOrQuery(soq, reader, globalDFs, ref subCollector);
+                var subDocs = subCollector.ToTopDocs();
+                foreach (var sd in subDocs.ScoreDocs)
+                    results.Add(new ScoreDoc(sd.DocId - reader.DocBase, sd.Score));
+                break;
+            }
+            case SpanNotQuery snotq:
+            {
+                var subCollector = new TopNCollector(10000);
+                ExecuteSpanNotQuery(snotq, reader, globalDFs, ref subCollector);
                 var subDocs = subCollector.ToTopDocs();
                 foreach (var sd in subDocs.ScoreDocs)
                     results.Add(new ScoreDoc(sd.DocId - reader.DocBase, sd.Score));
@@ -1088,7 +1139,7 @@ public sealed class IndexSearcher : IDisposable
 
                 int tf = postings.Freq;
                 int docLength = reader.GetFieldLength(docId, query.Field);
-                float score = Bm25Scorer.Score(tf, docLength, avgDocLength, _totalDocCount, docFreq);
+                float score = _similarity.Score(tf, docLength, avgDocLength, _totalDocCount, docFreq);
                 if (boost != 1.0f) score *= boost;
                 collector.Collect(docBase + docId, score);
             }
@@ -1121,7 +1172,7 @@ public sealed class IndexSearcher : IDisposable
 
                 int tf = postings.Freq;
                 int docLength = reader.GetFieldLength(docId, query.Field);
-                float score = Bm25Scorer.Score(tf, docLength, avgDocLength, _totalDocCount, docFreq);
+                float score = _similarity.Score(tf, docLength, avgDocLength, _totalDocCount, docFreq);
                 if (boost != 1.0f) score *= boost;
                 collector.Collect(docBase + docId, score);
             }
@@ -1159,7 +1210,7 @@ public sealed class IndexSearcher : IDisposable
 
                 int tf = postings.Freq;
                 int docLength = reader.GetFieldLength(docId, query.Field);
-                float score = Bm25Scorer.Score(tf, docLength, avgDocLength, _totalDocCount, docFreq) * distanceFactor;
+                float score = _similarity.Score(tf, docLength, avgDocLength, _totalDocCount, docFreq) * distanceFactor;
                 if (boost != 1.0f) score *= boost;
                 collector.Collect(docBase + docId, score);
             }
@@ -1193,7 +1244,7 @@ public sealed class IndexSearcher : IDisposable
 
                 int tf = postings.Freq;
                 int docLength = reader.GetFieldLength(docId, query.Field);
-                float score = Bm25Scorer.Score(tf, docLength, avgDocLength, _totalDocCount, docFreq);
+                float score = _similarity.Score(tf, docLength, avgDocLength, _totalDocCount, docFreq);
                 if (boost != 1.0f) score *= boost;
                 collector.Collect(docBase + docId, score);
             }
@@ -1279,7 +1330,7 @@ public sealed class IndexSearcher : IDisposable
 
                 int tf = postings.Freq;
                 int docLength = reader.GetFieldLength(docId, query.Field);
-                float score = Bm25Scorer.Score(tf, docLength, avgDocLength, _totalDocCount, docFreq);
+                float score = _similarity.Score(tf, docLength, avgDocLength, _totalDocCount, docFreq);
                 if (boost != 1.0f) score *= boost;
                 collector.Collect(docBase + docId, score);
             }
@@ -1483,5 +1534,239 @@ public sealed class IndexSearcher : IDisposable
         }
 
         return new IndexStats(_totalDocCount, liveDocCount, avgFieldLengths, fieldDocCounts);
+    }
+
+    // --- S2-5: Faceted search ---
+
+    /// <summary>Executes a query and returns both top-N results and facet counts for the specified fields.</summary>
+    public (TopDocs Results, IReadOnlyList<FacetResult> Facets) SearchWithFacets(
+        Query query, int topN, params string[] facetFields)
+    {
+        var results = Search(query, topN);
+        var facetsCollector = new FacetsCollector();
+
+        foreach (var sd in results.ScoreDocs)
+        {
+            int globalDocId = sd.DocId;
+            int readerIndex = ResolveReaderIndex(globalDocId);
+            var reader = _readers[readerIndex];
+            int localDocId = globalDocId - _docBases[readerIndex];
+
+            foreach (var facetField in facetFields)
+            {
+                if (reader.TryGetSortedDocValue(facetField, localDocId, out string val) && !string.IsNullOrEmpty(val))
+                {
+                    facetsCollector.Collect(facetField, val);
+                }
+                else
+                {
+                    var stored = reader.GetStoredFields(localDocId);
+                    if (stored.TryGetValue(facetField, out var values))
+                    {
+                        foreach (var v in values)
+                            facetsCollector.Collect(facetField, v);
+                    }
+                }
+            }
+        }
+
+        return (results, facetsCollector.GetResults());
+    }
+
+    // --- S2-6: FunctionScoreQuery ---
+
+    private void ExecuteFunctionScoreQuery(FunctionScoreQuery query, SegmentReader reader,
+        Dictionary<(string Field, string Term), int> globalDFs, ref TopNCollector collector)
+    {
+        // Execute inner query into temporary collector
+        var innerCollector = new TopNCollector(10000);
+        ExecuteQuery(query.Inner, reader, globalDFs, ref innerCollector);
+        var innerDocs = innerCollector.ToTopDocs();
+
+        int docBase = reader.DocBase;
+        foreach (var sd in innerDocs.ScoreDocs)
+        {
+            int localDocId = sd.DocId - docBase;
+            if (reader.TryGetNumericValue(query.NumericField, localDocId, out double fieldValue))
+            {
+                float combined = FunctionScoreQuery.Combine(sd.Score, fieldValue, query.Mode);
+                collector.Collect(sd.DocId, combined * query.Boost);
+            }
+            else
+            {
+                collector.Collect(sd.DocId, sd.Score * query.Boost);
+            }
+        }
+    }
+
+    // --- S2-4: SpanQuery execution ---
+
+    private void ExecuteSpanNearQuery(SpanNearQuery query, SegmentReader reader,
+        Dictionary<(string Field, string Term), int> globalDFs, ref TopNCollector collector)
+    {
+        // Collect spans per clause
+        var clauseSpans = new List<List<Span>>(query.Clauses.Count);
+        foreach (var clause in query.Clauses)
+        {
+            var spans = CollectSpans(clause, reader);
+            if (spans.Count == 0) return; // AND semantics: all clauses must match
+            clauseSpans.Add(spans);
+        }
+
+        // Find documents present in all clause spans
+        var docSets = clauseSpans.Select(s => s.Select(sp => sp.DocId).ToHashSet()).ToList();
+        var commonDocs = docSets[0];
+        for (int i = 1; i < docSets.Count; i++)
+            commonDocs.IntersectWith(docSets[i]);
+
+        int docBase = reader.DocBase;
+        foreach (int docId in commonDocs)
+        {
+            // Check positional constraints
+            var clausePositions = clauseSpans
+                .Select(s => s.Where(sp => sp.DocId == docId).Select(sp => sp.Start).OrderBy(p => p).ToList())
+                .ToList();
+
+            if (CheckNearConstraint(clausePositions, query.Slop, query.InOrder))
+            {
+                float score = 1.0f * query.Boost;
+                collector.Collect(docBase + docId, score);
+            }
+        }
+    }
+
+    private static bool CheckNearConstraint(List<List<int>> clausePositions, int slop, bool inOrder)
+    {
+        // Simple check: for each position in clause[0], find matching positions in other clauses
+        foreach (int pos0 in clausePositions[0])
+        {
+            bool allMatch = true;
+            int prevPos = pos0;
+            for (int c = 1; c < clausePositions.Count; c++)
+            {
+                bool found = false;
+                foreach (int posC in clausePositions[c])
+                {
+                    int distance = Math.Abs(posC - prevPos);
+                    if (distance <= slop + 1)
+                    {
+                        if (inOrder && posC <= prevPos) continue;
+                        prevPos = posC;
+                        found = true;
+                        break;
+                    }
+                }
+                if (!found) { allMatch = false; break; }
+            }
+            if (allMatch) return true;
+        }
+        return false;
+    }
+
+    private void ExecuteSpanOrQuery(SpanOrQuery query, SegmentReader reader,
+        Dictionary<(string Field, string Term), int> globalDFs, ref TopNCollector collector)
+    {
+        var seen = new HashSet<int>();
+        int docBase = reader.DocBase;
+        foreach (var clause in query.Clauses)
+        {
+            var spans = CollectSpans(clause, reader);
+            foreach (var span in spans)
+            {
+                if (seen.Add(span.DocId))
+                    collector.Collect(docBase + span.DocId, 1.0f * query.Boost);
+            }
+        }
+    }
+
+    private void ExecuteSpanNotQuery(SpanNotQuery query, SegmentReader reader,
+        Dictionary<(string Field, string Term), int> globalDFs, ref TopNCollector collector)
+    {
+        var includeSpans = CollectSpans(query.Include, reader);
+        var excludeSpans = CollectSpans(query.Exclude, reader);
+
+        // Exclude documents that have any exclude span
+        var excludedDocs = new HashSet<int>();
+        foreach (var s in excludeSpans)
+            excludedDocs.Add(s.DocId);
+
+        int docBase = reader.DocBase;
+        var seen = new HashSet<int>();
+        foreach (var span in includeSpans)
+        {
+            if (!excludedDocs.Contains(span.DocId) && seen.Add(span.DocId))
+                collector.Collect(docBase + span.DocId, 1.0f * query.Boost);
+        }
+    }
+
+    private List<Span> CollectSpans(SpanQuery query, SegmentReader reader)
+    {
+        var spans = new List<Span>();
+        switch (query)
+        {
+            case SpanTermQuery stq:
+            {
+                var qt = string.Concat(stq.Field, "\x00", stq.Term);
+                using var pe = reader.GetPostingsEnumWithPositions(qt);
+                while (pe.MoveNext())
+                {
+                    var positions = pe.GetCurrentPositions();
+                    foreach (int pos in positions)
+                        spans.Add(new Span(pe.DocId, pos, pos + 1));
+                }
+                break;
+            }
+            case SpanNearQuery snq:
+            {
+                // Recursive: collect matching spans
+                var clauseSpans = snq.Clauses.Select(c => CollectSpans(c, reader)).ToList();
+                var commonDocs = clauseSpans[0].Select(s => s.DocId).ToHashSet();
+                for (int i = 1; i < clauseSpans.Count; i++)
+                    commonDocs.IntersectWith(clauseSpans[i].Select(s => s.DocId));
+
+                foreach (int docId in commonDocs)
+                {
+                    var clausePositions = clauseSpans
+                        .Select(s => s.Where(sp => sp.DocId == docId).Select(sp => sp.Start).OrderBy(p => p).ToList())
+                        .ToList();
+                    if (CheckNearConstraint(clausePositions, snq.Slop, snq.InOrder))
+                    {
+                        int minPos = clausePositions.Min(p => p.Min());
+                        int maxPos = clausePositions.Max(p => p.Max());
+                        spans.Add(new Span(docId, minPos, maxPos + 1));
+                    }
+                }
+                break;
+            }
+            case SpanOrQuery soq:
+                foreach (var clause in soq.Clauses)
+                    spans.AddRange(CollectSpans(clause, reader));
+                break;
+            case SpanNotQuery snotq:
+            {
+                var includeSpans = CollectSpans(snotq.Include, reader);
+                var excludeSpans = CollectSpans(snotq.Exclude, reader);
+                var excludedDocs = new HashSet<int>();
+                foreach (var s in excludeSpans)
+                    excludedDocs.Add(s.DocId);
+                foreach (var span in includeSpans)
+                {
+                    if (!excludedDocs.Contains(span.DocId))
+                        spans.Add(span);
+                }
+                break;
+            }
+        }
+        return spans;
+    }
+
+    private int ResolveReaderIndex(int globalDocId)
+    {
+        for (int i = _docBases.Length - 1; i >= 0; i--)
+        {
+            if (globalDocId >= _docBases[i])
+                return i;
+        }
+        return 0;
     }
 }

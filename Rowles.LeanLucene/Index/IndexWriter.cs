@@ -47,10 +47,14 @@ public sealed class IndexWriter : IDisposable
     private readonly List<(string field, string term)> _pendingDeletes = [];
     private readonly Lock _writeLock = new();
     private readonly SemaphoreSlim? _backpressureSemaphore;
-    private int _semaphoreSlotsHeld; // Track how many semaphore slots are currently held
+    private int _semaphoreSlotsHeld;
     private readonly List<IndexSnapshot> _heldSnapshots = [];
     private bool _disposed;
     private readonly FileStream _writeLockFile;
+    // Background merge
+    private Task? _mergeTask;
+    private readonly CancellationTokenSource _mergeCts = new();
+    private readonly Lock _mergeLock = new();
 
     public IndexWriter(MMapDirectory directory, IndexWriterConfig config)
     {
@@ -351,14 +355,8 @@ public sealed class IndexWriter : IDisposable
         if (_pendingDeletes.Count > 0)
             ApplyPendingDeletions(_committedSegments);
 
-        // Maybe merge segments
-        var merger = new SegmentMerger(_directory);
-        var merged = merger.MaybeMerge(_committedSegments, ref _nextSegmentOrdinal);
-        if (!ReferenceEquals(merged, _committedSegments))
-        {
-            _committedSegments.Clear();
-            _committedSegments.AddRange(merged);
-        }
+        // Schedule merge in background (non-blocking)
+        ScheduleBackgroundMerge();
 
         // Write segments_N commit file (atomic: write to temp, then rename)
         _commitGeneration++;
@@ -370,6 +368,9 @@ public sealed class IndexWriter : IDisposable
         var commitData = JsonSerializer.Serialize(new CommitData { Segments = segmentIds, Generation = _commitGeneration });
         File.WriteAllText(tempFile, commitData);
         File.Move(tempFile, commitFile, overwrite: true);
+
+        // Apply deletion policy to prune old commit files
+        _config.DeletionPolicy.OnCommit(_directory.DirectoryPath, _commitGeneration);
     }
 
     public void Dispose()
@@ -377,12 +378,55 @@ public sealed class IndexWriter : IDisposable
         if (_disposed) return;
         _disposed = true;
 
+        // Cancel and await background merge
+        _mergeCts.Cancel();
+        try { _mergeTask?.Wait(TimeSpan.FromSeconds(10)); } catch { /* best-effort */ }
+        _mergeCts.Dispose();
+
         _backpressureSemaphore?.Dispose();
 
         // Release the directory write lock
         _writeLockFile.Dispose();
         var lockPath = Path.Combine(_directory.DirectoryPath, "write.lock");
         try { File.Delete(lockPath); } catch { /* best-effort */ }
+    }
+
+    private void ScheduleBackgroundMerge()
+    {
+        lock (_mergeLock)
+        {
+            if (_mergeTask is not null && !_mergeTask.IsCompleted)
+                return; // merge already in flight
+
+            var ct = _mergeCts.Token;
+            _mergeTask = Task.Run(() =>
+            {
+                if (ct.IsCancellationRequested) return;
+                lock (_writeLock)
+                {
+                    var merger = new SegmentMerger(_directory);
+                    var merged = merger.MaybeMerge(_committedSegments, ref _nextSegmentOrdinal);
+                    if (!ReferenceEquals(merged, _committedSegments))
+                    {
+                        _committedSegments.Clear();
+                        _committedSegments.AddRange(merged);
+
+                        // Write updated commit file so the merged segments are discoverable
+                        _commitGeneration++;
+                        var commitFile = Path.Combine(_directory.DirectoryPath, $"segments_{_commitGeneration}");
+                        var tempFile = commitFile + ".tmp";
+                        var segmentIds = new List<string>(_committedSegments.Count);
+                        foreach (var seg in _committedSegments)
+                            segmentIds.Add(seg.SegmentId);
+                        var commitData = JsonSerializer.Serialize(new CommitData { Segments = segmentIds, Generation = _commitGeneration });
+                        File.WriteAllText(tempFile, commitData);
+                        File.Move(tempFile, commitFile, overwrite: true);
+
+                        _config.DeletionPolicy.OnCommit(_directory.DirectoryPath, _commitGeneration);
+                    }
+                }
+            }, ct);
+        }
     }
 
     /// <summary>
@@ -692,6 +736,68 @@ public sealed class IndexWriter : IDisposable
                 dvs[field] = arr;
             }
             SortedDocValuesWriter.Write(basePath + ".dvs", dvs, _bufferedDocCount);
+        }
+
+        // Write BKD tree for numeric fields (.bkd)
+        if (_numericDocValues.Count > 0)
+        {
+            var bkdData = new Dictionary<string, List<(double Value, int DocId)>>(_numericDocValues.Count, StringComparer.Ordinal);
+            foreach (var (field, list) in _numericDocValues)
+            {
+                var points = new List<(double Value, int DocId)>();
+                for (int i = 0; i < Math.Min(list.Count, _bufferedDocCount); i++)
+                    points.Add((list[i], i));
+                if (points.Count > 0)
+                    bkdData[field] = points;
+            }
+            if (bkdData.Count > 0)
+                BKDWriter.Write(basePath + ".bkd", bkdData);
+        }
+
+        // Write term vectors (.tvd + .tvx) when enabled
+        if (_config.StoreTermVectors)
+        {
+            var tvDocs = new Dictionary<string, List<TermVectorEntry>>[_bufferedDocCount];
+            for (int d = 0; d < _bufferedDocCount; d++)
+                tvDocs[d] = new Dictionary<string, List<TermVectorEntry>>(StringComparer.Ordinal);
+
+            foreach (var (qt, acc) in _postings)
+            {
+                if (!acc.HasPositions) continue;
+                int sep = qt.IndexOf('\x00');
+                if (sep < 0) continue;
+                string fld = qt[..sep];
+                string trm = qt[(sep + 1)..];
+
+                var ids = acc.DocIds;
+                for (int i = 0; i < ids.Length; i++)
+                {
+                    int docId = ids[i];
+                    if (docId >= _bufferedDocCount) continue;
+                    if (!tvDocs[docId].TryGetValue(fld, out var terms))
+                    {
+                        terms = [];
+                        tvDocs[docId][fld] = terms;
+                    }
+                    int freq = acc.GetFreq(i);
+                    var positions = acc.GetPositions(i).ToArray();
+                    terms.Add(new TermVectorEntry(trm, freq, positions));
+                }
+            }
+            TermVectorsWriter.Write(basePath + ".tvd", basePath + ".tvx", tvDocs);
+        }
+
+        // Write compound file (.cfs) when enabled
+        if (_config.UseCompoundFile)
+        {
+            string[] extensions = [".seg", ".dic", ".pos", ".fdt", ".fdx", ".nrm", ".num", ".dvn", ".dvs"];
+            var existingExtensions = extensions.Where(ext => File.Exists(basePath + ext)).ToArray();
+            if (existingExtensions.Length > 0)
+            {
+                CompoundFileWriter.Write(basePath + ".cfs", basePath, existingExtensions);
+                foreach (var ext in existingExtensions)
+                    try { File.Delete(basePath + ext); } catch { /* best-effort */ }
+            }
         }
 
         _committedSegments.Add(segInfo);

@@ -1,4 +1,5 @@
 using Rowles.LeanLucene.Analysis;
+using Rowles.LeanLucene.Search;
 
 namespace Rowles.LeanLucene.Index;
 
@@ -25,4 +26,19 @@ public sealed class IndexWriterConfig
 
     /// <summary>Per-field analyser overrides. Key is the field name.</summary>
     public Dictionary<string, IAnalyser> FieldAnalysers { get; set; } = new();
+
+    /// <summary>Deletion policy applied after each commit. Default: keep latest only.</summary>
+    public IIndexDeletionPolicy DeletionPolicy { get; set; } = new KeepLatestCommitPolicy();
+
+    /// <summary>Scoring model used by IndexSearcher. Default: BM25.</summary>
+    public ISimilarity Similarity { get; set; } = Bm25Similarity.Instance;
+
+    /// <summary>Whether to store per-position payloads in the postings.</summary>
+    public bool StorePayloads { get; set; }
+
+    /// <summary>Whether to store term vectors for text fields.</summary>
+    public bool StoreTermVectors { get; set; }
+
+    /// <summary>Whether to write a compound file (.cfs) after segment flush.</summary>
+    public bool UseCompoundFile { get; set; }
 }

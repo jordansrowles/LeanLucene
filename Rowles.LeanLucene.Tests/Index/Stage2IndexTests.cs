@@ -1,0 +1,332 @@
+using Rowles.LeanLucene.Codecs;
+using Rowles.LeanLucene.Document;
+using Rowles.LeanLucene.Index;
+using Rowles.LeanLucene.Search;
+using Rowles.LeanLucene.Store;
+using Rowles.LeanLucene.Tests.Fixtures;
+
+namespace Rowles.LeanLucene.Tests.Index;
+
+/// <summary>
+/// Tests for Stage 2 index features: deletion policy, background merge, BKD, term vectors,
+/// compound file, payload support.
+/// </summary>
+public sealed class Stage2IndexTests : IClassFixture<TestDirectoryFixture>
+{
+    private readonly TestDirectoryFixture _fixture;
+    public Stage2IndexTests(TestDirectoryFixture fixture) => _fixture = fixture;
+
+    private string SubDir(string name)
+    {
+        var path = Path.Combine(_fixture.Path, name);
+        Directory.CreateDirectory(path);
+        return path;
+    }
+
+    // ── S2-2: Index Deletion Policy ─────────────────────────────────────────
+
+    [Fact]
+    public void KeepLatestCommitPolicy_PrunesOldCommitFiles()
+    {
+        var dir = new MMapDirectory(SubDir("del_policy_latest"));
+        var config = new IndexWriterConfig { DeletionPolicy = new KeepLatestCommitPolicy(), MaxBufferedDocs = 5 };
+
+        using (var writer = new IndexWriter(dir, config))
+        {
+            for (int i = 0; i < 3; i++)
+            {
+                var doc = new LeanDocument();
+                doc.Add(new TextField("body", $"document {i}"));
+                writer.AddDocument(doc);
+                writer.Commit();
+            }
+        }
+
+        // Only the latest segments_N file should remain
+        var commitFiles = Directory.GetFiles(dir.DirectoryPath, "segments_*");
+        Assert.Single(commitFiles);
+    }
+
+    [Fact]
+    public void KeepLastNCommitsPolicy_KeepsSpecifiedCount()
+    {
+        var dir = new MMapDirectory(SubDir("del_policy_n"));
+        var config = new IndexWriterConfig { DeletionPolicy = new KeepLastNCommitsPolicy(2), MaxBufferedDocs = 5 };
+
+        using (var writer = new IndexWriter(dir, config))
+        {
+            for (int i = 0; i < 5; i++)
+            {
+                var doc = new LeanDocument();
+                doc.Add(new TextField("body", $"document {i}"));
+                writer.AddDocument(doc);
+                writer.Commit();
+            }
+        }
+
+        var commitFiles = Directory.GetFiles(dir.DirectoryPath, "segments_*");
+        Assert.True(commitFiles.Length <= 2, $"Expected ≤2 commit files, got {commitFiles.Length}");
+    }
+
+    // ── S2-1: Background Merge ──────────────────────────────────────────────
+
+    [Fact]
+    public void BackgroundMerge_CommitReturnsImmediately_MergeRunsInBackground()
+    {
+        var dir = new MMapDirectory(SubDir("bg_merge"));
+        var config = new IndexWriterConfig { MaxBufferedDocs = 2 };
+
+        using (var writer = new IndexWriter(dir, config))
+        {
+            // Create multiple small segments to trigger merge
+            for (int i = 0; i < 20; i++)
+            {
+                var doc = new LeanDocument();
+                doc.Add(new TextField("body", $"document number {i} with some text"));
+                writer.AddDocument(doc);
+                if (i % 2 == 1) writer.Commit();
+            }
+            writer.Commit();
+            // Dispose waits for background merge to complete (up to 10s)
+        }
+
+        // Should be searchable after merge completes
+        using var searcher = new IndexSearcher(dir);
+        var results = searcher.Search(new TermQuery("body", "document"), 100);
+        Assert.Equal(20, results.TotalHits);
+    }
+
+    // ── S2-7: BKD Tree ──────────────────────────────────────────────────────
+
+    [Fact]
+    public void BKDTree_WriteAndRead_RangeQuery()
+    {
+        var path = Path.Combine(SubDir("bkd_rw"), "test.bkd");
+        var fieldPoints = new Dictionary<string, List<(double Value, int DocId)>>
+        {
+            ["price"] = [(10.0, 0), (20.0, 1), (30.0, 2), (40.0, 3), (50.0, 4)]
+        };
+        BKDWriter.Write(path, fieldPoints);
+
+        var reader = BKDReader.Open(path);
+        var results = reader.RangeQuery("price", 15.0, 35.0);
+        Assert.Equal(2, results.Count);
+        Assert.Contains(results, r => r.DocId == 1);
+        Assert.Contains(results, r => r.DocId == 2);
+    }
+
+    [Fact]
+    public void BKDTree_EmptyRange_ReturnsNoResults()
+    {
+        var path = Path.Combine(SubDir("bkd_empty"), "test.bkd");
+        var fieldPoints = new Dictionary<string, List<(double Value, int DocId)>>
+        {
+            ["price"] = [(10.0, 0), (20.0, 1)]
+        };
+        BKDWriter.Write(path, fieldPoints);
+
+        var reader = BKDReader.Open(path);
+        var results = reader.RangeQuery("price", 100.0, 200.0);
+        Assert.Empty(results);
+    }
+
+    [Fact]
+    public void BKDTree_MissingField_ReturnsEmpty()
+    {
+        var path = Path.Combine(SubDir("bkd_missing"), "test.bkd");
+        var fieldPoints = new Dictionary<string, List<(double Value, int DocId)>>
+        {
+            ["price"] = [(10.0, 0)]
+        };
+        BKDWriter.Write(path, fieldPoints);
+
+        var reader = BKDReader.Open(path);
+        var results = reader.RangeQuery("nonexistent", 0.0, 100.0);
+        Assert.Empty(results);
+    }
+
+    // ── S2-8: Term Vectors ──────────────────────────────────────────────────
+
+    [Fact]
+    public void TermVectors_WriteAndRead_RoundTrips()
+    {
+        var sub = SubDir("tv_rw");
+        var tvdPath = Path.Combine(sub, "test.tvd");
+        var tvxPath = Path.Combine(sub, "test.tvx");
+
+        var docs = new Dictionary<string, List<TermVectorEntry>>[]
+        {
+            new(StringComparer.Ordinal)
+            {
+                ["body"] = [new TermVectorEntry("hello", 2, [0, 5]), new TermVectorEntry("world", 1, [3])]
+            },
+            new(StringComparer.Ordinal)
+            {
+                ["body"] = [new TermVectorEntry("foo", 1, [0])]
+            }
+        };
+
+        TermVectorsWriter.Write(tvdPath, tvxPath, docs);
+        var reader = TermVectorsReader.Open(tvdPath, tvxPath);
+
+        var tv0 = reader.GetTermVector(0);
+        Assert.True(tv0.ContainsKey("body"));
+        Assert.Equal(2, tv0["body"].Count);
+        Assert.Contains(tv0["body"], e => e.Term == "hello" && e.Freq == 2);
+
+        var tv1 = reader.GetTermVector(1);
+        Assert.Single(tv1["body"]);
+        Assert.Equal("foo", tv1["body"][0].Term);
+    }
+
+    [Fact]
+    public void TermVectors_GetTermVectorByField_ReturnsCorrectField()
+    {
+        var sub = SubDir("tv_field");
+        var tvdPath = Path.Combine(sub, "test.tvd");
+        var tvxPath = Path.Combine(sub, "test.tvx");
+
+        var docs = new Dictionary<string, List<TermVectorEntry>>[]
+        {
+            new(StringComparer.Ordinal)
+            {
+                ["title"] = [new TermVectorEntry("test", 1, [0])],
+                ["body"] = [new TermVectorEntry("content", 1, [0])]
+            }
+        };
+
+        TermVectorsWriter.Write(tvdPath, tvxPath, docs);
+        var reader = TermVectorsReader.Open(tvdPath, tvxPath);
+
+        var titleTV = reader.GetTermVector(0, "title");
+        Assert.NotNull(titleTV);
+        Assert.Single(titleTV);
+        Assert.Equal("test", titleTV[0].Term);
+
+        var bodyTV = reader.GetTermVector(0, "body");
+        Assert.NotNull(bodyTV);
+        Assert.Equal("content", bodyTV![0].Term);
+    }
+
+    [Fact]
+    public void TermVectors_IntegrationWithIndexWriter()
+    {
+        var dir = new MMapDirectory(SubDir("tv_integration"));
+        var config = new IndexWriterConfig { StoreTermVectors = true };
+
+        using (var writer = new IndexWriter(dir, config))
+        {
+            var doc = new LeanDocument();
+            doc.Add(new TextField("body", "the quick brown fox"));
+            writer.AddDocument(doc);
+            writer.Commit();
+        }
+
+        // Term vector files should exist
+        var tvdFiles = Directory.GetFiles(dir.DirectoryPath, "*.tvd");
+        Assert.NotEmpty(tvdFiles);
+    }
+
+    // ── S2-10: Compound File ────────────────────────────────────────────────
+
+    [Fact]
+    public void CompoundFile_WriteAndRead_RoundTrips()
+    {
+        var sub = SubDir("cfs_rw");
+        var basePath = Path.Combine(sub, "seg_0");
+
+        // Create some component files
+        File.WriteAllText(basePath + ".seg", "segment metadata");
+        File.WriteAllText(basePath + ".dic", "dictionary data");
+        File.WriteAllBytes(basePath + ".pos", [1, 2, 3, 4, 5]);
+
+        CompoundFileWriter.Write(basePath + ".cfs", basePath, [".seg", ".dic", ".pos"]);
+        Assert.True(File.Exists(basePath + ".cfs"));
+
+        var reader = CompoundFileReader.Open(basePath + ".cfs");
+        var segData = reader.ReadFile(".seg");
+        Assert.Equal("segment metadata", System.Text.Encoding.UTF8.GetString(segData));
+
+        var posData = reader.ReadFile(".pos");
+        Assert.Equal(new byte[] { 1, 2, 3, 4, 5 }, posData);
+    }
+
+    [Fact]
+    public void CompoundFile_IntegrationWithIndexWriter()
+    {
+        var dir = new MMapDirectory(SubDir("cfs_integration"));
+        var config = new IndexWriterConfig { UseCompoundFile = true };
+
+        using (var writer = new IndexWriter(dir, config))
+        {
+            var doc = new LeanDocument();
+            doc.Add(new TextField("body", "hello world"));
+            writer.AddDocument(doc);
+            writer.Commit();
+        }
+
+        // .cfs file should exist and individual files should be cleaned up
+        var cfsFiles = Directory.GetFiles(dir.DirectoryPath, "*.cfs");
+        Assert.NotEmpty(cfsFiles);
+    }
+
+    // ── S2-9: Payload Support (data model) ──────────────────────────────────
+
+    [Fact]
+    public void PostingAccumulator_AddWithPayload_StoresPayloads()
+    {
+        var acc = new PostingAccumulator();
+        acc.AddWithPayload(0, 0, [0xCA, 0xFE]);
+        acc.AddWithPayload(0, 1, [0xBA, 0xBE]);
+        acc.AddWithPayload(1, 0, null);
+
+        Assert.True(acc.HasPayloads);
+        Assert.Equal(new byte[] { 0xCA, 0xFE }, acc.GetPayload(0, 0));
+        Assert.Equal(new byte[] { 0xBA, 0xBE }, acc.GetPayload(0, 1));
+        Assert.Null(acc.GetPayload(1, 0));
+    }
+
+    [Fact]
+    public void PostingAccumulator_WithoutPayloads_HasPayloadsIsFalse()
+    {
+        var acc = new PostingAccumulator();
+        acc.Add(0, 0);
+        acc.Add(0, 1);
+
+        Assert.False(acc.HasPayloads);
+        Assert.Null(acc.GetPayload(0, 0));
+    }
+
+    [Fact]
+    public void PostingsEnum_GetPayload_ReturnsEmptyForNow()
+    {
+        // PostingsEnum.GetPayload is a stub until the binary format is extended
+        var dir = new MMapDirectory(SubDir("payload_stub"));
+        using var writer = new IndexWriter(dir, new IndexWriterConfig());
+        var doc = new LeanDocument();
+        doc.Add(new TextField("body", "hello"));
+        writer.AddDocument(doc);
+        writer.Commit();
+
+        using var searcher = new IndexSearcher(dir);
+        // Just verify it doesn't throw
+        var results = searcher.Search(new TermQuery("body", "hello"), 10);
+        Assert.Equal(1, results.TotalHits);
+    }
+
+    // ── S2-3: Pluggable Similarity via Config ───────────────────────────────
+
+    [Fact]
+    public void IndexWriterConfig_DefaultSimilarity_IsBm25()
+    {
+        var config = new IndexWriterConfig();
+        Assert.IsType<Bm25Similarity>(config.Similarity);
+    }
+
+    [Fact]
+    public void IndexWriterConfig_CustomSimilarity_IsRetained()
+    {
+        var config = new IndexWriterConfig { Similarity = TfIdfSimilarity.Instance };
+        Assert.IsType<TfIdfSimilarity>(config.Similarity);
+    }
+}

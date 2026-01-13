@@ -1,0 +1,53 @@
+namespace Rowles.LeanLucene.Search;
+
+/// <summary>A single facet bucket: a field value and how many matching documents have it.</summary>
+public readonly record struct FacetBucket(string Value, int Count);
+
+/// <summary>The facet result for one field: the field name and its value-count buckets.</summary>
+public sealed class FacetResult
+{
+    public string FieldName { get; }
+    public IReadOnlyList<FacetBucket> Buckets { get; }
+
+    public FacetResult(string fieldName, IReadOnlyList<FacetBucket> buckets)
+    {
+        FieldName = fieldName;
+        Buckets = buckets;
+    }
+}
+
+/// <summary>
+/// Collects per-field value counts across a result set for faceted navigation.
+/// </summary>
+public sealed class FacetsCollector
+{
+    private readonly Dictionary<string, Dictionary<string, int>> _fieldValueCounts = new(StringComparer.Ordinal);
+
+    /// <summary>Records a facet value hit for a document.</summary>
+    public void Collect(string field, string value)
+    {
+        if (!_fieldValueCounts.TryGetValue(field, out var counts))
+        {
+            counts = new Dictionary<string, int>(StringComparer.Ordinal);
+            _fieldValueCounts[field] = counts;
+        }
+
+        counts.TryGetValue(value, out int current);
+        counts[value] = current + 1;
+    }
+
+    /// <summary>Returns the accumulated facet results, sorted by count descending.</summary>
+    public IReadOnlyList<FacetResult> GetResults()
+    {
+        var results = new List<FacetResult>(_fieldValueCounts.Count);
+        foreach (var (field, counts) in _fieldValueCounts)
+        {
+            var buckets = counts
+                .Select(kvp => new FacetBucket(kvp.Key, kvp.Value))
+                .OrderByDescending(b => b.Count)
+                .ToList();
+            results.Add(new FacetResult(field, buckets));
+        }
+        return results;
+    }
+}

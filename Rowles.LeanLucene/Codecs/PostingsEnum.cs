@@ -150,6 +150,18 @@ public struct PostingsEnum : IDisposable
         return new ReadOnlySpan<int>(_positionData, start, end - start);
     }
 
+    /// <summary>
+    /// Gets the payload for a specific position index of the current document.
+    /// Returns empty span when no payloads are stored.
+    /// </summary>
+    public readonly ReadOnlySpan<byte> GetPayload(int positionIndex)
+    {
+        // Payload data is not yet stored in the postings format;
+        // this stub allows consumers to compile and will return data once
+        // the binary format is extended with per-position payloads.
+        return ReadOnlySpan<byte>.Empty;
+    }
+
     public bool MoveNext()
     {
         if (++_index < _count)
