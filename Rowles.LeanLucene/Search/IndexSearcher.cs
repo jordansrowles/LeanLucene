@@ -189,10 +189,13 @@ public sealed class IndexSearcher : IDisposable
 
         if (termFreqs.Count == 0) return [];
 
-        var sorted = termFreqs.OrderByDescending(kv => kv.Value).Take(topN);
-        var result = new List<(string, int)>(Math.Min(topN, termFreqs.Count));
-        foreach (var kv in sorted)
+        // Manual sort + range avoids LINQ OrderByDescending().Take() allocation
+        var result = new List<(string, int)>(termFreqs.Count);
+        foreach (var kv in termFreqs)
             result.Add((kv.Key, kv.Value));
+        result.Sort((a, b) => b.Item2.CompareTo(a.Item2));
+        if (result.Count > topN)
+            result.RemoveRange(topN, result.Count - topN);
         return result;
     }
 
@@ -206,7 +209,7 @@ public sealed class IndexSearcher : IDisposable
             return Search(query, topN);
 
         // Collect all matching docs with scores
-        var allDocs = Search(query, int.MaxValue / 2 > 0 ? 10000 : 10000);
+        var allDocs = Search(query, 10_000);
         if (allDocs.TotalHits == 0) return TopDocs.Empty;
 
         var sorted = sort.Type switch
@@ -232,12 +235,11 @@ public sealed class IndexSearcher : IDisposable
 
     private ScoreDoc[] SortByNumericField(ScoreDoc[] docs, string fieldName, bool descending)
     {
-        var withValues = new (ScoreDoc Doc, double Value)[docs.Length];
+        var values = new double[docs.Length];
         for (int i = 0; i < docs.Length; i++)
         {
             double val = 0;
             int globalId = docs[i].DocId;
-            // Use DocValues (fast column-stride) with fallback to stored fields
             bool found = false;
             for (int r = 0; r < _readers.Count; r++)
             {
@@ -251,30 +253,26 @@ public sealed class IndexSearcher : IDisposable
             if (!found)
             {
                 var stored = GetStoredFields(globalId);
-                if (stored.TryGetValue(fieldName, out var values) && values.Count > 0)
-                    double.TryParse(values[0], System.Globalization.CultureInfo.InvariantCulture, out val);
+                if (stored.TryGetValue(fieldName, out var sv) && sv.Count > 0)
+                    double.TryParse(sv[0], System.Globalization.CultureInfo.InvariantCulture, out val);
             }
-            withValues[i] = (docs[i], val);
+            values[i] = val;
         }
 
-        Array.Sort(withValues, descending
-            ? static (a, b) => b.Value.CompareTo(a.Value)
-            : static (a, b) => a.Value.CompareTo(b.Value));
-
-        var result = new ScoreDoc[withValues.Length];
-        for (int i = 0; i < result.Length; i++)
-            result[i] = withValues[i].Doc;
-        return result;
+        // Sort docs in-place using values as the sort key
+        Array.Sort(values, docs);
+        if (descending)
+            Array.Reverse(docs);
+        return docs;
     }
 
     private ScoreDoc[] SortByStringField(ScoreDoc[] docs, string fieldName, bool descending)
     {
-        var withValues = new (ScoreDoc Doc, string Value)[docs.Length];
+        var values = new string[docs.Length];
         for (int i = 0; i < docs.Length; i++)
         {
             string val = string.Empty;
             int globalId = docs[i].DocId;
-            // Try SortedDocValues first, fallback to stored fields
             bool found = false;
             for (int r = 0; r < _readers.Count; r++)
             {
@@ -288,20 +286,17 @@ public sealed class IndexSearcher : IDisposable
             if (!found)
             {
                 var stored = GetStoredFields(globalId);
-                if (stored.TryGetValue(fieldName, out var values) && values.Count > 0)
-                    val = values[0];
+                if (stored.TryGetValue(fieldName, out var sv) && sv.Count > 0)
+                    val = sv[0];
             }
-            withValues[i] = (docs[i], val);
+            values[i] = val;
         }
 
-        Array.Sort(withValues, descending
-            ? static (a, b) => string.Compare(b.Value, a.Value, StringComparison.Ordinal)
-            : static (a, b) => string.Compare(a.Value, b.Value, StringComparison.Ordinal));
-
-        var result = new ScoreDoc[withValues.Length];
-        for (int i = 0; i < result.Length; i++)
-            result[i] = withValues[i].Doc;
-        return result;
+        // Sort docs in-place using values as the sort key
+        Array.Sort(values, docs, StringComparer.Ordinal);
+        if (descending)
+            Array.Reverse(docs);
+        return docs;
     }
 
     /// <summary>Retrieves stored fields for a global document ID.</summary>
@@ -340,7 +335,7 @@ public sealed class IndexSearcher : IDisposable
 
         if (!reader.IsLive(localDocId)) return null;
 
-        var qt = string.Concat(query.Field, "\x00", query.Term);
+        var qt = query.CachedQualifiedTerm ??= string.Concat(query.Field, "\x00", query.Term);
         using var postings = reader.GetPostingsEnum(qt);
         if (postings.IsExhausted) return null;
 
@@ -504,7 +499,7 @@ public sealed class IndexSearcher : IDisposable
     private void ExecuteTermQuery(TermQuery query, SegmentReader reader,
         Dictionary<(string Field, string Term), int> globalDFs, ref TopNCollector collector)
     {
-        var qt = string.Concat(query.Field, "\x00", query.Term);
+        var qt = query.CachedQualifiedTerm ??= string.Concat(query.Field, "\x00", query.Term);
         using var postings = reader.GetPostingsEnum(qt);
         if (postings.IsExhausted) return;
 
@@ -582,7 +577,7 @@ public sealed class IndexSearcher : IDisposable
             foreach (var clause in clauses)
             {
                 var tq = (TermQuery)clause.Query;
-                var qt = string.Concat(tq.Field, "\x00", tq.Term);
+                var qt = tq.CachedQualifiedTerm ??= string.Concat(tq.Field, "\x00", tq.Term);
                 var postings = reader.GetPostingsEnum(qt);
 
                 int docFreq = globalDFs.GetValueOrDefault((tq.Field, tq.Term), postings.DocFreq);
@@ -842,7 +837,7 @@ public sealed class IndexSearcher : IDisposable
         {
             case TermQuery tq:
             {
-                var qt = string.Concat(tq.Field, "\x00", tq.Term);
+                var qt = tq.CachedQualifiedTerm ??= string.Concat(tq.Field, "\x00", tq.Term);
                 using var postings = reader.GetPostingsEnum(qt);
                 if (postings.IsExhausted) break;
                 int docFreq = globalDFs.GetValueOrDefault((tq.Field, tq.Term), postings.DocFreq);
@@ -861,7 +856,7 @@ public sealed class IndexSearcher : IDisposable
             case BooleanQuery bq:
             {
                 // Nested boolean: use a sub-collector and extract results
-                var subCollector = new TopNCollector(int.MaxValue / 2 > 0 ? 10000 : 10000);
+                var subCollector = new TopNCollector(10_000);
                 ExecuteBooleanQuery(bq, reader, globalDFs, ref subCollector);
                 var subDocs = subCollector.ToTopDocs();
                 foreach (var sd in subDocs.ScoreDocs)
@@ -1086,14 +1081,32 @@ public sealed class IndexSearcher : IDisposable
         }
 
         // General case: check all position combinations
-        // Collect positions into a temporary list for HasPositionsWithinSlop
+        // Use ArrayPool to avoid heap allocations
+        var rentedArrays = new int[termCount][];
+        Span<int> actualLengths = stackalloc int[termCount];
         var termPositions = new List<int[]>(termCount);
-        for (int i = 0; i < termCount; i++)
+        
+        try
         {
-            var span = postings[i].GetCurrentPositions();
-            termPositions.Add(span.ToArray());
+            for (int i = 0; i < termCount; i++)
+            {
+                var span = postings[i].GetCurrentPositions();
+                var rented = ArrayPool<int>.Shared.Rent(span.Length);
+                span.CopyTo(rented);
+                rentedArrays[i] = rented;
+                actualLengths[i] = span.Length;
+                termPositions.Add(rented);
+            }
+            return HasPositionsWithinSlop(termPositions, actualLengths, slop);
         }
-        return HasPositionsWithinSlop(termPositions, slop);
+        finally
+        {
+            for (int i = 0; i < termCount; i++)
+            {
+                if (rentedArrays[i] != null)
+                    ArrayPool<int>.Shared.Return(rentedArrays[i]);
+            }
+        }
     }
 
     private void ExecuteVectorQuery(VectorQuery query, SegmentReader reader, ref TopNCollector collector)
@@ -1393,28 +1406,35 @@ public sealed class IndexSearcher : IDisposable
         return false;
     }
 
-    private static bool HasPositionsWithinSlop(List<int[]> termPositions, int slop)
+    private static bool HasPositionsWithinSlop(List<int[]> termPositions, ReadOnlySpan<int> actualLengths, int slop)
     {
-        foreach (var startPos in termPositions[0])
+        int firstTermLength = actualLengths[0];
+        int[] firstTermArray = termPositions[0];
+        
+        for (int startIdx = 0; startIdx < firstTermLength; startIdx++)
         {
+            int startPos = firstTermArray[startIdx];
             bool match = true;
+            
             for (int i = 1; i < termPositions.Count; i++)
             {
                 int expectedPos = startPos + i;
                 bool found = false;
+                int currentLength = actualLengths[i];
+                int[] currentArray = termPositions[i];
 
                 if (slop == 0)
                 {
-                    found = Array.BinarySearch(termPositions[i], expectedPos) >= 0;
+                    found = Array.BinarySearch(currentArray, 0, currentLength, expectedPos) >= 0;
                 }
                 else
                 {
                     // Search for any position within [expectedPos - slop, expectedPos + slop]
-                    int idx = Array.BinarySearch(termPositions[i], expectedPos - slop);
+                    int idx = Array.BinarySearch(currentArray, 0, currentLength, expectedPos - slop);
                     if (idx < 0) idx = ~idx;
-                    for (int j = idx; j < termPositions[i].Length; j++)
+                    for (int j = idx; j < currentLength; j++)
                     {
-                        int pos = termPositions[i][j];
+                        int pos = currentArray[j];
                         if (pos > expectedPos + slop) break;
                         if (pos >= expectedPos - slop)
                         {
@@ -1431,13 +1451,16 @@ public sealed class IndexSearcher : IDisposable
         return false;
     }
 
+    // Reusable buffer for PrecomputeGlobalDocFreqs to avoid per-call HashSet allocation
+    private readonly HashSet<(string Field, string Term)> _docFreqTermsBuf = new();
+
     private Dictionary<(string Field, string Term), int> PrecomputeGlobalDocFreqs(Query query)
     {
-        var terms = new HashSet<(string Field, string Term)>();
-        CollectTerms(query, terms);
+        _docFreqTermsBuf.Clear();
+        CollectTerms(query, _docFreqTermsBuf);
 
-        var result = new Dictionary<(string Field, string Term), int>(terms.Count);
-        foreach (var (field, term) in terms)
+        var result = new Dictionary<(string Field, string Term), int>(_docFreqTermsBuf.Count);
+        foreach (var (field, term) in _docFreqTermsBuf)
         {
             var qt = string.Concat(field, "\x00", term);
             int total = 0;
@@ -1480,18 +1503,32 @@ public sealed class IndexSearcher : IDisposable
         var files = Directory.GetFiles(_directory.DirectoryPath, "segments_*");
         if (files.Length == 0) return [];
 
-        var latest = files
-            .Select(f => (File: f, Gen: int.TryParse(Path.GetFileName(f).Replace("segments_", ""), out int g) ? g : -1))
-            .Where(x => x.Gen >= 0)
-            .OrderByDescending(x => x.Gen)
-            .FirstOrDefault();
+        // Manual loop avoids LINQ allocation overhead
+        var latestFile = (string?)null;
+        var latestGen = -1;
+        foreach (var file in files)
+        {
+            var fileName = Path.GetFileName(file);
+            if (int.TryParse(fileName.Replace("segments_", ""), out int gen) && gen > latestGen)
+            {
+                latestGen = gen;
+                latestFile = file;
+            }
+        }
 
-        if (latest.File == null) return [];
+        if (latestFile == null) return [];
 
-        var json = File.ReadAllText(latest.File);
+        var json = File.ReadAllText(latestFile);
         using var doc = JsonDocument.Parse(json);
         var segments = doc.RootElement.GetProperty("Segments");
-        return segments.EnumerateArray().Select(e => e.GetString()!).ToList();
+        var result = new List<string>();
+        foreach (var element in segments.EnumerateArray())
+        {
+            var segmentId = element.GetString();
+            if (segmentId != null)
+                result.Add(segmentId);
+        }
+        return result;
     }
 
     public void Dispose()
@@ -1614,7 +1651,13 @@ public sealed class IndexSearcher : IDisposable
         }
 
         // Find documents present in all clause spans
-        var docSets = clauseSpans.Select(s => s.Select(sp => sp.DocId).ToHashSet()).ToList();
+        var docSets = new List<HashSet<int>>(clauseSpans.Count);
+        foreach (var spans in clauseSpans)
+        {
+            var set = new HashSet<int>();
+            foreach (var sp in spans) set.Add(sp.DocId);
+            docSets.Add(set);
+        }
         var commonDocs = docSets[0];
         for (int i = 1; i < docSets.Count; i++)
             commonDocs.IntersectWith(docSets[i]);
@@ -1623,9 +1666,15 @@ public sealed class IndexSearcher : IDisposable
         foreach (int docId in commonDocs)
         {
             // Check positional constraints
-            var clausePositions = clauseSpans
-                .Select(s => s.Where(sp => sp.DocId == docId).Select(sp => sp.Start).OrderBy(p => p).ToList())
-                .ToList();
+            var clausePositions = new List<List<int>>(clauseSpans.Count);
+            foreach (var spans in clauseSpans)
+            {
+                var positions = new List<int>();
+                foreach (var sp in spans)
+                    if (sp.DocId == docId) positions.Add(sp.Start);
+                positions.Sort();
+                clausePositions.Add(positions);
+            }
 
             if (CheckNearConstraint(clausePositions, query.Slop, query.InOrder))
             {
@@ -1706,7 +1755,7 @@ public sealed class IndexSearcher : IDisposable
         {
             case SpanTermQuery stq:
             {
-                var qt = string.Concat(stq.Field, "\x00", stq.Term);
+                var qt = stq.CachedQualifiedTerm ??= string.Concat(stq.Field, "\x00", stq.Term);
                 using var pe = reader.GetPostingsEnumWithPositions(qt);
                 while (pe.MoveNext())
                 {
@@ -1719,20 +1768,44 @@ public sealed class IndexSearcher : IDisposable
             case SpanNearQuery snq:
             {
                 // Recursive: collect matching spans
-                var clauseSpans = snq.Clauses.Select(c => CollectSpans(c, reader)).ToList();
-                var commonDocs = clauseSpans[0].Select(s => s.DocId).ToHashSet();
+                var clauseSpans = new List<List<Span>>(snq.Clauses.Count);
+                foreach (var clause in snq.Clauses)
+                    clauseSpans.Add(CollectSpans(clause, reader));
+                
+                var commonDocs = new HashSet<int>();
+                foreach (var span in clauseSpans[0])
+                    commonDocs.Add(span.DocId);
                 for (int i = 1; i < clauseSpans.Count; i++)
-                    commonDocs.IntersectWith(clauseSpans[i].Select(s => s.DocId));
+                {
+                    var docIds = new HashSet<int>();
+                    foreach (var span in clauseSpans[i])
+                        docIds.Add(span.DocId);
+                    commonDocs.IntersectWith(docIds);
+                }
 
                 foreach (int docId in commonDocs)
                 {
-                    var clausePositions = clauseSpans
-                        .Select(s => s.Where(sp => sp.DocId == docId).Select(sp => sp.Start).OrderBy(p => p).ToList())
-                        .ToList();
+                    var clausePositions = new List<List<int>>(clauseSpans.Count);
+                    foreach (var clauseSpanList in clauseSpans)
+                    {
+                        var positions = new List<int>();
+                        foreach (var sp in clauseSpanList)
+                            if (sp.DocId == docId) positions.Add(sp.Start);
+                        positions.Sort();
+                        clausePositions.Add(positions);
+                    }
                     if (CheckNearConstraint(clausePositions, snq.Slop, snq.InOrder))
                     {
-                        int minPos = clausePositions.Min(p => p.Min());
-                        int maxPos = clausePositions.Max(p => p.Max());
+                        int minPos = int.MaxValue;
+                        int maxPos = int.MinValue;
+                        foreach (var positions in clausePositions)
+                        {
+                            foreach (int p in positions)
+                            {
+                                if (p < minPos) minPos = p;
+                                if (p > maxPos) maxPos = p;
+                            }
+                        }
                         spans.Add(new Span(docId, minPos, maxPos + 1));
                     }
                 }

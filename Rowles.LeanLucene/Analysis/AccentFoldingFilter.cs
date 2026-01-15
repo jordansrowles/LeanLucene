@@ -25,7 +25,7 @@ public sealed class AccentFoldingFilter : ITokenFilter
     /// Folds accents and diacritics from the input string.
     /// Returns the original reference if no changes were needed.
     /// </summary>
-    public static string Fold(string input)
+    internal static string Fold(string input)
     {
         var normalised = input.Normalize(NormalizationForm.FormD);
         if (normalised.Length == input.Length)

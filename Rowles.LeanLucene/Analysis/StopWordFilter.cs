@@ -17,10 +17,10 @@ public sealed class StopWordFilter : ITokenFilter
     }.ToFrozenSet(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>Returns true if the given term is a stop word.</summary>
-    public bool IsStopWord(string term) => StopWords.Contains(term);
+    internal bool IsStopWord(string term) => StopWords.Contains(term);
 
     /// <summary>Returns true if the given term span is a stop word (zero-alloc).</summary>
-    public bool IsStopWord(ReadOnlySpan<char> term)
+    internal bool IsStopWord(ReadOnlySpan<char> term)
         => StopWords.GetAlternateLookup<ReadOnlySpan<char>>().Contains(term);
 
     public void Apply(List<Token> tokens)

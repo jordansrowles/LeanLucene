@@ -15,43 +15,87 @@ public sealed class SegmentReader : IDisposable
     private readonly TermDictionaryReader _dicReader;
     private readonly IndexInput _posInput;
     private readonly StoredFieldsReader? _storedReader;
-    private readonly Dictionary<string, float[]> _fieldNorms;
+    private readonly Dictionary<string, byte[]> _fieldNorms;
     private readonly Dictionary<string, int[]> _fieldLengthsPerField;
-    private readonly Dictionary<string, Dictionary<int, double>> _numericIndex = new();
     private readonly VectorReader? _vectorReader;
-    private readonly Dictionary<string, double[]> _numericDocValues;
-    private readonly Dictionary<string, string[]> _sortedDocValues;
+    private readonly Dictionary<(string, string), string> _qualifiedTermCache = new();
     private LiveDocs? _liveDocs;
     private string? _lastQualifiedTerm;
     private long _lastPostingsOffset;
     private bool _lastLookupHit;
+
+    // Lazy-loaded Stage 2 features to avoid startup regression
+    private Dictionary<string, Dictionary<int, double>>? _numericIndex;
+    private bool _numericIndexInitialized;
+    private Dictionary<string, double[]>? _numericDocValues;
+    private bool _numericDocValuesInitialized;
+    private Dictionary<string, string[]>? _sortedDocValues;
+    private bool _sortedDocValuesInitialized;
+    private readonly string _basePath;
 
     public int DocBase { get; set; }
 
     public SegmentInfo Info => _info;
     public int MaxDoc => _info.DocCount;
 
+    /// <summary>Lazy-loads the numeric index (.num) for range queries.</summary>
+    private Dictionary<string, Dictionary<int, double>> EnsureNumericIndex()
+    {
+        if (!_numericIndexInitialized)
+        {
+            _numericIndexInitialized = true;
+            var numPath = _basePath + ".num";
+            if (File.Exists(numPath))
+                _numericIndex = ReadNumericIndex(numPath);
+            else
+                _numericIndex = new Dictionary<string, Dictionary<int, double>>();
+        }
+        return _numericIndex!;
+    }
+
+    /// <summary>Lazy-loads numeric doc values (.dvn) for per-document numeric retrieval.</summary>
+    private Dictionary<string, double[]> EnsureNumericDocValues()
+    {
+        if (!_numericDocValuesInitialized)
+        {
+            _numericDocValuesInitialized = true;
+            _numericDocValues = NumericDocValuesReader.Read(_basePath + ".dvn");
+        }
+        return _numericDocValues!;
+    }
+
+    /// <summary>Lazy-loads sorted doc values (.dvs) for per-document string retrieval.</summary>
+    private Dictionary<string, string[]> EnsureSortedDocValues()
+    {
+        if (!_sortedDocValuesInitialized)
+        {
+            _sortedDocValuesInitialized = true;
+            _sortedDocValues = SortedDocValuesReader.Read(_basePath + ".dvs");
+        }
+        return _sortedDocValues!;
+    }
+
     public SegmentReader(MMapDirectory directory, SegmentInfo info)
     {
         _directory = directory;
         _info = info;
+        _basePath = Path.Combine(directory.DirectoryPath, info.SegmentId);
 
-        var basePath = Path.Combine(directory.DirectoryPath, info.SegmentId);
-        ValidateSegmentFiles(basePath, info.DocCount);
-        _dicReader = TermDictionaryReader.Open(basePath + ".dic");
+        ValidateSegmentFiles(_basePath, info.DocCount);
+        _dicReader = TermDictionaryReader.Open(_basePath + ".dic");
         _posInput = directory.OpenInput(info.SegmentId + ".pos");
 
-        var fdtPath = basePath + ".fdt";
-        var fdxPath = basePath + ".fdx";
+        var fdtPath = _basePath + ".fdt";
+        var fdxPath = _basePath + ".fdx";
         if (File.Exists(fdtPath) && File.Exists(fdxPath))
             _storedReader = StoredFieldsReader.Open(fdtPath, fdxPath);
 
-        var delPath = basePath + ".del";
+        var delPath = _basePath + ".del";
         if (File.Exists(delPath))
             _liveDocs = LiveDocs.Deserialise(delPath, info.DocCount);
 
         // Load per-field norms
-        _fieldNorms = NormsReader.Read(basePath + ".nrm");
+        _fieldNorms = NormsReader.Read(_basePath + ".nrm");
 
         // Precompute per-field lengths from norms to avoid per-doc float division in scoring
         _fieldLengthsPerField = new Dictionary<string, int[]>(_fieldNorms.Count, StringComparer.Ordinal);
@@ -60,22 +104,18 @@ public sealed class SegmentReader : IDisposable
             var fieldLengths = new int[norms.Length];
             for (int i = 0; i < norms.Length; i++)
             {
-                float n = norms[i];
+                float n = norms[i] / 255f;
                 fieldLengths[i] = n <= 0f ? 1 : Math.Max(1, (int)MathF.Round(1.0f / n - 1.0f));
             }
             _fieldLengthsPerField[fieldName] = fieldLengths;
         }
 
-        var numPath = basePath + ".num";
-        if (File.Exists(numPath))
-            _numericIndex = ReadNumericIndex(numPath);
-
-        var vecPath = basePath + ".vec";
+        var vecPath = _basePath + ".vec";
         if (File.Exists(vecPath))
             _vectorReader = VectorReader.Open(vecPath);
 
-        _numericDocValues = NumericDocValuesReader.Read(basePath + ".dvn");
-        _sortedDocValues = SortedDocValuesReader.Read(basePath + ".dvs");
+        // Stage 2 features: numeric index, numeric doc values, and sorted doc values are now lazy-loaded
+        // to avoid startup regression for simple TermQuery and BooleanQuery operations
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -88,7 +128,7 @@ public sealed class SegmentReader : IDisposable
     public float GetNorm(int docId, string field)
     {
         if (_fieldNorms.TryGetValue(field, out var norms) && (uint)docId < (uint)norms.Length)
-            return norms[docId];
+            return norms[docId] / 255f;
         return 0f;
     }
 
@@ -98,7 +138,7 @@ public sealed class SegmentReader : IDisposable
         foreach (var norms in _fieldNorms.Values)
         {
             if ((uint)docId < (uint)norms.Length)
-                return norms[docId];
+                return norms[docId] / 255f;
         }
         return 0f;
     }
@@ -129,11 +169,36 @@ public sealed class SegmentReader : IDisposable
     }
 
     /// <summary>
+    /// Gets or creates a cached qualified term string (field\0term).
+    /// </summary>
+    private string GetQualifiedTerm(string field, string term)
+    {
+        var key = (field, term);
+        if (!_qualifiedTermCache.TryGetValue(key, out var qt))
+        {
+            qt = string.Concat(field, "\x00", term);
+            _qualifiedTermCache[key] = qt;
+        }
+        return qt;
+    }
+
+    /// <summary>
     /// Returns document IDs matching the given field and term.
     /// </summary>
     public int[] GetDocIds(string field, string term)
     {
-        var qualifiedTerm = $"{field}\x00{term}";
+        var qualifiedTerm = GetQualifiedTerm(field, term);
+        if (!_dicReader.TryGetPostingsOffset(qualifiedTerm, out long offset))
+            return [];
+
+        return ReadPostingsAtOffset(offset);
+    }
+
+    /// <summary>
+    /// Returns document IDs for a pre-built qualified term string.
+    /// </summary>
+    internal int[] GetDocIds(string qualifiedTerm)
+    {
         if (!_dicReader.TryGetPostingsOffset(qualifiedTerm, out long offset))
             return [];
 
@@ -145,7 +210,18 @@ public sealed class SegmentReader : IDisposable
     /// </summary>
     public int GetTermFrequency(string field, string term, int docId)
     {
-        var qualifiedTerm = $"{field}\x00{term}";
+        var qualifiedTerm = GetQualifiedTerm(field, term);
+        if (!_dicReader.TryGetPostingsOffset(qualifiedTerm, out long offset))
+            return 0;
+
+        return ReadTermFrequency(offset, docId);
+    }
+
+    /// <summary>
+    /// Returns the term frequency for a pre-built qualified term string.
+    /// </summary>
+    internal int GetTermFrequency(string qualifiedTerm, int docId)
+    {
         if (!_dicReader.TryGetPostingsOffset(qualifiedTerm, out long offset))
             return 0;
 
@@ -155,7 +231,13 @@ public sealed class SegmentReader : IDisposable
     /// <summary>Returns the document frequency for a term (count only, no full decode).</summary>
     public int GetDocFreq(string field, string term)
     {
-        var qualifiedTerm = $"{field}\x00{term}";
+        var qualifiedTerm = GetQualifiedTerm(field, term);
+        return GetDocFreqByQualified(qualifiedTerm);
+    }
+
+    /// <summary>Returns the document frequency for a pre-built qualified term string.</summary>
+    internal int GetDocFreq(string qualifiedTerm)
+    {
         return GetDocFreqByQualified(qualifiedTerm);
     }
 
@@ -212,10 +294,25 @@ public sealed class SegmentReader : IDisposable
     /// <summary>Returns positional data for a term in a specific document, or null if unavailable.</summary>
     public int[]? GetPositions(string field, string term, int docId)
     {
-        var qualifiedTerm = $"{field}\x00{term}";
+        var qualifiedTerm = GetQualifiedTerm(field, term);
         if (!_dicReader.TryGetPostingsOffset(qualifiedTerm, out long offset))
             return null;
 
+        return ReadPositionsAtOffset(offset, docId);
+    }
+
+    /// <summary>Returns positional data for a pre-built qualified term string.</summary>
+    internal ReadOnlySpan<int> GetPositions(string qualifiedTerm, int docId)
+    {
+        if (!_dicReader.TryGetPostingsOffset(qualifiedTerm, out long offset))
+            return ReadOnlySpan<int>.Empty;
+
+        var positions = ReadPositionsAtOffset(offset, docId);
+        return positions.AsSpan();
+    }
+
+    private int[]? ReadPositionsAtOffset(long offset, int docId)
+    {
         _posInput.Seek(offset);
         int count = _posInput.ReadInt32();
         // Skip past skip entries
@@ -282,12 +379,14 @@ public sealed class SegmentReader : IDisposable
     {
         value = 0;
         // Prefer column-stride DocValues (faster, no dict lookup per doc)
-        if (_numericDocValues.TryGetValue(field, out var dvArr) && (uint)docId < (uint)dvArr.Length)
+        var numericDocValues = EnsureNumericDocValues();
+        if (numericDocValues.TryGetValue(field, out var dvArr) && (uint)docId < (uint)dvArr.Length)
         {
             value = dvArr[docId];
             return true;
         }
-        return _numericIndex.TryGetValue(field, out var fieldMap) && fieldMap.TryGetValue(docId, out value);
+        var numericIndex = EnsureNumericIndex();
+        return numericIndex.TryGetValue(field, out var fieldMap) && fieldMap.TryGetValue(docId, out value);
     }
 
     /// <summary>
@@ -296,7 +395,8 @@ public sealed class SegmentReader : IDisposable
     public bool TryGetSortedDocValue(string field, int docId, out string value)
     {
         value = string.Empty;
-        if (_sortedDocValues.TryGetValue(field, out var arr) && (uint)docId < (uint)arr.Length)
+        var sortedDocValues = EnsureSortedDocValues();
+        if (sortedDocValues.TryGetValue(field, out var arr) && (uint)docId < (uint)arr.Length)
         {
             value = arr[docId];
             return true;
@@ -306,11 +406,11 @@ public sealed class SegmentReader : IDisposable
 
     /// <summary>Returns the NumericDocValues array for a field, or null if unavailable.</summary>
     public double[]? GetNumericDocValues(string field)
-        => _numericDocValues.GetValueOrDefault(field);
+        => EnsureNumericDocValues().GetValueOrDefault(field);
 
     /// <summary>Returns the SortedDocValues array for a field, or null if unavailable.</summary>
     public string[]? GetSortedDocValues(string field)
-        => _sortedDocValues.GetValueOrDefault(field);
+        => EnsureSortedDocValues().GetValueOrDefault(field);
 
     /// <summary>
     /// Returns all document IDs that have a numeric value in the given field within the specified range.
@@ -318,7 +418,8 @@ public sealed class SegmentReader : IDisposable
     public List<(int DocId, double Value)> GetNumericRange(string field, double min, double max)
     {
         var results = new List<(int, double)>();
-        if (!_numericIndex.TryGetValue(field, out var fieldMap))
+        var numericIndex = EnsureNumericIndex();
+        if (!numericIndex.TryGetValue(field, out var fieldMap))
             return results;
 
         foreach (var (docId, value) in fieldMap)

@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.IO.Compression;
 
 namespace Rowles.LeanLucene.Codecs;
@@ -17,6 +18,10 @@ public sealed class StoredFieldsReader : IDisposable
     private int _cachedBlockIndex = -1;
     private byte[]? _cachedBlockData;
     private int[]? _cachedIntraOffsets;
+
+    // Reusable MemoryStream + BinaryReader for ReadDocument (avoid per-call allocation)
+    private MemoryStream? _docStream;
+    private BinaryReader? _docReader;
 
     private bool _disposed;
 
@@ -52,11 +57,22 @@ public sealed class StoredFieldsReader : IDisposable
         int docInBlock = docId % _blockSize;
 
         if (blockIndex != _cachedBlockIndex)
+        {
             DecompressBlock(blockIndex);
+            // Invalidate reusable stream since block data changed
+            _docReader?.Dispose();
+            _docStream?.Dispose();
+            _docStream = new MemoryStream(_cachedBlockData!, 0, _cachedBlockData!.Length, writable: false, publiclyVisible: true);
+            _docReader = new BinaryReader(_docStream, System.Text.Encoding.UTF8, leaveOpen: true);
+        }
+        else if (_docStream is null)
+        {
+            _docStream = new MemoryStream(_cachedBlockData!, 0, _cachedBlockData!.Length, writable: false, publiclyVisible: true);
+            _docReader = new BinaryReader(_docStream, System.Text.Encoding.UTF8, leaveOpen: true);
+        }
 
-        using var ms = new MemoryStream(_cachedBlockData!);
-        ms.Seek(_cachedIntraOffsets![docInBlock], SeekOrigin.Begin);
-        using var br = new BinaryReader(ms, System.Text.Encoding.UTF8, leaveOpen: true);
+        _docStream!.Seek(_cachedIntraOffsets![docInBlock], SeekOrigin.Begin);
+        var br = _docReader!;
 
         int fieldCount = br.ReadInt32();
         var fields = new Dictionary<string, List<string>>(fieldCount);
@@ -92,28 +108,38 @@ public sealed class StoredFieldsReader : IDisposable
         for (int i = 0; i < docCount; i++)
             intraOffsets[i] = _reader.ReadInt32();
 
-        var compData = _reader.ReadBytes(compLength);
-
-        using var compStream = new MemoryStream(compData);
-        using var brotli = new BrotliStream(compStream, CompressionMode.Decompress);
-        var rawData = new byte[rawLength];
-        int totalRead = 0;
-        while (totalRead < rawLength)
+        var compData = ArrayPool<byte>.Shared.Rent(compLength);
+        try
         {
-            int read = brotli.Read(rawData, totalRead, rawLength - totalRead);
-            if (read == 0) break;
-            totalRead += read;
-        }
+            _reader.BaseStream.ReadExactly(compData.AsSpan(0, compLength));
 
-        _cachedBlockIndex = blockIndex;
-        _cachedBlockData = rawData;
-        _cachedIntraOffsets = intraOffsets;
+            using var compStream = new MemoryStream(compData, 0, compLength);
+            using var brotli = new BrotliStream(compStream, CompressionMode.Decompress);
+            var rawData = new byte[rawLength];
+            int totalRead = 0;
+            while (totalRead < rawLength)
+            {
+                int read = brotli.Read(rawData, totalRead, rawLength - totalRead);
+                if (read == 0) break;
+                totalRead += read;
+            }
+
+            _cachedBlockIndex = blockIndex;
+            _cachedBlockData = rawData;
+            _cachedIntraOffsets = intraOffsets;
+        }
+        finally
+        {
+            ArrayPool<byte>.Shared.Return(compData);
+        }
     }
 
     public void Dispose()
     {
         if (_disposed) return;
         _disposed = true;
+        _docReader?.Dispose();
+        _docStream?.Dispose();
         _reader.Dispose();
         _fs.Dispose();
     }

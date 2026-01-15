@@ -12,7 +12,7 @@ public static class TermDictionaryWriter
 {
     private const int SkipInterval = 128;
 
-    public static void Write(string filePath, List<string> sortedTerms, Dictionary<string, long> postingsOffsets)
+    internal static void Write(string filePath, List<string> sortedTerms, Dictionary<string, long> postingsOffsets)
     {
         // First pass: serialise term entries to a temporary buffer to compute offsets.
         using var termBuffer = new MemoryStream();
@@ -37,11 +37,14 @@ public static class TermDictionaryWriter
 
         // Write skip index header.
         output.WriteInt32(skipEntries.Count);
+        Span<byte> skipTermBuf = stackalloc byte[256];
         foreach (var (term, offset) in skipEntries)
         {
             output.WriteInt32(term.Length);
-            var charBytes = System.Text.Encoding.UTF8.GetBytes(term.ToCharArray());
-            output.WriteBytes(charBytes);
+            int byteCount = System.Text.Encoding.UTF8.GetByteCount(term);
+            Span<byte> buf = byteCount <= 256 ? skipTermBuf[..byteCount] : new byte[byteCount];
+            System.Text.Encoding.UTF8.GetBytes(term, buf);
+            output.WriteBytes(buf);
             output.WriteInt64(headerSize + offset);
         }
 
@@ -52,7 +55,7 @@ public static class TermDictionaryWriter
     private static void WriteTermEntry(BinaryWriter writer, string term, long postingsOffset)
     {
         writer.Write(term.Length);
-        writer.Write(term.ToCharArray());
+        writer.Write(term.AsSpan());
         writer.Write(postingsOffset);
     }
 
@@ -63,7 +66,7 @@ public static class TermDictionaryWriter
         foreach (var (term, _) in skipEntries)
         {
             // int: termLength + UTF-8 encoded chars + long: fileOffset
-            int charByteCount = System.Text.Encoding.UTF8.GetByteCount(term.ToCharArray());
+            int charByteCount = System.Text.Encoding.UTF8.GetByteCount(term);
             size += sizeof(int) + charByteCount + sizeof(long);
         }
         return size;

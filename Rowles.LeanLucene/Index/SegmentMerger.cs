@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Text.Json;
 using Rowles.LeanLucene.Codecs;
 using Rowles.LeanLucene.Store;
@@ -32,25 +33,39 @@ public sealed class SegmentMerger
         if (segments.Count < _mergeThreshold)
             return segments;
 
-        // Group segments by size tier (order of magnitude of doc count)
-        var tiers = segments
-            .GroupBy(s => GetSizeTier(s.DocCount))
-            .Where(g => g.Count() >= _mergeThreshold)
-            .OrderBy(g => g.Key)
-            .ToList();
+        // Group segments by size tier without LINQ allocations
+        var tierBuckets = new Dictionary<int, List<SegmentInfo>>();
+        foreach (var s in segments)
+        {
+            int tier = GetSizeTier(s.DocCount);
+            if (!tierBuckets.TryGetValue(tier, out var bucket))
+            {
+                bucket = new List<SegmentInfo>();
+                tierBuckets[tier] = bucket;
+            }
+            bucket.Add(s);
+        }
 
-        if (tiers.Count == 0)
+        // Collect tiers that meet the merge threshold, sorted by tier key
+        var eligibleTiers = new List<int>();
+        foreach (var (tier, bucket) in tierBuckets)
+        {
+            if (bucket.Count >= _mergeThreshold)
+                eligibleTiers.Add(tier);
+        }
+
+        if (eligibleTiers.Count == 0)
             return segments;
 
+        eligibleTiers.Sort();
         var result = new List<SegmentInfo>(segments);
 
-        foreach (var tier in tiers)
+        foreach (var tierKey in eligibleTiers)
         {
+            var bucket = tierBuckets[tierKey];
             // Take the smallest segments in this tier
-            var toMerge = tier
-                .OrderBy(s => s.DocCount)
-                .Take(_mergeThreshold)
-                .ToList();
+            bucket.Sort(static (a, b) => a.DocCount.CompareTo(b.DocCount));
+            var toMerge = bucket.Count <= _mergeThreshold ? bucket : bucket.GetRange(0, _mergeThreshold);
 
             if (toMerge.Count < 2)
                 continue;
@@ -113,11 +128,6 @@ public sealed class SegmentMerger
                 }
 
                 // Re-index postings for this doc
-                foreach (var field in segInfo.FieldNames)
-                {
-                    var docIds = reader.GetDocIds(field, "");
-                    // We need to scan all terms — read from the dic
-                }
 
                 newDocId++;
             }
@@ -308,7 +318,12 @@ public sealed class SegmentMerger
 
         // Write .vec if any
         if (allVectors.Count > 0 && allVectors.Any(v => v.Length > 0))
-            VectorWriter.Write(basePath + ".vec", allVectors.ToArray());
+        {
+            var memVectors = new ReadOnlyMemory<float>[allVectors.Count];
+            for (int i = 0; i < allVectors.Count; i++)
+                memVectors[i] = allVectors[i];
+            VectorWriter.Write(basePath + ".vec", memVectors);
+        }
 
         // Write .num if any numeric fields
         if (allNumericFields.Count > 0)
@@ -350,15 +365,26 @@ public sealed class SegmentMerger
         using var posFs = new FileStream(posPath, FileMode.Open, FileAccess.Read, FileShare.Read);
         using var posBr = new BinaryReader(posFs, System.Text.Encoding.UTF8, leaveOpen: false);
 
+        // Reusable char buffer for term strings (avoids per-term allocation)
+        var charBuf = ArrayPool<char>.Shared.Rent(256);
+        try
+        {
         while (dicFs.Position < dicFs.Length)
         {
             int termLen;
             try { termLen = dicBr.ReadInt32(); }
             catch (EndOfStreamException) { break; }
 
-            var chars = dicBr.ReadChars(termLen);
+            // #3: Read chars into pooled buffer, create string once
+            if (termLen > charBuf.Length)
+            {
+                ArrayPool<char>.Shared.Return(charBuf);
+                charBuf = ArrayPool<char>.Shared.Rent(termLen);
+            }
+            for (int c = 0; c < termLen; c++)
+                charBuf[c] = dicBr.ReadChar();
             long postingsOffset = dicBr.ReadInt64();
-            string qualifiedTerm = new string(chars);
+            string qualifiedTerm = new string(charBuf, 0, termLen);
 
             posFs.Seek(postingsOffset, SeekOrigin.Begin);
 
@@ -366,7 +392,12 @@ public sealed class SegmentMerger
             int postingSkipCount = posBr.ReadInt32();
             // Skip past skip entries (each is 2 × int32 = 8 bytes)
             posFs.Seek(postingSkipCount * 8L, SeekOrigin.Current);
-            var oldIds = new int[count];
+
+            // #7: Use ArrayPool for per-term arrays
+            var oldIds = ArrayPool<int>.Shared.Rent(count);
+            var freqs = ArrayPool<int>.Shared.Rent(count);
+            try
+            {
             int prev = 0;
             for (int j = 0; j < count; j++)
             {
@@ -376,7 +407,6 @@ public sealed class SegmentMerger
             }
 
             bool hasFreqs = posBr.ReadBoolean();
-            var freqs = new int[count];
             if (hasFreqs)
             {
                 for (int j = 0; j < count; j++)
@@ -384,7 +414,7 @@ public sealed class SegmentMerger
             }
             else
             {
-                Array.Fill(freqs, 1);
+                Array.Fill(freqs, 1, 0, count);
             }
 
             // Read positional data if present
@@ -434,6 +464,17 @@ public sealed class SegmentMerger
                         mergedPositions[newId] = positions[j];
                 }
             }
+            } // try oldIds/freqs
+            finally
+            {
+                ArrayPool<int>.Shared.Return(oldIds);
+                ArrayPool<int>.Shared.Return(freqs);
+            }
+        }
+        } // try charBuf
+        finally
+        {
+            ArrayPool<char>.Shared.Return(charBuf);
         }
 
         foreach (var (_, list) in allPostings)

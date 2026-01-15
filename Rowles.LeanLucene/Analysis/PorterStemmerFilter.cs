@@ -18,7 +18,7 @@ public sealed class PorterStemmerFilter : ITokenFilter
         }
     }
 
-    public static string Stem(string word)
+    internal static string Stem(string word)
     {
         if (word.Length <= 2) return word;
 

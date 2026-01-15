@@ -122,7 +122,10 @@ public sealed class CodecsTests : IClassFixture<TestDirectoryFixture>
         var restoredNorms = restored["testfield"];
         Assert.Equal(norms.Length, restoredNorms.Length);
         for (int i = 0; i < norms.Length; i++)
-            Assert.InRange(restoredNorms[i], norms[i] - 0.01f, norms[i] + 0.01f);
+        {
+            float restoredFloat = restoredNorms[i] / 255f;
+            Assert.InRange(restoredFloat, norms[i] - 0.01f, norms[i] + 0.01f);
+        }
     }
 
     [Fact]
@@ -172,14 +175,16 @@ public sealed class CodecsTests : IClassFixture<TestDirectoryFixture>
     public void VecFile_RoundTrip_FloatVectorsRestoredExactly()
     {
         var filePath = System.IO.Path.Combine(_fixture.Path, "vecfile");
-        var vectors = new float[50][];
+        var vectors = new ReadOnlyMemory<float>[50];
+        var vectorArrays = new float[50][];
         var rng = new Random(42);
 
         for (int i = 0; i < 50; i++)
         {
-            vectors[i] = new float[128];
+            vectorArrays[i] = new float[128];
             for (int j = 0; j < 128; j++)
-                vectors[i][j] = (float)rng.NextDouble();
+                vectorArrays[i][j] = (float)rng.NextDouble();
+            vectors[i] = vectorArrays[i];
         }
 
         VectorWriter.Write(filePath + ".vec", vectors);
@@ -188,7 +193,7 @@ public sealed class CodecsTests : IClassFixture<TestDirectoryFixture>
         for (int i = 0; i < 50; i++)
         {
             var restored = reader.ReadVector(i);
-            Assert.Equal(vectors[i], restored);
+            Assert.Equal(vectorArrays[i], restored);
         }
     }
 

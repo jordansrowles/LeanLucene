@@ -159,6 +159,7 @@ public struct PostingsEnum : IDisposable
         // Payload data is not yet stored in the postings format;
         // this stub allows consumers to compile and will return data once
         // the binary format is extended with per-position payloads.
+        // STUB: payloads are accepted via PostingAccumulator.AddWithPayload but not yet persisted to disk format
         return ReadOnlySpan<byte>.Empty;
     }
 

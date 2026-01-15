@@ -6,7 +6,7 @@ namespace Rowles.LeanLucene.Codecs;
 /// </summary>
 public static class PostingsWriter
 {
-    public static void Write(string filePath, string term, int[] docIds)
+    internal static void Write(string filePath, string term, int[] docIds)
     {
         using var fs = new FileStream(filePath, FileMode.Create, FileAccess.Write, FileShare.None);
         using var writer = new BinaryWriter(fs, System.Text.Encoding.UTF8, leaveOpen: false);

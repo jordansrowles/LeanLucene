@@ -21,6 +21,11 @@ public sealed class TestDirectoryFixture : IDisposable
     {
         if (System.IO.Directory.Exists(Path))
         {
+            // Force GC to release memory-mapped file handles before deletion
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
+            GC.Collect();
+
             System.IO.Directory.Delete(Path, recursive: true);
         }
     }

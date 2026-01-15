@@ -8,8 +8,9 @@ namespace Rowles.LeanLucene.Example.Benchmarks;
 
 internal sealed class BenchmarkRunReport
 {
-    public int SchemaVersion { get; set; } = 1;
+    public int SchemaVersion { get; set; } = 2;
     public string RunId { get; set; } = string.Empty;
+    public string RunType { get; set; } = "full";
     public string GeneratedAtUtc { get; set; } = string.Empty;
     public string[] CommandLineArgs { get; set; } = [];
     public string HostMachineName { get; set; } = Environment.MachineName;
@@ -59,13 +60,14 @@ internal sealed class BenchmarkGcReport
 
 internal sealed class BenchmarkRunIndex
 {
-    public int SchemaVersion { get; set; } = 1;
+    public int SchemaVersion { get; set; } = 2;
     public List<BenchmarkRunIndexEntry> Runs { get; set; } = [];
 }
 
 internal sealed class BenchmarkRunIndexEntry
 {
     public string RunId { get; set; } = string.Empty;
+    public string RunType { get; set; } = "full";
     public string GeneratedAtUtc { get; set; } = string.Empty;
     public string CommitHash { get; set; } = string.Empty;
     public string File { get; set; } = string.Empty;
@@ -246,25 +248,32 @@ internal static class BenchmarkRunReportWriter
 
     public static void WriteReport(string dataDirectory, BenchmarkRunReport report)
     {
-        Directory.CreateDirectory(dataDirectory);
+        // Build type-specific output directory: data/{type}/ or data/partial/{suite}/
+        var typeDir = Path.Combine(dataDirectory, report.RunType);
+        Directory.CreateDirectory(typeDir);
 
         var reportFileName = $"{report.RunId}.json";
-        var reportPath = Path.Combine(dataDirectory, reportFileName);
+        var reportPath = Path.Combine(typeDir, reportFileName);
         File.WriteAllText(reportPath, JsonSerializer.Serialize(report, JsonOptions));
+
+        // Relative path from dataDirectory for the index
+        var relativeFile = Path.Combine(report.RunType, reportFileName);
 
         var indexPath = Path.Combine(dataDirectory, "index.json");
         var runIndex = File.Exists(indexPath)
             ? JsonSerializer.Deserialize<BenchmarkRunIndex>(File.ReadAllText(indexPath), JsonOptions) ?? new BenchmarkRunIndex()
             : new BenchmarkRunIndex();
 
-        runIndex.Runs.RemoveAll(entry => string.Equals(entry.RunId, report.RunId, StringComparison.Ordinal));
+        runIndex.Runs.RemoveAll(entry => string.Equals(entry.RunId, report.RunId, StringComparison.Ordinal)
+            && string.Equals(entry.RunType, report.RunType, StringComparison.Ordinal));
 
         runIndex.Runs.Add(new BenchmarkRunIndexEntry
         {
             RunId = report.RunId,
+            RunType = report.RunType,
             GeneratedAtUtc = report.GeneratedAtUtc,
             CommitHash = report.CommitHash,
-            File = reportFileName,
+            File = relativeFile,
             BenchmarkCount = report.TotalBenchmarkCount,
             Suites = report.Suites.Select(s => s.SuiteName).ToArray()
         });

@@ -6,7 +6,7 @@ namespace Rowles.LeanLucene.Codecs;
 /// </summary>
 public static class VectorWriter
 {
-    public static void Write(string filePath, float[][] vectors)
+    internal static void Write(string filePath, ReadOnlyMemory<float>[] vectors)
     {
         using var fs = new FileStream(filePath, FileMode.Create, FileAccess.Write, FileShare.None);
         using var writer = new BinaryWriter(fs, System.Text.Encoding.UTF8, leaveOpen: false);
@@ -18,8 +18,9 @@ public static class VectorWriter
 
         for (int i = 0; i < vectors.Length; i++)
         {
+            var span = vectors[i].Span;
             for (int j = 0; j < dimension; j++)
-                writer.Write(vectors[i][j]);
+                writer.Write(span[j]);
         }
     }
 }

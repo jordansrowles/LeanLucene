@@ -18,7 +18,7 @@ public sealed class ConcurrentIndexingTests : IDisposable
             Directory.Delete(_dir, recursive: true);
     }
 
-    [RetryFact(3)]
+    [Fact]
     public void AddDocumentsConcurrent_AllDocsSearchable()
     {
         var directory = new MMapDirectory(_dir);
@@ -42,7 +42,7 @@ public sealed class ConcurrentIndexingTests : IDisposable
         Assert.Equal(100, results.TotalHits);
     }
 
-    [RetryFact(3)]
+    [Fact]
     public void AddDocumentsConcurrent_PreservesStoredFields()
     {
         var directory = new MMapDirectory(_dir);
@@ -73,7 +73,7 @@ public sealed class ConcurrentIndexingTests : IDisposable
         Assert.True(stored["body"].Count > 0);
     }
 
-    [RetryFact(3)]
+    [Fact]
     public void AddDocumentsConcurrent_EmptyBatch_NoOp()
     {
         var directory = new MMapDirectory(_dir);
@@ -87,7 +87,7 @@ public sealed class ConcurrentIndexingTests : IDisposable
         Assert.Equal(0, results.TotalHits);
     }
 
-    [RetryFact(3)]
+    [Fact]
     public void AddDocumentsConcurrent_WithNumericFields()
     {
         var directory = new MMapDirectory(_dir);

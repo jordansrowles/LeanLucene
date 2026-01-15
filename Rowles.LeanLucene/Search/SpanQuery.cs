@@ -15,6 +15,9 @@ public sealed class SpanTermQuery : SpanQuery
     public override string Field { get; }
     public string Term { get; }
 
+    /// <summary>Cached qualified term to avoid repeated string.Concat.</summary>
+    internal string? CachedQualifiedTerm { get; set; }
+
     public SpanTermQuery(string field, string term)
     {
         Field = field;

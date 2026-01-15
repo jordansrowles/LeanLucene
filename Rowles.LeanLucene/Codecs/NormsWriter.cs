@@ -9,7 +9,7 @@ namespace Rowles.LeanLucene.Codecs;
 /// </summary>
 public static class NormsWriter
 {
-    public static void Write(string filePath, IReadOnlyDictionary<string, float[]> fieldNorms)
+    internal static void Write(string filePath, IReadOnlyDictionary<string, float[]> fieldNorms)
     {
         using var output = new IndexOutput(filePath);
         

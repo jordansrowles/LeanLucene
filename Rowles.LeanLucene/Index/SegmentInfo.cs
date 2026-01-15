@@ -7,11 +7,11 @@ namespace Rowles.LeanLucene.Index;
 /// </summary>
 public sealed class SegmentInfo
 {
-    public string SegmentId { get; set; } = string.Empty;
-    public int DocCount { get; set; }
-    public int LiveDocCount { get; set; }
-    public int CommitGeneration { get; set; }
-    public List<string> FieldNames { get; set; } = [];
+    public string SegmentId { get; init; } = string.Empty;
+    public int DocCount { get; init; }
+    public int LiveDocCount { get; internal set; }
+    public int CommitGeneration { get; init; }
+    public List<string> FieldNames { get; init; } = [];
 
     public void WriteTo(string filePath)
     {

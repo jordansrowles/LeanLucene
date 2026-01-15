@@ -24,19 +24,19 @@ public sealed class IndexWriter : IDisposable
     private List<Dictionary<string, double>> _numericFields = [];
     // Per-field numeric values for range indexing: field → docId → value
     private Dictionary<string, Dictionary<int, double>> _numericIndex = new();
-    private Dictionary<int, (string FieldName, float[] Vector)> _bufferedVectors = new();
+    private Dictionary<int, (string FieldName, ReadOnlyMemory<float> Vector)> _bufferedVectors = new();
     private readonly HashSet<string> _termPool = new(StringComparer.Ordinal);
     // Per-field per-doc token counts for O(1) per-field norm computation
     private Dictionary<string, int[]> _docTokenCounts = new(StringComparer.Ordinal);
     // Track field names seen in this flush
     private readonly HashSet<string> _fieldNames = new(StringComparer.Ordinal);
-    // Cache qualified term strings to avoid repeated string.Concat
-    private Dictionary<(string Field, string Term), string> _qualifiedTermPool = new();
+    // Cache qualified term strings to avoid repeated string.Concat — keyed by the qualified term itself
+    private Dictionary<string, string> _qualifiedTermPool = new(StringComparer.Ordinal);
     // DocValues accumulators: field → per-doc values
     private Dictionary<string, List<double>> _numericDocValues = new(StringComparer.Ordinal);
     private Dictionary<string, List<string?>> _sortedDocValues = new(StringComparer.Ordinal);
     private readonly Dictionary<string, IAnalyser> _analyserCache = new(StringComparer.Ordinal);
-    private readonly List<string> _sortedTermsBuffer = new();
+    private readonly List<string> _sortedTermsBuffer = new(capacity: 10000);
 
     private int _bufferedDocCount;
     private long _estimatedRamBytes;
@@ -137,12 +137,12 @@ public sealed class IndexWriter : IDisposable
         if (documents.Count == 0) return;
 
         // Partition docs into per-thread chunks and process in parallel
-        var fieldAnalysers = _config.FieldAnalysers;
+        // Each thread gets its own analyser instances to avoid thread-safety issues
         var perThreadResults = new System.Collections.Concurrent.ConcurrentBag<DocumentsWriterPerThread>();
 
         Parallel.ForEach(
             System.Collections.Concurrent.Partitioner.Create(0, documents.Count),
-            () => new DocumentsWriterPerThread(_defaultAnalyser, fieldAnalysers),
+            () => CreateThreadLocalDocumentWriter(),
             (range, _, dwpt) =>
             {
                 for (int i = range.Item1; i < range.Item2; i++)
@@ -157,6 +157,36 @@ public sealed class IndexWriter : IDisposable
             foreach (var dwpt in perThreadResults)
                 MergeDwpt(dwpt);
         }
+    }
+
+    /// <summary>
+    /// Creates a DocumentsWriterPerThread with fresh analyser instances for thread-safe parallel indexing.
+    /// Each analyser instance maintains its own internal buffers (_tokensBuf, _internCache, etc.)
+    /// to prevent race conditions when multiple threads analyse documents concurrently.
+    /// </summary>
+    private DocumentsWriterPerThread CreateThreadLocalDocumentWriter()
+    {
+        // Create a fresh default analyser instance for this thread
+        IAnalyser threadLocalDefaultAnalyser = _defaultAnalyser switch
+        {
+            StandardAnalyser => new StandardAnalyser(),
+            StemmedAnalyser => new StemmedAnalyser(),
+            _ => _defaultAnalyser // Fall back to shared instance for unknown types
+        };
+
+        // Clone per-field analysers for this thread
+        var threadLocalFieldAnalysers = new Dictionary<string, IAnalyser>(_config.FieldAnalysers.Count);
+        foreach (var kvp in _config.FieldAnalysers)
+        {
+            threadLocalFieldAnalysers[kvp.Key] = kvp.Value switch
+            {
+                StandardAnalyser => new StandardAnalyser(),
+                StemmedAnalyser => new StemmedAnalyser(),
+                _ => kvp.Value // Fall back to shared instance for unknown types
+            };
+        }
+
+        return new DocumentsWriterPerThread(threadLocalDefaultAnalyser, threadLocalFieldAnalysers);
     }
 
     private void MergeDwpt(DocumentsWriterPerThread dwpt)
@@ -192,17 +222,19 @@ public sealed class IndexWriter : IDisposable
             _storedFields.Add(storedDoc);
 
         // Merge per-field token counts
+        // Pre-allocate to MaxBufferedDocs to avoid resize overhead
         foreach (var (fieldName, counts) in dwpt.DocTokenCounts)
         {
             if (!_docTokenCounts.TryGetValue(fieldName, out var dstCounts))
             {
-                dstCounts = new int[Math.Max(_config.MaxBufferedDocs, 64)];
+                dstCounts = new int[_config.MaxBufferedDocs];
                 _docTokenCounts[fieldName] = dstCounts;
             }
             
             int newTotal = docBase + dwpt.DocCount;
             if (newTotal > dstCounts.Length)
             {
+                // Rare case: need to grow beyond pre-allocated size
                 Array.Resize(ref dstCounts, Math.Max(dstCounts.Length * 2, newTotal));
                 _docTokenCounts[fieldName] = dstCounts;
             }
@@ -249,7 +281,7 @@ public sealed class IndexWriter : IDisposable
     private void AddDocumentCore(LeanDocument doc)
     {
         int localDocId = _bufferedDocCount;
-        var storedDoc = new Dictionary<string, List<string>>();
+        var storedDoc = new Dictionary<string, List<string>>(8);
         Dictionary<string, double>? numericDoc = null;
 
         foreach (var field in doc.Fields)
@@ -294,7 +326,7 @@ public sealed class IndexWriter : IDisposable
                     }
                     break;
                 case VectorField vf:
-                    _bufferedVectors[localDocId] = (vf.Name, vf.Value.ToArray());
+                    _bufferedVectors[localDocId] = (vf.Name, vf.Value);
                     break;
             }
         }
@@ -505,13 +537,15 @@ public sealed class IndexWriter : IDisposable
         var tokens = analyser.Analyse(value.AsSpan());
 
         // Track per-field token count for O(1) per-field norm computation
+        // Pre-allocate to MaxBufferedDocs to avoid resize overhead during indexing
         if (!_docTokenCounts.TryGetValue(fieldName, out var counts))
         {
-            counts = new int[Math.Max(_config.MaxBufferedDocs, 64)];
+            counts = new int[_config.MaxBufferedDocs];
             _docTokenCounts[fieldName] = counts;
         }
-        if (docId >= counts.Length)
+        else if (docId >= counts.Length)
         {
+            // Rare case: exceeded MaxBufferedDocs, grow the array
             Array.Resize(ref counts, Math.Max(counts.Length * 2, docId + 1));
             _docTokenCounts[fieldName] = counts;
         }
@@ -524,16 +558,17 @@ public sealed class IndexWriter : IDisposable
             var term = CanonicaliseTerm(tokens[pos].Text);
 
             // Try direct lookup first to avoid allocating the qualified term string
-            if (!_qualifiedTermPool.TryGetValue((fieldName, term), out var qualifiedTerm))
+            var qualifiedTerm = string.Concat(fieldName, "\x00", term);
+            if (!_qualifiedTermPool.TryGetValue(qualifiedTerm, out var pooledTerm))
             {
-                qualifiedTerm = string.Concat(fieldName, "\x00", term);
-                _qualifiedTermPool[(fieldName, term)] = qualifiedTerm;
+                _qualifiedTermPool[qualifiedTerm] = qualifiedTerm;
+                pooledTerm = qualifiedTerm;
             }
 
-            if (!_postings.TryGetValue(qualifiedTerm, out var acc))
+            if (!_postings.TryGetValue(pooledTerm, out var acc))
             {
                 acc = new PostingAccumulator();
-                _postings[qualifiedTerm] = acc;
+                _postings[pooledTerm] = acc;
             }
             acc.Add(docId, pos);
         }
@@ -544,16 +579,17 @@ public sealed class IndexWriter : IDisposable
         _fieldNames.Add(fieldName);
         var term = CanonicaliseTerm(value);
 
-        if (!_qualifiedTermPool.TryGetValue((fieldName, term), out var qualifiedTerm))
+        var qualifiedTerm = string.Concat(fieldName, "\x00", term);
+        if (!_qualifiedTermPool.TryGetValue(qualifiedTerm, out var pooledTerm))
         {
-            qualifiedTerm = string.Concat(fieldName, "\x00", term);
-            _qualifiedTermPool[(fieldName, term)] = qualifiedTerm;
+            _qualifiedTermPool[qualifiedTerm] = qualifiedTerm;
+            pooledTerm = qualifiedTerm;
         }
 
-        if (!_postings.TryGetValue(qualifiedTerm, out var acc))
+        if (!_postings.TryGetValue(pooledTerm, out var acc))
         {
             acc = new PostingAccumulator();
-            _postings[qualifiedTerm] = acc;
+            _postings[pooledTerm] = acc;
         }
         acc.AddDocOnly(docId);
     }
@@ -697,16 +733,17 @@ public sealed class IndexWriter : IDisposable
         NormsWriter.Write(basePath + ".nrm", fieldNorms);
 
         // Write stored fields (.fdt + .fdx)
-        StoredFieldsWriter.Write(basePath + ".fdt", basePath + ".fdx", _storedFields);
+        StoredFieldsWriter.Write(basePath + ".fdt", basePath + ".fdx", _storedFields,
+            _config.StoredFieldBlockSize, _config.StoredFieldCompressionLevel);
 
         // Write numeric field index (.num)
         WriteNumericIndex(basePath + ".num");
 
         if (_bufferedVectors.Count > 0)
         {
-            var vectors = new float[_bufferedDocCount][];
+            var vectors = new ReadOnlyMemory<float>[_bufferedDocCount];
             for (int i = 0; i < _bufferedDocCount; i++)
-                vectors[i] = _bufferedVectors.TryGetValue(i, out var entry) ? entry.Vector : [];
+                vectors[i] = _bufferedVectors.TryGetValue(i, out var entry) ? entry.Vector : ReadOnlyMemory<float>.Empty;
 
             VectorWriter.Write(basePath + ".vec", vectors);
         }
@@ -780,7 +817,8 @@ public sealed class IndexWriter : IDisposable
                         tvDocs[docId][fld] = terms;
                     }
                     int freq = acc.GetFreq(i);
-                    var positions = acc.GetPositions(i).ToArray();
+                    var posSpan = acc.GetPositions(i);
+                    var positions = posSpan.IsEmpty ? [] : posSpan.ToArray();
                     terms.Add(new TermVectorEntry(trm, freq, positions));
                 }
             }
@@ -821,6 +859,13 @@ public sealed class IndexWriter : IDisposable
     {
         if (_pendingDeletes.Count == 0) return;
 
+        // Pre-compute qualified terms to avoid repeated string allocation
+        var qualifiedTerms = new List<string>(_pendingDeletes.Count);
+        foreach (var (field, term) in _pendingDeletes)
+        {
+            qualifiedTerms.Add($"{field}\x00{term}");
+        }
+
         foreach (var seg in segments)
         {
             var basePath = Path.Combine(_directory.DirectoryPath, seg.SegmentId);
@@ -841,9 +886,8 @@ public sealed class IndexWriter : IDisposable
             bool changed = false;
             // Open .pos file ONCE per segment for all delete terms
             using var posReader = new BinaryReader(File.OpenRead(posPath));
-            foreach (var (field, term) in _pendingDeletes)
+            foreach (var qualifiedTerm in qualifiedTerms)
             {
-                var qualifiedTerm = $"{field}\x00{term}";
                 if (!dicReader.TryGetPostingsOffset(qualifiedTerm, out long offset))
                     continue;
 
@@ -977,15 +1021,22 @@ public sealed class IndexWriter : IDisposable
         var files = Directory.GetFiles(_directory.DirectoryPath, "segments_*");
         if (files.Length == 0) return;
 
-        var latest = files
-            .Select(f => (File: f, Gen: int.TryParse(Path.GetFileName(f).Replace("segments_", ""), out int g) ? g : -1))
-            .Where(x => x.Gen >= 0)
-            .OrderByDescending(x => x.Gen)
-            .FirstOrDefault();
+        // Manual loop avoids LINQ allocation overhead  
+        var latestFile = (string?)null;
+        var latestGen = -1;
+        foreach (var file in files)
+        {
+            var fileName = Path.GetFileName(file);
+            if (int.TryParse(fileName.Replace("segments_", ""), out int gen) && gen > latestGen)
+            {
+                latestGen = gen;
+                latestFile = file;
+            }
+        }
 
-        if (latest.File == null) return;
+        if (latestFile == null) return;
 
-        var json = File.ReadAllText(latest.File);
+        var json = File.ReadAllText(latestFile);
         var commitData = JsonSerializer.Deserialize<CommitData>(json);
         if (commitData == null) return;
 

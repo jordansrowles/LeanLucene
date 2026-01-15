@@ -153,17 +153,18 @@ public sealed class TermDictionaryReader : IDisposable
         while (_input.Position < _dataEnd)
         {
             int termLen = _input.ReadInt32();
-            byte[] termBytes = _input.ReadBytes(termLen);
+            var termSpan = _input.ReadSpan(termLen);
             long postingsOffset = _input.ReadInt64();
 
-            // Check if term starts with prefix
-            if (termBytes.Length >= prefixUtf8Len &&
-                termBytes.AsSpan(0, prefixUtf8Len).SequenceEqual(prefixUtf8))
+            // Check if term starts with prefix using zero-alloc span comparison
+            if (termSpan.Length >= prefixUtf8Len &&
+                termSpan[..prefixUtf8Len].SequenceEqual(prefixUtf8))
             {
-                string term = System.Text.Encoding.UTF8.GetString(termBytes);
+                // Only allocate string for matching terms
+                string term = System.Text.Encoding.UTF8.GetString(termSpan);
                 results.Add((term, postingsOffset));
             }
-            else if (termBytes.AsSpan().SequenceCompareTo(prefixUtf8) > 0 && results.Count > 0)
+            else if (termSpan.SequenceCompareTo(prefixUtf8) > 0 && results.Count > 0)
             {
                 // Past the prefix range in sorted order
                 break;

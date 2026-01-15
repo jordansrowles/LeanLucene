@@ -36,7 +36,7 @@ internal sealed class DocumentsWriterPerThread
     public void AddDocument(LeanDocument doc, int globalDocId)
     {
         int localDocId = DocCount;
-        var storedDoc = new Dictionary<string, List<string>>();
+        var storedDoc = new Dictionary<string, List<string>>(8);
 
         foreach (var field in doc.Fields)
         {

@@ -1,5 +1,4 @@
 using BenchmarkDotNet.Attributes;
-using Lifti;
 using Lucene.Net.Analysis.Standard;
 using Lucene.Net.Documents;
 using Lucene.Net.Index;
@@ -19,7 +18,7 @@ using LuceneTextField = Lucene.Net.Documents.TextField;
 namespace Rowles.LeanLucene.Example.Benchmarks;
 
 /// <summary>
-/// Measures FuzzyQuery performance across all 3 libraries.
+/// Measures FuzzyQuery performance across LeanLucene and Lucene.NET.
 /// </summary>
 [MemoryDiagnoser]
 [HtmlExporter]
@@ -47,15 +46,12 @@ public class FuzzyQueryBenchmarks
     private DirectoryReader? _luceneReader;
     private LuceneIndexSearcher? _luceneSearcher;
 
-    private IFullTextIndex<int>? _liftiIndex;
-
     [GlobalSetup]
     public void Setup()
     {
         var documents = BenchmarkData.BuildDocuments(DocumentCount);
         BuildLeanIndex(documents);
         BuildLuceneIndex(documents);
-        BuildLiftiIndex(documents);
     }
 
     [GlobalCleanup]
@@ -82,12 +78,6 @@ public class FuzzyQueryBenchmarks
     {
         var query = new Lucene.Net.Search.FuzzyQuery(new Term("body", QueryTerm), 2);
         return _luceneSearcher!.Search(query, TopN).TotalHits;
-    }
-
-    [Benchmark]
-    public int Lifti_FuzzyQuery()
-    {
-        return _liftiIndex!.Search($"?{QueryTerm}~2").Count();
     }
 
     private void BuildLeanIndex(string[] documents)
@@ -138,10 +128,4 @@ public class FuzzyQueryBenchmarks
         _luceneSearcher = new LuceneIndexSearcher(_luceneReader);
     }
 
-    private void BuildLiftiIndex(string[] documents)
-    {
-        _liftiIndex = new FullTextIndexBuilder<int>().Build();
-        for (int i = 0; i < documents.Length; i++)
-            _liftiIndex.AddAsync(i, documents[i]).GetAwaiter().GetResult();
-    }
 }

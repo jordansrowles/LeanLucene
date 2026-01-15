@@ -1,5 +1,4 @@
 using BenchmarkDotNet.Attributes;
-using Lifti;
 using Lucene.Net.Analysis.Standard;
 using Lucene.Net.Documents;
 using Lucene.Net.Index;
@@ -19,7 +18,7 @@ using LuceneTextField = Lucene.Net.Documents.TextField;
 namespace Rowles.LeanLucene.Example.Benchmarks;
 
 /// <summary>
-/// Measures BooleanQuery performance: Must / Should / MustNot across all 3 libraries.
+/// Measures BooleanQuery performance: Must / Should / MustNot across LeanLucene and Lucene.NET.
 /// </summary>
 [MemoryDiagnoser]
 [HtmlExporter]
@@ -44,15 +43,12 @@ public class BooleanQueryBenchmarks
     private DirectoryReader? _luceneReader;
     private LuceneIndexSearcher? _luceneSearcher;
 
-    private IFullTextIndex<int>? _liftiIndex;
-
     [GlobalSetup]
     public void Setup()
     {
         var documents = BenchmarkData.BuildDocuments(DocumentCount);
         BuildLeanIndex(documents);
         BuildLuceneIndex(documents);
-        BuildLiftiIndex(documents);
     }
 
     [GlobalCleanup]
@@ -89,12 +85,6 @@ public class BooleanQueryBenchmarks
         return _luceneSearcher!.Search(bq, TopN).TotalHits;
     }
 
-    [Benchmark]
-    public int Lifti_Must()
-    {
-        return _liftiIndex!.Search("search & benchmark").Count();
-    }
-
     // --- Should (OR) ---
 
     [Benchmark]
@@ -117,12 +107,6 @@ public class BooleanQueryBenchmarks
         return _luceneSearcher!.Search(bq, TopN).TotalHits;
     }
 
-    [Benchmark]
-    public int Lifti_Should()
-    {
-        return _liftiIndex!.Search("search | vector").Count();
-    }
-
     // --- MustNot ---
 
     [Benchmark]
@@ -143,12 +127,6 @@ public class BooleanQueryBenchmarks
             { new Lucene.Net.Search.TermQuery(new Term("body", "vector")), Occur.MUST_NOT }
         };
         return _luceneSearcher!.Search(bq, TopN).TotalHits;
-    }
-
-    [Benchmark]
-    public int Lifti_MustNot()
-    {
-        return _liftiIndex!.Search("benchmark & -vector").Count();
     }
 
     // --- Index builders ---
@@ -201,10 +179,4 @@ public class BooleanQueryBenchmarks
         _luceneSearcher = new LuceneIndexSearcher(_luceneReader);
     }
 
-    private void BuildLiftiIndex(string[] documents)
-    {
-        _liftiIndex = new FullTextIndexBuilder<int>().Build();
-        for (int i = 0; i < documents.Length; i++)
-            _liftiIndex.AddAsync(i, documents[i]).GetAwaiter().GetResult();
-    }
 }

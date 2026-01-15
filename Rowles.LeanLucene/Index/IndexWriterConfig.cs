@@ -41,4 +41,16 @@ public sealed class IndexWriterConfig
 
     /// <summary>Whether to write a compound file (.cfs) after segment flush.</summary>
     public bool UseCompoundFile { get; set; }
+
+    /// <summary>
+    /// Brotli compression level for stored fields. Default: <see cref="System.IO.Compression.CompressionLevel.Fastest"/>.
+    /// Higher levels reduce disk size at the cost of slower writes; decompression speed is unaffected.
+    /// </summary>
+    public System.IO.Compression.CompressionLevel StoredFieldCompressionLevel { get; set; } = System.IO.Compression.CompressionLevel.Fastest;
+
+    /// <summary>
+    /// Number of documents per stored field block. Larger blocks compress better but
+    /// increase random-access cost. Default: 16.
+    /// </summary>
+    public int StoredFieldBlockSize { get; set; } = 16;
 }

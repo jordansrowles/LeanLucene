@@ -500,4 +500,36 @@ public sealed class SearchTests : IClassFixture<TestDirectoryFixture>
 
         Assert.Equal(5, result.Count);
     }
+
+    [Fact]
+    public void PhraseQuery_MultiSegment_MatchesAcrossSegments()
+    {
+        var dir = new MMapDirectory(SubDir("phrase_multiseg"));
+        var config = new IndexWriterConfig { MaxBufferedDocs = 3 };
+        using var writer = new IndexWriter(dir, config);
+
+        // Segment 1: Index first batch of documents
+        for (int i = 0; i < 3; i++)
+        {
+            var doc = new LeanDocument();
+            doc.Add(new TextField("content", "the quick brown fox jumps over the lazy dog"));
+            writer.AddDocument(doc);
+        }
+        writer.Commit();
+
+        // Segment 2: Index second batch of documents
+        for (int i = 0; i < 3; i++)
+        {
+            var doc = new LeanDocument();
+            doc.Add(new TextField("content", "the quick brown fox runs in the field"));
+            writer.AddDocument(doc);
+        }
+        writer.Commit();
+
+        using var searcher = new IndexSearcher(dir);
+        var results = searcher.Search(new PhraseQuery("content", "quick", "brown", "fox"), 10);
+
+        // Should match all 6 documents across both segments
+        Assert.Equal(6, results.TotalHits);
+    }
 }

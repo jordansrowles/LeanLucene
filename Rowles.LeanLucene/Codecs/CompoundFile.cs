@@ -6,7 +6,7 @@ namespace Rowles.LeanLucene.Codecs;
 /// </summary>
 public static class CompoundFileWriter
 {
-    public static void Write(string cfsPath, string basePath, string[] extensions)
+    internal static void Write(string cfsPath, string basePath, string[] extensions)
     {
         using var cfsFs = new FileStream(cfsPath, FileMode.Create, FileAccess.Write, FileShare.None);
         using var writer = new BinaryWriter(cfsFs, System.Text.Encoding.UTF8, leaveOpen: false);
@@ -30,14 +30,21 @@ public static class CompoundFileWriter
             writer.Write(0L); // placeholder length
         }
 
-        // Write file data and record offsets
+        // Write file data and record offsets using chunked stream copy
         var offsets = new (long Offset, long Length)[entries.Count];
+        var copyBuf = new byte[65536];
         for (int i = 0; i < entries.Count; i++)
         {
             offsets[i].Offset = cfsFs.Position;
-            var data = File.ReadAllBytes(entries[i].FullPath);
-            cfsFs.Write(data);
-            offsets[i].Length = data.Length;
+            using var srcFs = new FileStream(entries[i].FullPath, FileMode.Open, FileAccess.Read, FileShare.Read);
+            long totalCopied = 0;
+            int bytesRead;
+            while ((bytesRead = srcFs.Read(copyBuf, 0, copyBuf.Length)) > 0)
+            {
+                cfsFs.Write(copyBuf, 0, bytesRead);
+                totalCopied += bytesRead;
+            }
+            offsets[i].Length = totalCopied;
         }
 
         // Go back and fill in the directory

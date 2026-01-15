@@ -24,7 +24,7 @@ public sealed class FacetsCollector
     private readonly Dictionary<string, Dictionary<string, int>> _fieldValueCounts = new(StringComparer.Ordinal);
 
     /// <summary>Records a facet value hit for a document.</summary>
-    public void Collect(string field, string value)
+    internal void Collect(string field, string value)
     {
         if (!_fieldValueCounts.TryGetValue(field, out var counts))
         {
@@ -42,10 +42,11 @@ public sealed class FacetsCollector
         var results = new List<FacetResult>(_fieldValueCounts.Count);
         foreach (var (field, counts) in _fieldValueCounts)
         {
-            var buckets = counts
-                .Select(kvp => new FacetBucket(kvp.Key, kvp.Value))
-                .OrderByDescending(b => b.Count)
-                .ToList();
+            // Manual loop avoids LINQ allocation overhead
+            var buckets = new List<FacetBucket>(counts.Count);
+            foreach (var kvp in counts)
+                buckets.Add(new FacetBucket(kvp.Key, kvp.Value));
+            buckets.Sort((a, b) => b.Count.CompareTo(a.Count));
             results.Add(new FacetResult(field, buckets));
         }
         return results;

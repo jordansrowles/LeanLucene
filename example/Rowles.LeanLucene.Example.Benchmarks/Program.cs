@@ -10,7 +10,7 @@ internal static class Program
 {
     public static int Main(string[] args)
     {
-        var (suite, benchmarkArgs, showHelp, docCount) = ParseArguments(args);
+        var (suite, runType, benchmarkArgs, showHelp, docCount) = ParseArguments(args);
 
         if (showHelp)
         {
@@ -28,42 +28,56 @@ internal static class Program
         Directory.CreateDirectory(dataDirectory);
 
         var commitHash = GetGitShortHash(repoRoot);
-        var timestamp = DateTimeOffset.UtcNow.ToString("yyyyMMdd-HHmmss", CultureInfo.InvariantCulture);
+        var timestamp = DateTimeOffset.UtcNow.ToString("yyyy-MM-dd HH-mm", CultureInfo.InvariantCulture);
         var runId = string.IsNullOrEmpty(commitHash)
             ? timestamp
-            : $"{timestamp}-{commitHash}";
+            : $"{timestamp} ({commitHash})";
+
+        // Resolve effective run type: partial when running a single suite (unless overridden)
+        var effectiveRunType = runType;
+        if (string.IsNullOrEmpty(effectiveRunType))
+            effectiveRunType = "full";
+
+        // For partial runs of a single suite, nest under partial/{suite}
+        if (effectiveRunType == "partial" && suite is not BenchmarkSuite.All)
+        {
+            effectiveRunType = $"partial/{suite.ToString().ToLowerInvariant()}";
+        }
 
         var suiteSummaries = new List<(string Suite, Summary Summary)>();
 
+        // BDN artifacts go into the type-specific folder
+        var typeDataDir = Path.Combine(dataDirectory, effectiveRunType);
+
         if (suite is BenchmarkSuite.All or BenchmarkSuite.Query)
-            RunSuite<TermQueryBenchmarks>("query", dataDirectory, runId, benchmarkArgs, suiteSummaries);
+            RunSuite<TermQueryBenchmarks>("query", typeDataDir, runId, benchmarkArgs, suiteSummaries);
 
         if (suite is BenchmarkSuite.All or BenchmarkSuite.Index)
-            RunSuite<IndexingBenchmarks>("index", dataDirectory, runId, benchmarkArgs, suiteSummaries);
+            RunSuite<IndexingBenchmarks>("index", typeDataDir, runId, benchmarkArgs, suiteSummaries);
 
         if (suite is BenchmarkSuite.All or BenchmarkSuite.Analysis)
-            RunSuite<AnalysisBenchmarks>("analysis", dataDirectory, runId, benchmarkArgs, suiteSummaries);
+            RunSuite<AnalysisBenchmarks>("analysis", typeDataDir, runId, benchmarkArgs, suiteSummaries);
 
         if (suite is BenchmarkSuite.All or BenchmarkSuite.Boolean)
-            RunSuite<BooleanQueryBenchmarks>("boolean", dataDirectory, runId, benchmarkArgs, suiteSummaries);
+            RunSuite<BooleanQueryBenchmarks>("boolean", typeDataDir, runId, benchmarkArgs, suiteSummaries);
 
         if (suite is BenchmarkSuite.All or BenchmarkSuite.Phrase)
-            RunSuite<PhraseQueryBenchmarks>("phrase", dataDirectory, runId, benchmarkArgs, suiteSummaries);
+            RunSuite<PhraseQueryBenchmarks>("phrase", typeDataDir, runId, benchmarkArgs, suiteSummaries);
 
         if (suite is BenchmarkSuite.All or BenchmarkSuite.SmallIndex)
-            RunSuite<SmallIndexBenchmarks>("smallindex", dataDirectory, runId, benchmarkArgs, suiteSummaries);
+            RunSuite<SmallIndexBenchmarks>("smallindex", typeDataDir, runId, benchmarkArgs, suiteSummaries);
 
         if (suite is BenchmarkSuite.All or BenchmarkSuite.Prefix)
-            RunSuite<PrefixQueryBenchmarks>("prefix", dataDirectory, runId, benchmarkArgs, suiteSummaries);
+            RunSuite<PrefixQueryBenchmarks>("prefix", typeDataDir, runId, benchmarkArgs, suiteSummaries);
 
         if (suite is BenchmarkSuite.All or BenchmarkSuite.Fuzzy)
-            RunSuite<FuzzyQueryBenchmarks>("fuzzy", dataDirectory, runId, benchmarkArgs, suiteSummaries);
+            RunSuite<FuzzyQueryBenchmarks>("fuzzy", typeDataDir, runId, benchmarkArgs, suiteSummaries);
 
         if (suite is BenchmarkSuite.All or BenchmarkSuite.Wildcard)
-            RunSuite<WildcardQueryBenchmarks>("wildcard", dataDirectory, runId, benchmarkArgs, suiteSummaries);
+            RunSuite<WildcardQueryBenchmarks>("wildcard", typeDataDir, runId, benchmarkArgs, suiteSummaries);
 
         if (suite is BenchmarkSuite.All or BenchmarkSuite.Deletion)
-            RunSuite<DeletionBenchmarks>("deletion", dataDirectory, runId, benchmarkArgs, suiteSummaries);
+            RunSuite<DeletionBenchmarks>("deletion", typeDataDir, runId, benchmarkArgs, suiteSummaries);
 
         if (suiteSummaries.Count == 0)
         {
@@ -78,14 +92,16 @@ internal static class Program
             benchmarkArgs,
             suiteSummaries);
         report.CommitHash = commitHash;
+        report.RunType = effectiveRunType;
 
         BenchmarkRunReportWriter.WriteReport(dataDirectory, report);
 
         Console.WriteLine();
         Console.WriteLine($"Run:    {runId}");
+        Console.WriteLine($"Type:   {effectiveRunType}");
         Console.WriteLine($"Commit: {(string.IsNullOrEmpty(commitHash) ? "(unknown)" : commitHash)}");
-        Console.WriteLine($"Output: {Path.Combine(dataDirectory, runId)}");
-        Console.WriteLine($"Report: {Path.Combine(dataDirectory, $"{runId}.json")}");
+        Console.WriteLine($"Output: {Path.Combine(typeDataDir, runId)}");
+        Console.WriteLine($"Report: {Path.Combine(typeDataDir, $"{runId}.json")}");
         Console.WriteLine($"Suites: {string.Join(", ", suiteSummaries.Select(s => s.Suite))}");
         return 0;
     }
@@ -140,51 +156,54 @@ internal static class Program
 
             Options:
               --suite <name>   Run a specific benchmark suite (default: all)
+              --type <name>    Run type: full, smoke, stress, partial (default: full)
               --doccount <n>   Override document count for all suites (env: BENCH_DOC_COUNT)
               --help, -h       Show this help message
 
+            Run Types:
+              full             Standardised full run with maximum information output
+              smoke            Quick smoke test (fast validation)
+              stress           Stress testing with large document counts
+              partial          Benchmarking specific suites (auto-set when --suite is not 'all')
+
             Suites:
               all              Run all benchmark suites (default)
-              index            IndexingBenchmarks — bulk indexing throughput (3K docs)
-              query            TermQueryBenchmarks — single-term search with competitors
+              index            IndexingBenchmarks — bulk indexing throughput (vs Lucene.NET)
+              query            TermQueryBenchmarks — single-term search (vs Lucene.NET)
               analysis         AnalysisBenchmarks — tokenisation pipeline throughput
               boolean          BooleanQueryBenchmarks — Must/Should/MustNot queries
               phrase           PhraseQueryBenchmarks — exact and slop phrase matching
-              prefix           PrefixQueryBenchmarks — prefix matching (vs Lucene.NET + Lifti)
+              prefix           PrefixQueryBenchmarks — prefix matching (vs Lucene.NET)
               fuzzy            FuzzyQueryBenchmarks — fuzzy/edit-distance matching
               wildcard         WildcardQueryBenchmarks — wildcard pattern matching
-              deletion         DeletionBenchmarks — delete throughput (vs Lucene.NET + Lifti)
+              deletion         DeletionBenchmarks — delete throughput (vs Lucene.NET)
               smallindex       SmallIndexBenchmarks — 100-doc roundtrip overhead
 
             Output:
-              Results are written to bench/data/<timestamp>-<commit>/<suite>/
-              Each suite produces JSON, Markdown, and HTML reports via BenchmarkDotNet.
-              A consolidated JSON report and index.json are written to bench/data/
-              for the web-based benchmark viewer (bench/index.html).
+              Results are written to bench/data/<type>/<runId>/
+              Run ID format: "yyyy-MM-dd HH-mm (shortcommit)"
+              A consolidated JSON report and index.json are maintained.
 
             Examples:
-              # Run all suites
               dotnet run -c Release -- --suite all
-
-              # Run only the query suite
-              dotnet run -c Release -- --suite query
-
-              # Run with BenchmarkDotNet filter
-              dotnet run -c Release -- --suite query --filter "*Lean*"
+              dotnet run -c Release -- --suite query --type partial
+              dotnet run -c Release -- --type smoke --suite analysis --job dry
 
             Script wrapper:
-              .\scripts\benchmark.ps1 --suite all
-              .\scripts\benchmark.ps1 --suite query
-              .\scripts\benchmark.ps1 --help
+              .\scripts\benchmark.ps1 -Suite all
+              .\scripts\benchmark.ps1 -Suite query -Type partial
+              .\scripts\benchmark.ps1 -Strat fast -Suite analysis
+              .\scripts\benchmark.ps1 -Help
             """);
     }
 
-    private static (BenchmarkSuite Suite, string[] BenchmarkArgs, bool ShowHelp, int? DocCount) ParseArguments(string[] args)
+    private static (BenchmarkSuite Suite, string RunType, string[] BenchmarkArgs, bool ShowHelp, int? DocCount) ParseArguments(string[] args)
     {
         var suite = BenchmarkSuite.All;
         var benchmarkArgs = new List<string>(args.Length);
         var showHelp = false;
         int? docCount = null;
+        string runType = string.Empty;
 
         for (var i = 0; i < args.Length; i++)
         {
@@ -201,6 +220,12 @@ internal static class Program
                 continue;
             }
 
+            if (string.Equals(args[i], "--type", StringComparison.OrdinalIgnoreCase) && i + 1 < args.Length)
+            {
+                runType = args[++i].ToLowerInvariant();
+                continue;
+            }
+
             if (string.Equals(args[i], "--doccount", StringComparison.OrdinalIgnoreCase) && i + 1 < args.Length)
             {
                 if (int.TryParse(args[++i], NumberStyles.Integer, CultureInfo.InvariantCulture, out var dc))
@@ -211,7 +236,7 @@ internal static class Program
             benchmarkArgs.Add(args[i]);
         }
 
-        return (suite, [.. benchmarkArgs], showHelp, docCount);
+        return (suite, runType, [.. benchmarkArgs], showHelp, docCount);
     }
 
     private static BenchmarkSuite ParseSuite(string value)

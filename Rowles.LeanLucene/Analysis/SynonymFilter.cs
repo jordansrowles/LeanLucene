@@ -33,16 +33,20 @@ public sealed class SynonymFilter : ITokenFilter
     /// </summary>
     public void Apply(List<Token> tokens)
     {
-        // Iterate backwards so insertions don't invalidate earlier indices
-        for (int i = tokens.Count - 1; i >= 0; i--)
+        // Forward pass: build new list to avoid O(n²) Insert shifts
+        var expanded = new List<Token>(tokens.Count + 4);
+        for (int i = 0; i < tokens.Count; i++)
         {
-            if (!_synonyms.TryGetValue(tokens[i].Text, out var synonymTerms))
-                continue;
-
-            int start = tokens[i].StartOffset;
-            int end = tokens[i].EndOffset;
-            for (int j = synonymTerms.Length - 1; j >= 0; j--)
-                tokens.Insert(i + 1, new Token(synonymTerms[j], start, end));
+            expanded.Add(tokens[i]);
+            if (_synonyms.TryGetValue(tokens[i].Text, out var synonymTerms))
+            {
+                int start = tokens[i].StartOffset;
+                int end = tokens[i].EndOffset;
+                for (int j = 0; j < synonymTerms.Length; j++)
+                    expanded.Add(new Token(synonymTerms[j], start, end));
+            }
         }
+        tokens.Clear();
+        tokens.AddRange(expanded);
     }
 }

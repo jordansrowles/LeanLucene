@@ -9,16 +9,17 @@ namespace Rowles.LeanLucene.Codecs;
 /// </summary>
 public static class StoredFieldsWriter
 {
-    private const int BlockSize = 16;
+    private const int DefaultBlockSize = 16;
 
-    public static void Write(string fdtPath, string fdxPath, IReadOnlyList<Dictionary<string, List<string>>> docs)
+    internal static void Write(string fdtPath, string fdxPath, IReadOnlyList<Dictionary<string, List<string>>> docs,
+        int blockSize = DefaultBlockSize, CompressionLevel compressionLevel = CompressionLevel.Fastest)
     {
         using var fdtStream = new FileStream(fdtPath, FileMode.Create, FileAccess.Write, FileShare.None);
         using var fdtWriter = new BinaryWriter(fdtStream, System.Text.Encoding.UTF8, leaveOpen: false);
 
         // Header: version + block size
         fdtWriter.Write((byte)3); // version 3 = compressed + multi-valued
-        fdtWriter.Write(BlockSize);
+        fdtWriter.Write(blockSize);
 
         var blockOffsets = new List<long>();
 
@@ -28,9 +29,9 @@ public static class StoredFieldsWriter
         var compStream = new MemoryStream(4096);
         Span<byte> encodeBuf = stackalloc byte[512];
 
-        for (int blockStart = 0; blockStart < docs.Count; blockStart += BlockSize)
+        for (int blockStart = 0; blockStart < docs.Count; blockStart += blockSize)
         {
-            int blockEnd = Math.Min(blockStart + BlockSize, docs.Count);
+            int blockEnd = Math.Min(blockStart + blockSize, docs.Count);
             int blockCount = blockEnd - blockStart;
 
             // Reset reusable streams
@@ -70,7 +71,7 @@ public static class StoredFieldsWriter
             // Compress with Brotli (quality 4 = fast), reuse compStream
             compStream.SetLength(0);
             compStream.Position = 0;
-            using (var brotli = new BrotliStream(compStream, CompressionLevel.Fastest, leaveOpen: true))
+            using (var brotli = new BrotliStream(compStream, compressionLevel, leaveOpen: true))
             {
                 brotli.Write(rawStream.GetBuffer().AsSpan(0, rawLength));
             }
@@ -97,7 +98,7 @@ public static class StoredFieldsWriter
         using var fdxWriter = new BinaryWriter(fdxStream, System.Text.Encoding.UTF8, leaveOpen: false);
 
         fdxWriter.Write((byte)3); // version
-        fdxWriter.Write(BlockSize);
+        fdxWriter.Write(blockSize);
         fdxWriter.Write(docs.Count);
         fdxWriter.Write(blockOffsets.Count);
         foreach (var offset in blockOffsets)

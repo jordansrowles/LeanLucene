@@ -6,6 +6,10 @@ namespace Rowles.LeanLucene.Analysis;
 /// for lowercasing to avoid double string allocation.
 /// The returned token list is reused across calls — callers must not hold
 /// references to it beyond the current invocation.
+/// 
+/// Thread-safety: This class maintains instance-level buffers (_tokensBuf, _lowerBuf, _internCache)
+/// for performance. Each instance should be used by a single thread, or callers should create
+/// separate instances per thread (as IndexWriter does in AddDocumentsConcurrent).
 /// </summary>
 public sealed class StandardAnalyser : IAnalyser
 {
@@ -14,6 +18,9 @@ public sealed class StandardAnalyser : IAnalyser
     private char[] _lowerBuf = new char[64];
     private readonly List<(int Start, int End)> _offsetBuf = new();
     private readonly List<Token> _tokensBuf = new();
+    // Intern cache for frequently seen token strings to reduce per-token string allocation
+    private readonly Dictionary<int, string> _internCache = new();
+    private const int MaxInternCacheSize = 4096;
 
     public List<Token> Analyse(ReadOnlySpan<char> input)
     {
@@ -36,7 +43,21 @@ public sealed class StandardAnalyser : IAnalyser
                 _lowerBuf = new char[Math.Max(_lowerBuf.Length * 2, len)];
 
             span.ToLowerInvariant(_lowerBuf.AsSpan(0, len));
-            var text = new string(_lowerBuf.AsSpan(0, len));
+            var lowerSpan = _lowerBuf.AsSpan(0, len);
+
+            // Try intern cache to reuse string objects for repeated tokens
+            int hash = string.GetHashCode(lowerSpan);
+            string text;
+            if (_internCache.TryGetValue(hash, out var cached) && cached.AsSpan().SequenceEqual(lowerSpan))
+            {
+                text = cached;
+            }
+            else
+            {
+                text = new string(lowerSpan);
+                if (_internCache.Count < MaxInternCacheSize)
+                    _internCache[hash] = text;
+            }
 
             _tokensBuf.Add(new Token(text, start, end));
         }

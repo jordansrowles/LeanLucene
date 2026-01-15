@@ -1,22 +1,34 @@
+using System.Buffers;
+
 namespace Rowles.LeanLucene.Index;
 
 /// <summary>
 /// Accumulates doc IDs, term frequencies, and positions for a single qualified term
-/// during indexing. Replaces the triple-dictionary approach with a single flat structure.
+/// during indexing. Uses a single flat position buffer to avoid per-posting small array allocations.
 /// </summary>
 internal sealed class PostingAccumulator
 {
     private int[] _docIds;
     private int[] _freqs;
-    private int[][] _positions;
+    // Per-posting index into flat position buffer: (start offset, allocated length)
+    private int[] _posStarts;
+    private int[] _posLengths;
+    // Single flat buffer for ALL positions across all postings
+    private int[] _posBuf;
+    private int _posBufUsed;
     private byte[]?[][]? _payloads; // lazily allocated when payloads are used
     private int _count;
+
+    private const int NoPositionSentinel = -1;
 
     public PostingAccumulator()
     {
         _docIds = new int[4];
         _freqs = new int[4];
-        _positions = new int[4][];
+        _posStarts = new int[4];
+        _posLengths = new int[4];
+        _posBuf = new int[8]; // shared flat buffer for all positions
+        _posBufUsed = 0;
         _count = 0;
     }
 
@@ -29,16 +41,28 @@ internal sealed class PostingAccumulator
     {
         if (_count > 0 && _docIds[_count - 1] == docId)
         {
-            // Same doc — increment freq and append position
+            // Same doc — increment freq and append position to flat buffer
             _freqs[_count - 1]++;
-            ref var posArr = ref _positions[_count - 1];
-            int posLen = posArr.Length;
-            int posCount = _freqs[_count - 1];
-            if (posCount > posLen)
+            int freq = _freqs[_count - 1];
+            int start = _posStarts[_count - 1];
+            int allocated = _posLengths[_count - 1];
+            if (freq > allocated)
             {
-                Array.Resize(ref posArr, posLen * 2);
+                // Need more space: grow the slot in the flat buffer
+                int newAllocated = allocated * 2;
+                EnsurePosBufCapacity(_posBufUsed + newAllocated);
+                // Copy existing positions to end of buffer
+                int newStart = _posBufUsed;
+                Array.Copy(_posBuf, start, _posBuf, newStart, freq - 1);
+                _posStarts[_count - 1] = newStart;
+                _posLengths[_count - 1] = newAllocated;
+                _posBuf[newStart + freq - 1] = position;
+                _posBufUsed += newAllocated;
             }
-            posArr[posCount - 1] = position;
+            else
+            {
+                _posBuf[start + freq - 1] = position;
+            }
             return;
         }
 
@@ -46,10 +70,13 @@ internal sealed class PostingAccumulator
         if (_count == _docIds.Length)
             Grow();
 
+        EnsurePosBufCapacity(_posBufUsed + 1);
         _docIds[_count] = docId;
         _freqs[_count] = 1;
-        _positions[_count] = new int[4];
-        _positions[_count][0] = position;
+        _posStarts[_count] = _posBufUsed;
+        _posLengths[_count] = 1;
+        _posBuf[_posBufUsed] = position;
+        _posBufUsed += 1;
         _count++;
     }
 
@@ -60,32 +87,49 @@ internal sealed class PostingAccumulator
         {
             _payloads = new byte[]?[_docIds.Length][];
             for (int i = 0; i < _count; i++)
-                _payloads[i] = new byte[]?[_positions[i].Length];
+            {
+                int freq = _freqs[i] > 0 ? _freqs[i] : 0;
+                _payloads[i] = new byte[]?[freq];
+            }
         }
 
         if (_count > 0 && _docIds[_count - 1] == docId)
         {
             _freqs[_count - 1]++;
-            ref var posArr = ref _positions[_count - 1];
-            int posCount = _freqs[_count - 1];
-            if (posCount > posArr.Length)
+            int freq = _freqs[_count - 1];
+            int start = _posStarts[_count - 1];
+            int allocated = _posLengths[_count - 1];
+            if (freq > allocated)
             {
-                Array.Resize(ref posArr, posArr.Length * 2);
-                Array.Resize(ref _payloads[_count - 1], posArr.Length);
+                int newAllocated = allocated * 2;
+                EnsurePosBufCapacity(_posBufUsed + newAllocated);
+                int newStart = _posBufUsed;
+                Array.Copy(_posBuf, start, _posBuf, newStart, freq - 1);
+                _posStarts[_count - 1] = newStart;
+                _posLengths[_count - 1] = newAllocated;
+                _posBuf[newStart + freq - 1] = position;
+                _posBufUsed += newAllocated;
+                Array.Resize(ref _payloads[_count - 1], newAllocated);
             }
-            posArr[posCount - 1] = position;
-            _payloads[_count - 1][posCount - 1] = payload;
+            else
+            {
+                _posBuf[start + freq - 1] = position;
+            }
+            _payloads[_count - 1][freq - 1] = payload;
             return;
         }
 
         if (_count == _docIds.Length)
             Grow();
 
+        EnsurePosBufCapacity(_posBufUsed + 1);
         _docIds[_count] = docId;
         _freqs[_count] = 1;
-        _positions[_count] = new int[4];
-        _positions[_count][0] = position;
-        _payloads[_count] = new byte[]?[4];
+        _posStarts[_count] = _posBufUsed;
+        _posLengths[_count] = 1;
+        _posBuf[_posBufUsed] = position;
+        _posBufUsed += 1;
+        _payloads[_count] = new byte[]?[1];
         _payloads[_count][0] = payload;
         _count++;
     }
@@ -103,7 +147,8 @@ internal sealed class PostingAccumulator
 
         _docIds[_count] = docId;
         _freqs[_count] = 0;
-        _positions[_count] = [];
+        _posStarts[_count] = NoPositionSentinel;
+        _posLengths[_count] = 0;
         _count++;
     }
 
@@ -111,7 +156,12 @@ internal sealed class PostingAccumulator
 
     public int GetFreq(int index) => _freqs[index];
 
-    public ReadOnlySpan<int> GetPositions(int index) => _positions[index].AsSpan(0, _freqs[index]);
+    public ReadOnlySpan<int> GetPositions(int index)
+    {
+        int start = _posStarts[index];
+        if (start == NoPositionSentinel) return ReadOnlySpan<int>.Empty;
+        return _posBuf.AsSpan(start, _freqs[index]);
+    }
 
     /// <summary>Gets the payload for a specific position index of a given posting entry.</summary>
     public byte[]? GetPayload(int docIndex, int positionIndex)
@@ -136,7 +186,7 @@ internal sealed class PostingAccumulator
         get
         {
             for (int i = 0; i < _count; i++)
-                if (_freqs[i] > 0) return true;
+                if (_posStarts[i] != NoPositionSentinel && _freqs[i] > 0) return true;
             return false;
         }
     }
@@ -146,8 +196,16 @@ internal sealed class PostingAccumulator
         int newLen = _docIds.Length * 2;
         Array.Resize(ref _docIds, newLen);
         Array.Resize(ref _freqs, newLen);
-        Array.Resize(ref _positions, newLen);
+        Array.Resize(ref _posStarts, newLen);
+        Array.Resize(ref _posLengths, newLen);
         if (_payloads != null)
             Array.Resize(ref _payloads, newLen);
+    }
+
+    private void EnsurePosBufCapacity(int required)
+    {
+        if (required <= _posBuf.Length) return;
+        int newLen = Math.Max(_posBuf.Length * 2, required);
+        Array.Resize(ref _posBuf, newLen);
     }
 }

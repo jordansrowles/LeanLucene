@@ -9,7 +9,7 @@ public static class BKDWriter
 {
     private const int MaxLeafSize = 512;
 
-    public static void Write(string filePath, Dictionary<string, List<(double Value, int DocId)>> fieldPoints)
+    internal static void Write(string filePath, Dictionary<string, List<(double Value, int DocId)>> fieldPoints)
     {
         using var fs = new FileStream(filePath, FileMode.Create, FileAccess.Write, FileShare.None);
         using var writer = new BinaryWriter(fs, System.Text.Encoding.UTF8, leaveOpen: false);

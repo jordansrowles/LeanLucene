@@ -87,17 +87,22 @@ public sealed class IndexOutput : IDisposable
 
     /// <summary>
     /// Writes a non-negative integer using variable-length encoding (LEB128).
-    /// Small values (0–127) consume a single byte.
+    /// Small values (0–127) consume a single byte. Encodes into a local buffer
+    /// then writes all bytes in one call to reduce per-byte overhead.
     /// </summary>
     public void WriteVarInt(int value)
     {
         uint v = (uint)value;
+        // Max 5 bytes for a 32-bit varint
+        Span<byte> buf = stackalloc byte[5];
+        int pos = 0;
         while (v >= 0x80)
         {
-            WriteByte((byte)(v | 0x80));
+            buf[pos++] = (byte)(v | 0x80);
             v >>= 7;
         }
-        WriteByte((byte)v);
+        buf[pos++] = (byte)v;
+        WriteBytes(buf[..pos]);
     }
 
     public void Flush() => FlushBuffer();

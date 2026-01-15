@@ -1,6 +1,5 @@
 using BenchmarkDotNet.Attributes;
 using BenchmarkDotNet.Jobs;
-using Lifti;
 using Lucene.Net.Analysis.Standard;
 using Lucene.Net.Documents;
 using Lucene.Net.Index;
@@ -50,15 +49,12 @@ public class TermQueryBenchmarks
     private DirectoryReader? _luceneReader;
     private LuceneIndexSearcher? _luceneSearcher;
 
-    private IFullTextIndex<int>? _liftiIndex;
-
     [GlobalSetup]
     public void Setup()
     {
         _documents = BenchmarkData.BuildDocuments(DocumentCount);
         BuildLeanLuceneIndex();
         BuildLuceneNetIndex();
-        BuildLiftiIndex();
     }
 
     [GlobalCleanup]
@@ -86,13 +82,6 @@ public class TermQueryBenchmarks
         var query = new LuceneTermQuery(new Term("body", QueryTerm));
         var topDocs = _luceneSearcher!.Search(query, TopN);
         return topDocs.TotalHits;
-    }
-
-    [Benchmark]
-    public int Lifti_TermQuery()
-    {
-        var results = _liftiIndex!.Search(QueryTerm);
-        return results.Count();
     }
 
     private void BuildLeanLuceneIndex()
@@ -149,11 +138,4 @@ public class TermQueryBenchmarks
         _luceneSearcher = new LuceneIndexSearcher(_luceneReader);
     }
 
-    private void BuildLiftiIndex()
-    {
-        _liftiIndex = new FullTextIndexBuilder<int>().Build();
-
-        for (int i = 0; i < _documents.Length; i++)
-            _liftiIndex.AddAsync(i, _documents[i]).GetAwaiter().GetResult();
-    }
 }
