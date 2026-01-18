@@ -2,9 +2,11 @@ using Rowles.LeanLucene.Document;
 using Rowles.LeanLucene.Index;
 using Rowles.LeanLucene.Search;
 using Rowles.LeanLucene.Store;
+using Xunit.Abstractions;
 
 namespace Rowles.LeanLucene.Tests.Index;
 
+[Trait("Category", "Index")]
 public class IndexWriterReuseTests
 {
     [Fact]

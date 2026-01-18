@@ -2,6 +2,8 @@ using Rowles.LeanLucene.Search;
 
 namespace Rowles.LeanLucene.Tests.Search;
 
+[Trait("Category", "Search")]
+[Trait("Category", "Collector")]
 public class CollectorTests
 {
     [Fact]

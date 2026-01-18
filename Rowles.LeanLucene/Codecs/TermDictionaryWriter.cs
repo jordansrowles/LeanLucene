@@ -10,7 +10,7 @@ namespace Rowles.LeanLucene.Codecs;
 /// </summary>
 public static class TermDictionaryWriter
 {
-    private const int SkipInterval = 128;
+    private const int SkipInterval = 32;
 
     internal static void Write(string filePath, List<string> sortedTerms, Dictionary<string, long> postingsOffsets)
     {
@@ -40,8 +40,8 @@ public static class TermDictionaryWriter
         Span<byte> skipTermBuf = stackalloc byte[256];
         foreach (var (term, offset) in skipEntries)
         {
-            output.WriteInt32(term.Length);
             int byteCount = System.Text.Encoding.UTF8.GetByteCount(term);
+            output.WriteInt32(byteCount);
             Span<byte> buf = byteCount <= 256 ? skipTermBuf[..byteCount] : new byte[byteCount];
             System.Text.Encoding.UTF8.GetBytes(term, buf);
             output.WriteBytes(buf);
@@ -54,7 +54,8 @@ public static class TermDictionaryWriter
 
     private static void WriteTermEntry(BinaryWriter writer, string term, long postingsOffset)
     {
-        writer.Write(term.Length);
+        int byteCount = System.Text.Encoding.UTF8.GetByteCount(term);
+        writer.Write(byteCount);
         writer.Write(term.AsSpan());
         writer.Write(postingsOffset);
     }

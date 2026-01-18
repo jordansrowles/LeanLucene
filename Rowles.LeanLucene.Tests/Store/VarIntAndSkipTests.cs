@@ -8,6 +8,8 @@ using Rowles.LeanLucene.Tests.Fixtures;
 namespace Rowles.LeanLucene.Tests.Store;
 
 /// <summary>Tests for VarInt encoding, skip pointers, and prefetch on IndexInput/IndexOutput.</summary>
+[Trait("Category", "Store")]
+[Trait("Category", "Codecs")]
 public sealed class VarIntAndSkipTests : IClassFixture<TestDirectoryFixture>
 {
     private readonly TestDirectoryFixture _fixture;

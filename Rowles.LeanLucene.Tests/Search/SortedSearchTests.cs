@@ -3,13 +3,22 @@ using Rowles.LeanLucene.Index;
 using Rowles.LeanLucene.Search;
 using Rowles.LeanLucene.Store;
 using Rowles.LeanLucene.Tests.Fixtures;
+using Xunit.Abstractions;
 
 namespace Rowles.LeanLucene.Tests.Search;
 
+[Trait("Category", "Search")]
+[Trait("Category", "Sorting")]
 public sealed class SortedSearchTests : IClassFixture<TestDirectoryFixture>
 {
     private readonly TestDirectoryFixture _fixture;
-    public SortedSearchTests(TestDirectoryFixture fixture) => _fixture = fixture;
+    private readonly ITestOutputHelper _output;
+
+    public SortedSearchTests(TestDirectoryFixture fixture, ITestOutputHelper output)
+    {
+        _fixture = fixture;
+        _output = output;
+    }
 
     private string SubDir(string name)
     {

@@ -12,14 +12,14 @@ public sealed class IndexWriterConfig
     public double RamBufferSizeMB { get; set; } = 256.0;
 
     /// <summary>Maximum number of buffered documents before an automatic flush.</summary>
-    public int MaxBufferedDocs { get; set; } = 1000;
+    public int MaxBufferedDocs { get; set; } = 10_000;
 
     /// <summary>
     /// Maximum number of documents that can be queued for indexing before AddDocument blocks.
     /// Provides backpressure to prevent unbounded memory growth. Set to 0 to disable (not recommended).
     /// Default: 2 × MaxBufferedDocs.
     /// </summary>
-    public int MaxQueuedDocs { get; set; } = 2000;
+    public int MaxQueuedDocs { get; set; } = 20_000;
 
     /// <summary>Default analyser used for fields without a specific mapping.</summary>
     public IAnalyser DefaultAnalyser { get; set; } = new StandardAnalyser();

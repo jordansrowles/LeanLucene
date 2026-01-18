@@ -3,13 +3,22 @@ using Rowles.LeanLucene.Index;
 using Rowles.LeanLucene.Search;
 using Rowles.LeanLucene.Store;
 using Rowles.LeanLucene.Tests.Fixtures;
+using Xunit.Abstractions;
 
 namespace Rowles.LeanLucene.Tests.Search;
 
+[Trait("Category", "Search")]
+[Trait("Category", "Highlighter")]
 public sealed class HighlighterTests : IClassFixture<TestDirectoryFixture>
 {
     private readonly TestDirectoryFixture _fixture;
-    public HighlighterTests(TestDirectoryFixture fixture) => _fixture = fixture;
+    private readonly ITestOutputHelper _output;
+
+    public HighlighterTests(TestDirectoryFixture fixture, ITestOutputHelper output)
+    {
+        _fixture = fixture;
+        _output = output;
+    }
 
     [Fact]
     public void GetBestFragment_MatchingTerms_HighlightsCorrectly()

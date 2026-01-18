@@ -3,14 +3,22 @@ using Rowles.LeanLucene.Index;
 using Rowles.LeanLucene.Search;
 using Rowles.LeanLucene.Store;
 using Rowles.LeanLucene.Tests.Fixtures;
+using Xunit.Abstractions;
 
 namespace Rowles.LeanLucene.Tests.Index;
 
+[Trait("Category", "Index")]
+[Trait("Category", "LiveDocs")]
 public sealed class LiveDocsTests : IClassFixture<TestDirectoryFixture>
 {
     private readonly TestDirectoryFixture _fixture;
+    private readonly ITestOutputHelper _output;
 
-    public LiveDocsTests(TestDirectoryFixture fixture) => _fixture = fixture;
+    public LiveDocsTests(TestDirectoryFixture fixture, ITestOutputHelper output)
+    {
+        _fixture = fixture;
+        _output = output;
+    }
 
     [Fact]
     public void LiveDocs_DeleteDocument_MarkedInBitset()

@@ -3,15 +3,23 @@ using Rowles.LeanLucene.Index;
 using Rowles.LeanLucene.Search;
 using Rowles.LeanLucene.Store;
 using Rowles.LeanLucene.Tests.Fixtures;
+using Xunit.Abstractions;
 
 namespace Rowles.LeanLucene.Tests.Search;
 
 /// <summary>Tests for Phase 3 features: parallel search, RangeQuery boost, VarInt postings end-to-end.</summary>
+[Trait("Category", "Search")]
+[Trait("Category", "Phase3")]
 public sealed class Phase3SearchTests : IClassFixture<TestDirectoryFixture>
 {
     private readonly TestDirectoryFixture _fixture;
+    private readonly ITestOutputHelper _output;
 
-    public Phase3SearchTests(TestDirectoryFixture fixture) => _fixture = fixture;
+    public Phase3SearchTests(TestDirectoryFixture fixture, ITestOutputHelper output)
+    {
+        _fixture = fixture;
+        _output = output;
+    }
 
     private string SubDir(string name)
     {

@@ -3,6 +3,7 @@ using Rowles.LeanLucene.Tests.Fixtures;
 
 namespace Rowles.LeanLucene.Tests.Store;
 
+[Trait("Category", "Store")]
 public sealed class MMapDirectoryTests : IClassFixture<TestDirectoryFixture>
 {
     private readonly TestDirectoryFixture _fixture;

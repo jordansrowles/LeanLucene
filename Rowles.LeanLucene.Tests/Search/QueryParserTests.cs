@@ -3,6 +3,8 @@ using Rowles.LeanLucene.Search;
 
 namespace Rowles.LeanLucene.Tests.Search;
 
+[Trait("Category", "Search")]
+[Trait("Category", "QueryParser")]
 public sealed class QueryParserTests
 {
     private readonly QueryParser _parser = new("body", new StandardAnalyser());

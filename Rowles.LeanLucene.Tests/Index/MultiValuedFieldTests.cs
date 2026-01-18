@@ -3,14 +3,22 @@ using Rowles.LeanLucene.Index;
 using Rowles.LeanLucene.Search;
 using Rowles.LeanLucene.Store;
 using Rowles.LeanLucene.Tests.Fixtures;
+using Xunit.Abstractions;
 
 namespace Rowles.LeanLucene.Tests.Index;
 
+[Trait("Category", "Index")]
+[Trait("Category", "MultiValuedField")]
 public sealed class MultiValuedFieldTests : IClassFixture<TestDirectoryFixture>
 {
     private readonly TestDirectoryFixture _fixture;
+    private readonly ITestOutputHelper _output;
 
-    public MultiValuedFieldTests(TestDirectoryFixture fixture) => _fixture = fixture;
+    public MultiValuedFieldTests(TestDirectoryFixture fixture, ITestOutputHelper output)
+    {
+        _fixture = fixture;
+        _output = output;
+    }
 
     private string SubDir(string name)
     {

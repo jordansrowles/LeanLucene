@@ -1,4 +1,5 @@
 using System.Buffers;
+using System.Runtime.CompilerServices;
 using System.Text.Json;
 using Rowles.LeanLucene.Analysis;
 using Rowles.LeanLucene.Codecs;
@@ -82,6 +83,11 @@ public sealed class IndexSearcher : IDisposable
         // lookup per segment instead of 2.
         if (query is TermQuery tq)
             return SearchTermQuery(tq, topN);
+
+        // Fast path for BooleanQuery with all-TermQuery clauses — compute
+        // global DFs inline without the generic PrecomputeGlobalDocFreqs tree walk
+        if (query is BooleanQuery bq && IsAllTermQueryBoolean(bq))
+            return SearchBooleanTermQueryFast(bq, topN);
 
         var globalDFs = PrecomputeGlobalDocFreqs(query);
         var collector = new TopNCollector(topN);
@@ -435,6 +441,64 @@ public sealed class IndexSearcher : IDisposable
         {
             for (int i = 0; i < readerCount; i++)
                 postingsArr[i].Dispose();
+        }
+
+        return collector.ToTopDocs();
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static bool IsAllTermQueryBoolean(BooleanQuery bq)
+    {
+        foreach (var clause in bq.Clauses)
+        {
+            if (clause.Query is not TermQuery)
+                return false;
+        }
+        return bq.Clauses.Count > 0;
+    }
+
+    /// <summary>
+    /// Fast path for BooleanQuery where all clauses are TermQuery.
+    /// Computes global DFs inline without the generic PrecomputeGlobalDocFreqs tree walk.
+    /// </summary>
+    private TopDocs SearchBooleanTermQueryFast(BooleanQuery bq, int topN)
+    {
+        var clauses = bq.Clauses;
+
+        // Compute global DFs inline — one pass over readers per unique term
+        var globalDFs = new Dictionary<(string Field, string Term), int>(clauses.Count);
+        foreach (var clause in clauses)
+        {
+            var tq = (TermQuery)clause.Query;
+            var key = (tq.Field, tq.Term);
+            if (globalDFs.ContainsKey(key)) continue;
+            var qt = tq.CachedQualifiedTerm ??= string.Concat(tq.Field, "\x00", tq.Term);
+            int total = 0;
+            for (int r = 0; r < _readers.Count; r++)
+                total += _readers[r].GetDocFreqByQualified(qt);
+            globalDFs[key] = total;
+        }
+
+        var collector = new TopNCollector(topN);
+
+        if (_readers.Count == 1)
+        {
+            ExecuteBooleanQuery(bq, _readers[0], globalDFs, ref collector);
+        }
+        else
+        {
+            var lockObj = new Lock();
+            Parallel.ForEach(_readers, new ParallelOptions { MaxDegreeOfParallelism = Environment.ProcessorCount }, reader =>
+            {
+                var localCollector = new TopNCollector(topN);
+                ExecuteBooleanQuery(bq, reader, globalDFs, ref localCollector);
+                var localDocs = localCollector.ToTopDocs();
+                lock (lockObj)
+                {
+                    foreach (var sd in localDocs.ScoreDocs)
+                        collector.Collect(sd.DocId, sd.Score);
+                }
+            });
         }
 
         return collector.ToTopDocs();
@@ -1040,15 +1104,8 @@ public sealed class IndexSearcher : IDisposable
             if (hasAllPositions && HasPositionsWithinSlopSpan(postingsArr, termCount, leaderIdx, slop))
             {
                 collector.Collect(docBase + docId, score);
-                continue;
             }
-
-            if (!hasAllPositions && slop == 0)
-            {
-                var stored = reader.GetStoredFields(docId);
-                if (stored.TryGetValue(query.Field, out var values) && values.Count > 0 && ContainsPhrase(values[0], query.Terms))
-                    collector.Collect(docBase + docId, score);
-            }
+            // No fallback to stored fields — positions are required for phrase matching
         }
 
         for (int i = 0; i < termCount; i++)
@@ -1075,6 +1132,32 @@ public sealed class IndexSearcher : IDisposable
                     int diff = pos1[j] - pos0[i] - 1;
                     if (slop == 0 ? diff == 0 : Math.Abs(diff) <= slop)
                         return true;
+                }
+            }
+            return false;
+        }
+
+        // 3-term specialisation: inline check without ArrayPool
+        if (termCount == 3)
+        {
+            var p0 = postings[0].GetCurrentPositions();
+            var p1 = postings[1].GetCurrentPositions();
+            var p2 = postings[2].GetCurrentPositions();
+            for (int i = 0; i < p0.Length; i++)
+            {
+                int target1 = p0[i] + 1;
+                for (int j = 0; j < p1.Length; j++)
+                {
+                    int diff1 = p1[j] - target1;
+                    if (slop == 0 ? diff1 != 0 : Math.Abs(diff1) > slop)
+                        continue;
+                    int target2 = p1[j] + 1;
+                    for (int k = 0; k < p2.Length; k++)
+                    {
+                        int diff2 = p2[k] - target2;
+                        if (slop == 0 ? diff2 == 0 : Math.Abs(diff2) <= slop)
+                            return true;
+                    }
                 }
             }
             return false;
@@ -1137,9 +1220,9 @@ public sealed class IndexSearcher : IDisposable
         float avgDocLength = _stats.GetAvgFieldLength(query.Field);
         int docBase = reader.DocBase;
 
-        foreach (var (qualifiedTerm, _) in matchingTerms)
+        foreach (var (qualifiedTerm, postingsOffset) in matchingTerms)
         {
-            using var postings = reader.GetPostingsEnum(qualifiedTerm);
+            using var postings = reader.GetPostingsEnumAtOffset(postingsOffset);
             if (postings.IsExhausted) continue;
 
             var termPart = qualifiedTerm.AsSpan(query.Field.Length + 1).ToString();
@@ -1170,9 +1253,9 @@ public sealed class IndexSearcher : IDisposable
         float avgDocLength = _stats.GetAvgFieldLength(query.Field);
         int docBase = reader.DocBase;
 
-        foreach (var (qualifiedTerm, _) in matchingTerms)
+        foreach (var (qualifiedTerm, postingsOffset) in matchingTerms)
         {
-            using var postings = reader.GetPostingsEnum(qualifiedTerm);
+            using var postings = reader.GetPostingsEnumAtOffset(postingsOffset);
             if (postings.IsExhausted) continue;
 
             var termPart = qualifiedTerm.AsSpan(query.Field.Length + 1).ToString();
@@ -1204,12 +1287,12 @@ public sealed class IndexSearcher : IDisposable
         int docBase = reader.DocBase;
         var queryTermSpan = query.Term.AsSpan();
 
-        foreach (var (qualifiedTerm, _) in matchingTerms)
+        foreach (var (qualifiedTerm, postingsOffset) in matchingTerms)
         {
             var termPart = qualifiedTerm.AsSpan(query.Field.Length + 1);
             int distance = LevenshteinDistance.Compute(queryTermSpan, termPart);
 
-            using var postings = reader.GetPostingsEnum(qualifiedTerm);
+            using var postings = reader.GetPostingsEnumAtOffset(postingsOffset);
             if (postings.IsExhausted) continue;
 
             float distanceFactor = 1.0f - ((float)distance / (query.MaxEdits + 1));
@@ -1242,9 +1325,9 @@ public sealed class IndexSearcher : IDisposable
         float avgDocLength = _stats.GetAvgFieldLength(query.Field);
         int docBase = reader.DocBase;
 
-        foreach (var (qualifiedTerm, _) in matchingTerms)
+        foreach (var (qualifiedTerm, postingsOffset) in matchingTerms)
         {
-            using var postings = reader.GetPostingsEnum(qualifiedTerm);
+            using var postings = reader.GetPostingsEnumAtOffset(postingsOffset);
             if (postings.IsExhausted) continue;
 
             var termPart = qualifiedTerm.AsSpan(query.Field.Length + 1).ToString();
@@ -1328,9 +1411,9 @@ public sealed class IndexSearcher : IDisposable
         float avgDocLength = _stats.GetAvgFieldLength(query.Field);
         int docBase = reader.DocBase;
 
-        foreach (var (qualifiedTerm, _) in matchingTerms)
+        foreach (var (qualifiedTerm, postingsOffset) in matchingTerms)
         {
-            using var postings = reader.GetPostingsEnum(qualifiedTerm);
+            using var postings = reader.GetPostingsEnumAtOffset(postingsOffset);
             if (postings.IsExhausted) continue;
 
             var termPart = qualifiedTerm.AsSpan(query.Field.Length + 1).ToString();

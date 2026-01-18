@@ -2,6 +2,7 @@ using Rowles.LeanLucene.Analysis;
 
 namespace Rowles.LeanLucene.Tests.Analysis;
 
+[Trait("Category", "Analysis")]
 public class StandardAnalyserTests
 {
     private readonly StandardAnalyser _analyser = new();

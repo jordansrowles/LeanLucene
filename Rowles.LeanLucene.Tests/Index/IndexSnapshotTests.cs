@@ -5,6 +5,8 @@ using Rowles.LeanLucene.Store;
 
 namespace Rowles.LeanLucene.Tests.Index;
 
+[Trait("Category", "Index")]
+[Trait("Category", "Snapshot")]
 public sealed class IndexSnapshotTests : IDisposable
 {
     private readonly string _dir = Path.Combine(Path.GetTempPath(), $"ll-snap-{Guid.NewGuid():N}");

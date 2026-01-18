@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using System.Text.Json;
 using Rowles.LeanLucene.Analysis;
 using Rowles.LeanLucene.Codecs;
@@ -18,8 +19,12 @@ public sealed class IndexWriter : IDisposable
 
     // Unified posting accumulator keyed by qualified term ("field\0term")
     private Dictionary<string, PostingAccumulator> _postings = new(StringComparer.Ordinal);
-    // Buffered stored fields per document (local doc ID → field data)
-    private List<Dictionary<string, List<string>>> _storedFields = [];
+    // Flat stored field buffer: parallel arrays indexed by entry position
+    private List<int> _sfFieldIds = new(4096);
+    private List<string> _sfValues = new(4096);
+    private List<int> _sfDocStarts = new(256);
+    private readonly Dictionary<string, int> _sfFieldNameToId = new(StringComparer.Ordinal);
+    private readonly List<string> _sfFieldIdToName = new();
     // Buffered numeric fields per document
     private List<Dictionary<string, double>> _numericFields = [];
     // Per-field numeric values for range indexing: field → docId → value
@@ -32,6 +37,8 @@ public sealed class IndexWriter : IDisposable
     private readonly HashSet<string> _fieldNames = new(StringComparer.Ordinal);
     // Cache qualified term strings to avoid repeated string.Concat — keyed by the qualified term itself
     private Dictionary<string, string> _qualifiedTermPool = new(StringComparer.Ordinal);
+    // Cache field name prefixes ("fieldName\0") to avoid repeated prefix construction
+    private readonly Dictionary<string, string> _fieldPrefixCache = new(StringComparer.Ordinal);
     // DocValues accumulators: field → per-doc values
     private Dictionary<string, List<double>> _numericDocValues = new(StringComparer.Ordinal);
     private Dictionary<string, List<string?>> _sortedDocValues = new(StringComparer.Ordinal);
@@ -109,6 +116,47 @@ public sealed class IndexWriter : IDisposable
                 lock (_writeLock)
                 {
                     _semaphoreSlotsHeld--;
+                }
+            }
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Indexes a batch of documents with a single lock acquisition.
+    /// Faster than calling <see cref="AddDocument"/> in a loop because lock
+    /// and backpressure overhead is paid once for the entire batch.
+    /// </summary>
+    public void AddDocuments(IReadOnlyList<LeanDocument> documents)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        if (documents.Count == 0) return;
+
+        if (_backpressureSemaphore is not null)
+        {
+            for (int i = 0; i < documents.Count; i++)
+                _backpressureSemaphore.Wait();
+        }
+
+        try
+        {
+            lock (_writeLock)
+            {
+                if (_backpressureSemaphore is not null)
+                    _semaphoreSlotsHeld += documents.Count;
+
+                for (int i = 0; i < documents.Count; i++)
+                    AddDocumentCore(documents[i]);
+            }
+        }
+        catch
+        {
+            if (_backpressureSemaphore is not null)
+            {
+                _backpressureSemaphore.Release(documents.Count);
+                lock (_writeLock)
+                {
+                    _semaphoreSlotsHeld -= documents.Count;
                 }
             }
             throw;
@@ -217,9 +265,16 @@ public sealed class IndexWriter : IDisposable
             }
         }
 
-        // Merge stored fields
+        // Merge stored fields from DWPT dictionary format into flat buffer
         foreach (var storedDoc in dwpt.StoredFields)
-            _storedFields.Add(storedDoc);
+        {
+            _sfDocStarts.Add(_sfFieldIds.Count);
+            foreach (var (name, values) in storedDoc)
+            {
+                foreach (var value in values)
+                    AppendStoredField(name, value);
+            }
+        }
 
         // Merge per-field token counts
         // Pre-allocate to MaxBufferedDocs to avoid resize overhead
@@ -281,8 +336,9 @@ public sealed class IndexWriter : IDisposable
     private void AddDocumentCore(LeanDocument doc)
     {
         int localDocId = _bufferedDocCount;
-        var storedDoc = new Dictionary<string, List<string>>(8);
+        _sfDocStarts.Add(_sfFieldIds.Count);
         Dictionary<string, double>? numericDoc = null;
+        int storedEntryStart = _sfFieldIds.Count;
 
         foreach (var field in doc.Fields)
         {
@@ -292,24 +348,14 @@ public sealed class IndexWriter : IDisposable
                     IndexTextField(tf.Name, tf.Value, localDocId);
                     if (tf.IsStored)
                     {
-                        if (!storedDoc.TryGetValue(tf.Name, out var list))
-                        {
-                            list = new List<string>();
-                            storedDoc[tf.Name] = list;
-                        }
-                        list.Add(tf.Value);
+                        AppendStoredField(tf.Name, tf.Value);
                     }
                     break;
                 case StringField sf:
                     IndexStringField(sf.Name, sf.Value, localDocId);
                     if (sf.IsStored)
                     {
-                        if (!storedDoc.TryGetValue(sf.Name, out var list))
-                        {
-                            list = new List<string>();
-                            storedDoc[sf.Name] = list;
-                        }
-                        list.Add(sf.Value);
+                        AppendStoredField(sf.Name, sf.Value);
                     }
                     break;
                 case NumericField nf:
@@ -317,12 +363,7 @@ public sealed class IndexWriter : IDisposable
                     numericDoc ??= new Dictionary<string, double>();
                     if (nf.IsStored)
                     {
-                        if (!storedDoc.TryGetValue(nf.Name, out var list))
-                        {
-                            list = new List<string>();
-                            storedDoc[nf.Name] = list;
-                        }
-                        list.Add(nf.Value.ToString(System.Globalization.CultureInfo.InvariantCulture));
+                        AppendStoredField(nf.Name, nf.Value.ToString(System.Globalization.CultureInfo.InvariantCulture));
                     }
                     break;
                 case VectorField vf:
@@ -331,19 +372,14 @@ public sealed class IndexWriter : IDisposable
             }
         }
 
-        _storedFields.Add(storedDoc);
         if (numericDoc is not null)
             _numericFields.Add(numericDoc);
         _bufferedDocCount++;
 
-        // Estimate RAM usage (rough: 100 bytes per token entry + stored field sizes)
+        // Estimate RAM usage
         _estimatedRamBytes += 200;
-        foreach (var kvp in storedDoc)
-        {
-            _estimatedRamBytes += kvp.Key.Length * 2;
-            foreach (var value in kvp.Value)
-                _estimatedRamBytes += value.Length * 2;
-        }
+        for (int i = storedEntryStart; i < _sfFieldIds.Count; i++)
+            _estimatedRamBytes += _sfValues[i].Length * 2 + 16;
 
         // Check flush thresholds
         if (ShouldFlush())
@@ -434,7 +470,15 @@ public sealed class IndexWriter : IDisposable
             _mergeTask = Task.Run(() =>
             {
                 if (ct.IsCancellationRequested) return;
-                lock (_writeLock)
+
+                // Spin briefly to avoid contending with an active flush/commit
+                SpinWait sw = default;
+                while (!_writeLock.TryEnter())
+                {
+                    if (ct.IsCancellationRequested) return;
+                    sw.SpinOnce();
+                }
+                try
                 {
                     var merger = new SegmentMerger(_directory);
                     var merged = merger.MaybeMerge(_committedSegments, ref _nextSegmentOrdinal);
@@ -456,6 +500,10 @@ public sealed class IndexWriter : IDisposable
 
                         _config.DeletionPolicy.OnCommit(_directory.DirectoryPath, _commitGeneration);
                     }
+                }
+                finally
+                {
+                    _writeLock.Exit();
                 }
             }, ct);
         }
@@ -557,13 +605,7 @@ public sealed class IndexWriter : IDisposable
         {
             var term = CanonicaliseTerm(tokens[pos].Text);
 
-            // Try direct lookup first to avoid allocating the qualified term string
-            var qualifiedTerm = string.Concat(fieldName, "\x00", term);
-            if (!_qualifiedTermPool.TryGetValue(qualifiedTerm, out var pooledTerm))
-            {
-                _qualifiedTermPool[qualifiedTerm] = qualifiedTerm;
-                pooledTerm = qualifiedTerm;
-            }
+            var pooledTerm = GetOrCreateQualifiedTerm(fieldName, term);
 
             if (!_postings.TryGetValue(pooledTerm, out var acc))
             {
@@ -579,12 +621,7 @@ public sealed class IndexWriter : IDisposable
         _fieldNames.Add(fieldName);
         var term = CanonicaliseTerm(value);
 
-        var qualifiedTerm = string.Concat(fieldName, "\x00", term);
-        if (!_qualifiedTermPool.TryGetValue(qualifiedTerm, out var pooledTerm))
-        {
-            _qualifiedTermPool[qualifiedTerm] = qualifiedTerm;
-            pooledTerm = qualifiedTerm;
-        }
+        var pooledTerm = GetOrCreateQualifiedTerm(fieldName, term);
 
         if (!_postings.TryGetValue(pooledTerm, out var acc))
         {
@@ -732,8 +769,9 @@ public sealed class IndexWriter : IDisposable
         }
         NormsWriter.Write(basePath + ".nrm", fieldNorms);
 
-        // Write stored fields (.fdt + .fdx)
-        StoredFieldsWriter.Write(basePath + ".fdt", basePath + ".fdx", _storedFields,
+        // Write stored fields (.fdt + .fdx) from flat buffer
+        StoredFieldsWriter.Write(basePath + ".fdt", basePath + ".fdx",
+            _sfDocStarts, _sfFieldIds, _sfValues, _sfFieldIdToName,
             _config.StoredFieldBlockSize, _config.StoredFieldCompressionLevel);
 
         // Write numeric field index (.num)
@@ -884,15 +922,14 @@ public sealed class IndexWriter : IDisposable
                 liveDocs = LiveDocs.Deserialise(delPath, seg.DocCount);
 
             bool changed = false;
-            // Open .pos file ONCE per segment for all delete terms
-            using var posReader = new BinaryReader(File.OpenRead(posPath));
+            // Use memory-mapped IndexInput instead of BinaryReader for zero-copy reads
+            using var posInput = new IndexInput(posPath);
             foreach (var qualifiedTerm in qualifiedTerms)
             {
                 if (!dicReader.TryGetPostingsOffset(qualifiedTerm, out long offset))
                     continue;
 
-                // Seek within the already-open stream
-                ReadPostingsAtOffsetInto(posReader, offset, liveDocs, ref changed);
+                ReadPostingsAtOffsetInto(posInput, offset, liveDocs, ref changed);
             }
 
             if (changed)
@@ -906,21 +943,21 @@ public sealed class IndexWriter : IDisposable
     }
 
     /// <summary>
-    /// Reads doc IDs from postings at the given offset using an already-open reader,
+    /// Reads doc IDs from postings at the given offset using a memory-mapped IndexInput,
     /// and marks matching live docs as deleted. Zero allocation for the common case.
     /// </summary>
-    private static void ReadPostingsAtOffsetInto(BinaryReader reader, long offset, LiveDocs liveDocs, ref bool changed)
+    private static void ReadPostingsAtOffsetInto(IndexInput input, long offset, LiveDocs liveDocs, ref bool changed)
     {
-        reader.BaseStream.Seek(offset, SeekOrigin.Begin);
-        int count = reader.ReadInt32();
-        int skipCount = reader.ReadInt32();
+        input.Seek(offset);
+        int count = input.ReadInt32();
+        int skipCount = input.ReadInt32();
         if (skipCount > 0)
-            reader.BaseStream.Seek(skipCount * 8L, SeekOrigin.Current);
+            input.Seek(input.Position + skipCount * 8L);
 
         int prev = 0;
         for (int i = 0; i < count; i++)
         {
-            int delta = PostingsReader.ReadVarInt(reader);
+            int delta = input.ReadVarInt();
             if (delta < 0)
                 throw new InvalidDataException("Postings data is corrupt: negative delta encountered.");
             try
@@ -942,7 +979,9 @@ public sealed class IndexWriter : IDisposable
     private void ResetBuffer()
     {
         _postings.Clear();
-        _storedFields.Clear();
+        _sfFieldIds.Clear();
+        _sfValues.Clear();
+        _sfDocStarts.Clear();
         _numericFields.Clear();
         _termPool.Clear();
         _fieldNames.Clear();
@@ -955,6 +994,19 @@ public sealed class IndexWriter : IDisposable
         _bufferedDocCount = 0;
         _estimatedRamBytes = 0;
         _docTokenCounts.Clear();
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private void AppendStoredField(string fieldName, string value)
+    {
+        if (!_sfFieldNameToId.TryGetValue(fieldName, out int fid))
+        {
+            fid = _sfFieldIdToName.Count;
+            _sfFieldNameToId[fieldName] = fid;
+            _sfFieldIdToName.Add(fieldName);
+        }
+        _sfFieldIds.Add(fid);
+        _sfValues.Add(value);
     }
 
     private string CanonicaliseTerm(string term)
@@ -972,6 +1024,34 @@ public sealed class IndexWriter : IDisposable
         // For HashSet<string>, the set itself maintains the canonical reference.
         // We return the input term since we just added it, but the next lookup will return this instance.
         return term;
+    }
+
+    /// <summary>
+    /// Returns a pooled qualified term string ("field\0term"). Avoids allocation when the
+    /// qualified term already exists in the pool by checking the pool before constructing
+    /// the string. Uses a cached field prefix to reduce per-token concat cost.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private string GetOrCreateQualifiedTerm(string fieldName, string term)
+    {
+        if (!_fieldPrefixCache.TryGetValue(fieldName, out var prefix))
+        {
+            prefix = string.Concat(fieldName, "\x00");
+            _fieldPrefixCache[fieldName] = prefix;
+        }
+
+        var qualifiedTerm = string.Create(prefix.Length + term.Length, (prefix, term),
+            static (span, state) =>
+            {
+                state.prefix.AsSpan().CopyTo(span);
+                state.term.AsSpan().CopyTo(span[state.prefix.Length..]);
+            });
+
+        if (_qualifiedTermPool.TryGetValue(qualifiedTerm, out var pooled))
+            return pooled;
+
+        _qualifiedTermPool[qualifiedTerm] = qualifiedTerm;
+        return qualifiedTerm;
     }
 
     private void IndexNumericField(string fieldName, double value, int docId)

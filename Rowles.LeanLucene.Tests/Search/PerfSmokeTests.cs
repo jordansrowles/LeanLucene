@@ -79,8 +79,8 @@ public sealed class PerfSmokeTests : IClassFixture<TestDirectoryFixture>
         _output.WriteLine($"  Avg allocation: {avgKb:F2} KB");
         _output.WriteLine($"  Total hits:     {searcher.Search(query, topN).TotalHits}");
 
-        // Sanity assertions (generous bounds — will tighten as we improve)
-        Assert.True(avgUs < 50_000, $"Latency {avgUs:F0} µs exceeds 50,000 µs budget");
-        Assert.True(avgKb < 5_000, $"Allocation {avgKb:F0} KB exceeds 5,000 KB budget");
+        // Tightened bounds: 3× of typical measured baseline (was 50,000 µs / 5,000 KB)
+        Assert.True(avgUs < 2_000, $"Latency {avgUs:F0} µs exceeds 2,000 µs budget");
+        Assert.True(avgKb < 100, $"Allocation {avgKb:F0} KB exceeds 100 KB budget");
     }
 }

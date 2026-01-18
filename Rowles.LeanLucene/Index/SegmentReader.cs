@@ -20,9 +20,13 @@ public sealed class SegmentReader : IDisposable
     private readonly VectorReader? _vectorReader;
     private readonly Dictionary<(string, string), string> _qualifiedTermCache = new();
     private LiveDocs? _liveDocs;
-    private string? _lastQualifiedTerm;
-    private long _lastPostingsOffset;
-    private bool _lastLookupHit;
+
+    // 16-entry open-addressing term offset cache (replaces single-entry cache)
+    private const int TermCacheSize = 16;
+    private const int TermCacheMask = TermCacheSize - 1;
+    private readonly string?[] _termCacheKeys = new string?[TermCacheSize];
+    private readonly long[] _termCacheOffsets = new long[TermCacheSize];
+    private readonly bool[] _termCacheHits = new bool[TermCacheSize];
 
     // Lazy-loaded Stage 2 features to avoid startup regression
     private Dictionary<string, Dictionary<int, double>>? _numericIndex;
@@ -264,6 +268,13 @@ public sealed class SegmentReader : IDisposable
     }
 
     /// <summary>
+    /// Returns a PostingsEnum at a known postings offset, skipping the dictionary lookup.
+    /// Use when the offset was already obtained from a term scan (e.g. prefix/wildcard).
+    /// </summary>
+    public PostingsEnum GetPostingsEnumAtOffset(long offset)
+        => PostingsEnum.Create(_posInput, offset);
+
+    /// <summary>
     /// Returns a PostingsEnum with decoded positions for phrase queries.
     /// </summary>
     public PostingsEnum GetPostingsEnumWithPositions(string qualifiedTerm)
@@ -274,20 +285,21 @@ public sealed class SegmentReader : IDisposable
         return PostingsEnum.CreateWithPositions(_posInput, offset);
     }
 
-    /// <summary>Single-entry cache for the most recent term lookup.</summary>
+    /// <summary>16-entry open-addressing cache for recent term lookups.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private bool TryGetCachedOffset(string qualifiedTerm, out long offset)
     {
-        if (ReferenceEquals(qualifiedTerm, _lastQualifiedTerm))
+        int slot = qualifiedTerm.GetHashCode() & TermCacheMask;
+        if (ReferenceEquals(qualifiedTerm, _termCacheKeys[slot]))
         {
-            offset = _lastPostingsOffset;
-            return _lastLookupHit;
+            offset = _termCacheOffsets[slot];
+            return _termCacheHits[slot];
         }
 
         bool found = _dicReader.TryGetPostingsOffset(qualifiedTerm, out offset);
-        _lastQualifiedTerm = qualifiedTerm;
-        _lastPostingsOffset = offset;
-        _lastLookupHit = found;
+        _termCacheKeys[slot] = qualifiedTerm;
+        _termCacheOffsets[slot] = offset;
+        _termCacheHits[slot] = found;
         return found;
     }
 

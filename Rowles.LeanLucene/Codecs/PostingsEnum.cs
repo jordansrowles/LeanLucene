@@ -1,4 +1,5 @@
 using System.Buffers;
+using System.Runtime.CompilerServices;
 using Rowles.LeanLucene.Store;
 
 namespace Rowles.LeanLucene.Codecs;
@@ -8,7 +9,7 @@ namespace Rowles.LeanLucene.Codecs;
 /// once into ArrayPool-rented buffers, then yields (DocId, Freq) pairs via MoveNext().
 /// Optionally decodes positions when created via <see cref="CreateWithPositions"/>.
 /// </summary>
-public struct PostingsEnum : IDisposable
+public unsafe struct PostingsEnum : IDisposable
 {
     private int[]? _docIds;
     private int[]? _freqs;
@@ -17,6 +18,12 @@ public struct PostingsEnum : IDisposable
     private bool _disposed;
     private int[]? _positionData;
     private int[]? _positionStarts;
+
+    // Lazy position decoding: store per-doc byte offsets and base pointer
+    private long[]? _positionByteOffsets;
+    private int[]? _positionCounts;
+    private byte* _posBasePtr;
+    private int[]? _lazyPosBuffer;
 
     public int DocFreq => _count;
     public int DocId => _index >= 0 && _index < _count ? _docIds![_index] : -1;
@@ -33,6 +40,26 @@ public struct PostingsEnum : IDisposable
         _disposed = false;
         _positionData = positionData;
         _positionStarts = positionStarts;
+        _positionByteOffsets = null;
+        _positionCounts = null;
+        _posBasePtr = null;
+        _lazyPosBuffer = null;
+    }
+
+    private PostingsEnum(int[]? docIds, int[]? freqs, int count,
+        long[]? positionByteOffsets, int[]? positionCounts, byte* posBasePtr)
+    {
+        _docIds = docIds;
+        _freqs = freqs;
+        _count = count;
+        _index = -1;
+        _disposed = false;
+        _positionData = null;
+        _positionStarts = null;
+        _positionByteOffsets = positionByteOffsets;
+        _positionCounts = positionCounts;
+        _posBasePtr = posBasePtr;
+        _lazyPosBuffer = null;
     }
 
     /// <summary>Creates a PostingsEnum by reading from a memory-mapped IndexInput at the specified offset.</summary>
@@ -69,8 +96,9 @@ public struct PostingsEnum : IDisposable
     }
 
     /// <summary>
-    /// Creates a PostingsEnum that also decodes position data for phrase queries.
-    /// Positions are decoded upfront into flat ArrayPool buffers for O(1) per-doc access.
+    /// Creates a PostingsEnum that lazily decodes position data for phrase queries.
+    /// During creation, only per-doc byte offsets and position counts are recorded.
+    /// Actual position values are decoded on-demand via <see cref="GetCurrentPositions"/>.
     /// </summary>
     public static PostingsEnum CreateWithPositions(IndexInput input, long offset)
     {
@@ -101,53 +129,88 @@ public struct PostingsEnum : IDisposable
         }
 
         bool hasPositions = input.ReadBoolean();
-        int[]? positionData = null;
-        int[]? positionStarts = null;
-        if (hasPositions)
+        if (!hasPositions)
+            return new PostingsEnum(docIds, freqs, count);
+
+        // Record per-doc byte offsets for lazy position decoding
+        var positionByteOffsets = ArrayPool<long>.Shared.Rent(count);
+        var positionCounts = ArrayPool<int>.Shared.Rent(count);
+
+        for (int i = 0; i < count; i++)
         {
-            positionStarts = ArrayPool<int>.Shared.Rent(count + 1);
-            int estimatedTotal = count * 4;
-            positionData = ArrayPool<int>.Shared.Rent(estimatedTotal);
-            int totalPositions = 0;
-
-            for (int i = 0; i < count; i++)
-            {
-                positionStarts[i] = totalPositions;
-                int posCount = input.ReadVarInt();
-
-                if (totalPositions + posCount > positionData.Length)
-                {
-                    var newData = ArrayPool<int>.Shared.Rent(
-                        Math.Max(positionData.Length * 2, totalPositions + posCount));
-                    positionData.AsSpan(0, totalPositions).CopyTo(newData);
-                    ArrayPool<int>.Shared.Return(positionData);
-                    positionData = newData;
-                }
-
-                int prevPos = 0;
-                for (int j = 0; j < posCount; j++)
-                {
-                    prevPos += input.ReadVarInt();
-                    positionData[totalPositions++] = prevPos;
-                }
-            }
-            positionStarts[count] = totalPositions;
+            int posCount = input.ReadVarInt();
+            positionCounts[i] = posCount;
+            positionByteOffsets[i] = input.Position;
+            // Skip past the position VarInts without decoding values
+            for (int j = 0; j < posCount; j++)
+                input.ReadVarInt();
         }
 
-        return new PostingsEnum(docIds, freqs, count, positionData, positionStarts);
+        return new PostingsEnum(docIds, freqs, count, positionByteOffsets, positionCounts, input.BasePointer);
     }
 
     /// <summary>
-    /// Returns positions for the current document. Only available when created via
-    /// <see cref="CreateWithPositions"/>. Returns empty span if positions were not decoded.
+    /// Returns positions for the current document. Supports both eager (pre-decoded) and
+    /// lazy (on-demand) position data. Returns empty span if positions were not available.
     /// </summary>
-    public readonly ReadOnlySpan<int> GetCurrentPositions()
+    public ReadOnlySpan<int> GetCurrentPositions()
     {
-        if (_positionData is null || _positionStarts is null || _index < 0 || _index >= _count)
+        if (_index < 0 || _index >= _count)
             return ReadOnlySpan<int>.Empty;
-        int start = _positionStarts[_index];
-        int end = _positionStarts[_index + 1];
-        return new ReadOnlySpan<int>(_positionData, start, end - start);
+
+        // Eager path (pre-decoded positions)
+        if (_positionData is not null && _positionStarts is not null)
+        {
+            int start = _positionStarts[_index];
+            int end = _positionStarts[_index + 1];
+            return new ReadOnlySpan<int>(_positionData, start, end - start);
+        }
+
+        // Lazy path: decode positions on-demand from mmap'd memory
+        if (_positionByteOffsets is not null && _positionCounts is not null && _posBasePtr != null)
+        {
+            int posCount = _positionCounts[_index];
+            if (posCount == 0)
+                return ReadOnlySpan<int>.Empty;
+
+            // Ensure buffer is large enough
+            if (_lazyPosBuffer is null || _lazyPosBuffer.Length < posCount)
+            {
+                if (_lazyPosBuffer is not null)
+                    ArrayPool<int>.Shared.Return(_lazyPosBuffer);
+                _lazyPosBuffer = ArrayPool<int>.Shared.Rent(posCount);
+            }
+
+            // Decode VarInt position deltas directly from mmap'd memory
+            long pos = _positionByteOffsets[_index];
+            int prevPos = 0;
+            for (int j = 0; j < posCount; j++)
+            {
+                int delta = ReadVarIntFromPtr(_posBasePtr, ref pos);
+                prevPos += delta;
+                _lazyPosBuffer[j] = prevPos;
+            }
+
+            return new ReadOnlySpan<int>(_lazyPosBuffer, 0, posCount);
+        }
+
+        return ReadOnlySpan<int>.Empty;
+    }
+
+    /// <summary>Reads a VarInt directly from a raw byte pointer at the given position.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static int ReadVarIntFromPtr(byte* ptr, ref long position)
+    {
+        uint result = 0;
+        int shift = 0;
+        byte b;
+        do
+        {
+            b = ptr[position++];
+            result |= (uint)(b & 0x7F) << shift;
+            shift += 7;
+        } while ((b & 0x80) != 0);
+        return (int)result;
     }
 
     /// <summary>
@@ -233,6 +296,21 @@ public struct PostingsEnum : IDisposable
         {
             ArrayPool<int>.Shared.Return(_positionStarts);
             _positionStarts = null;
+        }
+        if (_positionByteOffsets is not null)
+        {
+            ArrayPool<long>.Shared.Return(_positionByteOffsets);
+            _positionByteOffsets = null;
+        }
+        if (_positionCounts is not null)
+        {
+            ArrayPool<int>.Shared.Return(_positionCounts);
+            _positionCounts = null;
+        }
+        if (_lazyPosBuffer is not null)
+        {
+            ArrayPool<int>.Shared.Return(_lazyPosBuffer);
+            _lazyPosBuffer = null;
         }
     }
 

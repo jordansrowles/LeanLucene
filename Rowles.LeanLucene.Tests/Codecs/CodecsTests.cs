@@ -1,14 +1,21 @@
 using Rowles.LeanLucene.Codecs;
 using Rowles.LeanLucene.Index;
 using Rowles.LeanLucene.Tests.Fixtures;
+using Xunit.Abstractions;
 
 namespace Rowles.LeanLucene.Tests.Codecs;
 
+[Trait("Category", "Codecs")]
 public sealed class CodecsTests : IClassFixture<TestDirectoryFixture>
 {
     private readonly TestDirectoryFixture _fixture;
+    private readonly ITestOutputHelper _output;
 
-    public CodecsTests(TestDirectoryFixture fixture) => _fixture = fixture;
+    public CodecsTests(TestDirectoryFixture fixture, ITestOutputHelper output)
+    {
+        _fixture = fixture;
+        _output = output;
+    }
 
     [Fact]
     public void DicFile_RoundTrip_AllTermsRecoverable()

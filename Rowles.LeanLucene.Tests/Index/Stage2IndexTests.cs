@@ -4,6 +4,7 @@ using Rowles.LeanLucene.Index;
 using Rowles.LeanLucene.Search;
 using Rowles.LeanLucene.Store;
 using Rowles.LeanLucene.Tests.Fixtures;
+using Xunit.Abstractions;
 
 namespace Rowles.LeanLucene.Tests.Index;
 
@@ -11,10 +12,18 @@ namespace Rowles.LeanLucene.Tests.Index;
 /// Tests for Stage 2 index features: deletion policy, background merge, BKD, term vectors,
 /// compound file, payload support.
 /// </summary>
+[Trait("Category", "Index")]
+[Trait("Category", "Stage2")]
 public sealed class Stage2IndexTests : IClassFixture<TestDirectoryFixture>
 {
     private readonly TestDirectoryFixture _fixture;
-    public Stage2IndexTests(TestDirectoryFixture fixture) => _fixture = fixture;
+    private readonly ITestOutputHelper _output;
+
+    public Stage2IndexTests(TestDirectoryFixture fixture, ITestOutputHelper output)
+    {
+        _fixture = fixture;
+        _output = output;
+    }
 
     private string SubDir(string name)
     {

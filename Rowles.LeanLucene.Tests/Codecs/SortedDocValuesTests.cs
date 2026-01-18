@@ -3,6 +3,7 @@ using Rowles.LeanLucene.Store;
 
 namespace Rowles.LeanLucene.Tests.Codecs;
 
+[Trait("Category", "Codecs")]
 public sealed class SortedDocValuesTests : IDisposable
 {
     private readonly string _dir = Path.Combine(Path.GetTempPath(), $"ll-sdv-{Guid.NewGuid():N}");

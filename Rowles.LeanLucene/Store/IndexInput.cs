@@ -45,6 +45,9 @@ public sealed unsafe class IndexInput : IDisposable
     /// <summary>Total file length in bytes.</summary>
     public long Length => _length;
 
+    /// <summary>Base pointer for the memory-mapped region. Used for zero-copy reads.</summary>
+    internal byte* BasePointer => _ptr;
+
     /// <summary>Current read position within the file.</summary>
     public long Position => _position;
 

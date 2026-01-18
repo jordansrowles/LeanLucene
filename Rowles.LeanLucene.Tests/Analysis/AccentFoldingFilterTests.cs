@@ -2,6 +2,7 @@ using Rowles.LeanLucene.Analysis;
 
 namespace Rowles.LeanLucene.Tests.Analysis;
 
+[Trait("Category", "Analysis")]
 public class AccentFoldingFilterTests
 {
     private readonly AccentFoldingFilter _filter = new();
