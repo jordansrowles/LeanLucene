@@ -11,6 +11,8 @@ public static class VectorWriter
         using var fs = new FileStream(filePath, FileMode.Create, FileAccess.Write, FileShare.None);
         using var writer = new BinaryWriter(fs, System.Text.Encoding.UTF8, leaveOpen: false);
 
+        CodecConstants.WriteHeader(writer, CodecConstants.VectorVersion);
+
         int dimension = vectors.Length > 0 ? vectors[0].Length : 0;
 
         writer.Write(vectors.Length);

@@ -13,6 +13,9 @@ internal static class NumericDocValuesWriter
     public static void Write(string filePath, IReadOnlyDictionary<string, double[]> fields, int docCount)
     {
         using var output = new IndexOutput(filePath);
+        
+        CodecConstants.WriteHeader(output, CodecConstants.NumericDocValuesVersion);
+        
         output.WriteInt32(fields.Count);
 
         foreach (var (fieldName, values) in fields)
@@ -81,6 +84,9 @@ internal static class NumericDocValuesReader
         if (!File.Exists(filePath)) return result;
 
         using var input = new IndexInput(filePath);
+        
+        CodecConstants.ValidateHeader(input, CodecConstants.NumericDocValuesVersion, "numeric doc values (.dvn)");
+        
         int fieldCount = input.ReadInt32();
 
         for (int f = 0; f < fieldCount; f++)

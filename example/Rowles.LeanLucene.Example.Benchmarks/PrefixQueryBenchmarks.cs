@@ -88,7 +88,7 @@ public class PrefixQueryBenchmarks
         _leanDirectory = new LeanMMapDirectory(_leanIndexPath);
         using (var writer = new Rowles.LeanLucene.Index.IndexWriter(
             _leanDirectory,
-            new Rowles.LeanLucene.Index.IndexWriterConfig { MaxBufferedDocs = 512, RamBufferSizeMB = 64 }))
+            new Rowles.LeanLucene.Index.IndexWriterConfig { MaxBufferedDocs = 10_000, RamBufferSizeMB = 256 }))
         {
             for (int i = 0; i < documents.Length; i++)
             {

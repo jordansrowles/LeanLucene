@@ -14,6 +14,8 @@ public static class BKDWriter
         using var fs = new FileStream(filePath, FileMode.Create, FileAccess.Write, FileShare.None);
         using var writer = new BinaryWriter(fs, System.Text.Encoding.UTF8, leaveOpen: false);
 
+        CodecConstants.WriteHeader(writer, CodecConstants.BKDVersion);
+
         writer.Write(fieldPoints.Count);
         foreach (var (field, points) in fieldPoints)
         {
@@ -69,6 +71,8 @@ public sealed class BKDReader : IDisposable
     {
         var fs = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read);
         var reader = new BinaryReader(fs, System.Text.Encoding.UTF8, leaveOpen: true);
+
+        CodecConstants.ValidateHeader(reader, CodecConstants.BKDVersion, "BKD tree (.bkd)");
 
         int fieldCount = reader.ReadInt32();
         var offsets = new Dictionary<string, long>(fieldCount, StringComparer.Ordinal);

@@ -49,7 +49,7 @@ public class DeletionBenchmarks
             var directory = new LeanMMapDirectory(path);
             using var writer = new Rowles.LeanLucene.Index.IndexWriter(
                 directory,
-                new Rowles.LeanLucene.Index.IndexWriterConfig { MaxBufferedDocs = 512, RamBufferSizeMB = 64 });
+                new Rowles.LeanLucene.Index.IndexWriterConfig { MaxBufferedDocs = 10_000, RamBufferSizeMB = 256 });
 
             for (int i = 0; i < _documents.Length; i++)
             {

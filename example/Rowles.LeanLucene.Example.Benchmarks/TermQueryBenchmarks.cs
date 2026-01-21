@@ -94,8 +94,8 @@ public class TermQueryBenchmarks
             _leanDirectory,
             new Rowles.LeanLucene.Index.IndexWriterConfig
             {
-                MaxBufferedDocs = 512,
-                RamBufferSizeMB = 64
+                MaxBufferedDocs = 10_000,
+                RamBufferSizeMB = 256
             }))
         {
             for (int i = 0; i < _documents.Length; i++)

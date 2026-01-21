@@ -56,7 +56,7 @@ public sealed class IndexWriter : IDisposable
     private readonly SemaphoreSlim? _backpressureSemaphore;
     private int _semaphoreSlotsHeld;
     private readonly List<IndexSnapshot> _heldSnapshots = [];
-    private bool _disposed;
+    private int _disposed; // 0 = alive, 1 = disposed (atomically set via Interlocked)
     private readonly FileStream _writeLockFile;
     // Background merge
     private Task? _mergeTask;
@@ -90,7 +90,7 @@ public sealed class IndexWriter : IDisposable
 
     public void AddDocument(LeanDocument doc)
     {
-        ObjectDisposedException.ThrowIf(_disposed, this);
+        ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
 
         // Apply backpressure if enabled: wait for a semaphore slot before acquiring the write lock.
         // This prevents unbounded memory growth when documents are queued faster than they can be flushed.
@@ -129,7 +129,7 @@ public sealed class IndexWriter : IDisposable
     /// </summary>
     public void AddDocuments(IReadOnlyList<LeanDocument> documents)
     {
-        ObjectDisposedException.ThrowIf(_disposed, this);
+        ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
         if (documents.Count == 0) return;
 
         if (_backpressureSemaphore is not null)
@@ -166,7 +166,7 @@ public sealed class IndexWriter : IDisposable
     /// <summary>Atomically deletes documents matching the selector and adds the replacement.</summary>
     public void UpdateDocument(string field, string term, LeanDocument replacement)
     {
-        ObjectDisposedException.ThrowIf(_disposed, this);
+        ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
         lock (_writeLock)
         {
             _pendingDeletes.Add((field, term));
@@ -181,7 +181,7 @@ public sealed class IndexWriter : IDisposable
     /// </summary>
     public void AddDocumentsConcurrent(IReadOnlyList<LeanDocument> documents)
     {
-        ObjectDisposedException.ThrowIf(_disposed, this);
+        ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
         if (documents.Count == 0) return;
 
         // Partition docs into per-thread chunks and process in parallel
@@ -396,7 +396,7 @@ public sealed class IndexWriter : IDisposable
 
     public void Commit()
     {
-        ObjectDisposedException.ThrowIf(_disposed, this);
+        ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
         lock (_writeLock)
         {
             CommitCore();
@@ -443,8 +443,7 @@ public sealed class IndexWriter : IDisposable
 
     public void Dispose()
     {
-        if (_disposed) return;
-        _disposed = true;
+        if (Interlocked.CompareExchange(ref _disposed, 1, 0) != 0) return;
 
         // Cancel and await background merge
         _mergeCts.Cancel();
@@ -515,7 +514,7 @@ public sealed class IndexWriter : IDisposable
     /// </summary>
     public IReadOnlyList<SegmentInfo> GetNrtSegments()
     {
-        ObjectDisposedException.ThrowIf(_disposed, this);
+        ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
         if (_bufferedDocCount > 0)
             FlushSegment();
         return _committedSegments.AsReadOnly();
@@ -528,7 +527,7 @@ public sealed class IndexWriter : IDisposable
     /// </summary>
     public IndexSnapshot CreateSnapshot()
     {
-        ObjectDisposedException.ThrowIf(_disposed, this);
+        ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
         lock (_writeLock)
         {
             // Flush any pending docs so the snapshot is up to date
@@ -675,6 +674,9 @@ public sealed class IndexWriter : IDisposable
         const int SkipInterval = 128;
         using (var posOutput = new IndexOutput(basePath + ".pos"))
         {
+            // Write header at the start of the file
+            CodecConstants.WriteHeader(posOutput, CodecConstants.PostingsVersion);
+            
             foreach (var qt in _sortedTermsBuffer)
             {
                 var acc = _postings[qt];
@@ -1097,33 +1099,13 @@ public sealed class IndexWriter : IDisposable
 
     private void LoadLatestCommit()
     {
-        // Find highest segments_N file
-        var files = Directory.GetFiles(_directory.DirectoryPath, "segments_*");
-        if (files.Length == 0) return;
+        var recovery = IndexRecovery.RecoverLatestCommit(_directory.DirectoryPath);
+        if (recovery is null) return;
 
-        // Manual loop avoids LINQ allocation overhead  
-        var latestFile = (string?)null;
-        var latestGen = -1;
-        foreach (var file in files)
-        {
-            var fileName = Path.GetFileName(file);
-            if (int.TryParse(fileName.Replace("segments_", ""), out int gen) && gen > latestGen)
-            {
-                latestGen = gen;
-                latestFile = file;
-            }
-        }
+        _commitGeneration = recovery.Generation;
+        _nextSegmentOrdinal = recovery.SegmentIds.Count;
 
-        if (latestFile == null) return;
-
-        var json = File.ReadAllText(latestFile);
-        var commitData = JsonSerializer.Deserialize<CommitData>(json);
-        if (commitData == null) return;
-
-        _commitGeneration = commitData.Generation;
-        _nextSegmentOrdinal = commitData.Segments.Count;
-
-        foreach (var segId in commitData.Segments)
+        foreach (var segId in recovery.SegmentIds)
         {
             var segPath = Path.Combine(_directory.DirectoryPath, segId + ".seg");
             if (File.Exists(segPath))

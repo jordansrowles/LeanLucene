@@ -30,9 +30,29 @@ public sealed class VectorReader : IDisposable
         var mmf = MemoryMappedFile.CreateFromFile(filePath, FileMode.Open, null, 0, MemoryMappedFileAccess.Read);
         var accessor = mmf.CreateViewAccessor(0, 0, MemoryMappedFileAccess.Read);
 
-        int vectorCount = accessor.ReadInt32(0);
-        int dimension = accessor.ReadInt32(4);
-        long dataStart = 8; // two int32s
+        long offset = 0;
+        
+        // Validate header: magic (4 bytes) + version (1 byte)
+        int magic = accessor.ReadInt32(offset);
+        offset += 4;
+        if (magic != CodecConstants.Magic)
+            throw new InvalidDataException(
+                $"Invalid vector file: expected magic 0x{CodecConstants.Magic:X8}, got 0x{magic:X8}. " +
+                "The file may be corrupted or from an incompatible version.");
+        
+        byte version = accessor.ReadByte(offset);
+        offset += 1;
+        if (version > CodecConstants.VectorVersion)
+            throw new InvalidDataException(
+                $"Unsupported vector format version {version}. " +
+                $"This build supports up to version {CodecConstants.VectorVersion}. " +
+                "Please upgrade LeanLucene.");
+
+        int vectorCount = accessor.ReadInt32(offset);
+        offset += 4;
+        int dimension = accessor.ReadInt32(offset);
+        offset += 4;
+        long dataStart = offset;
 
         return new VectorReader(mmf, accessor, vectorCount, dimension, dataStart);
     }

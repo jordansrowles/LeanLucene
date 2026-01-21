@@ -1,6 +1,5 @@
 using System.Buffers;
 using System.Runtime.CompilerServices;
-using System.Text.Json;
 using Rowles.LeanLucene.Analysis;
 using Rowles.LeanLucene.Codecs;
 using Rowles.LeanLucene.Index;
@@ -89,7 +88,12 @@ public sealed class IndexSearcher : IDisposable
         if (query is BooleanQuery bq && IsAllTermQueryBoolean(bq))
             return SearchBooleanTermQueryFast(bq, topN);
 
-        var globalDFs = PrecomputeGlobalDocFreqs(query);
+        // Pattern-based queries (Prefix, Wildcard, Fuzzy) don't have static terms,
+        // so PrecomputeGlobalDocFreqs produces an empty dictionary. Skip the tree walk.
+        bool skipGlobalDFs = query is PrefixQuery or WildcardQuery or FuzzyQuery;
+        var globalDFs = skipGlobalDFs
+            ? new Dictionary<(string Field, string Term), int>()
+            : PrecomputeGlobalDocFreqs(query);
         var collector = new TopNCollector(topN);
 
         if (_readers.Count == 1)
@@ -214,8 +218,8 @@ public sealed class IndexSearcher : IDisposable
         if (sort.Type == SortFieldType.Score)
             return Search(query, topN);
 
-        // Collect all matching docs with scores
-        var allDocs = Search(query, 10_000);
+        // Collect all matching docs — use a generous limit to capture enough for re-sorting
+        var allDocs = Search(query, Math.Max(topN, _totalDocCount));
         if (allDocs.TotalHits == 0) return TopDocs.Empty;
 
         var sorted = sort.Type switch
@@ -920,7 +924,7 @@ public sealed class IndexSearcher : IDisposable
             case BooleanQuery bq:
             {
                 // Nested boolean: use a sub-collector and extract results
-                var subCollector = new TopNCollector(10_000);
+                var subCollector = new TopNCollector(reader.MaxDoc);
                 ExecuteBooleanQuery(bq, reader, globalDFs, ref subCollector);
                 var subDocs = subCollector.ToTopDocs();
                 foreach (var sd in subDocs.ScoreDocs)
@@ -937,7 +941,7 @@ public sealed class IndexSearcher : IDisposable
             }
             case TermRangeQuery trq:
             {
-                var subCollector = new TopNCollector(10000);
+                var subCollector = new TopNCollector(reader.MaxDoc);
                 ExecuteTermRangeQuery(trq, reader, globalDFs, ref subCollector);
                 var subDocs = subCollector.ToTopDocs();
                 foreach (var sd in subDocs.ScoreDocs)
@@ -946,7 +950,7 @@ public sealed class IndexSearcher : IDisposable
             }
             case ConstantScoreQuery csq:
             {
-                var subCollector = new TopNCollector(10000);
+                var subCollector = new TopNCollector(reader.MaxDoc);
                 ExecuteConstantScoreQuery(csq, reader, globalDFs, ref subCollector);
                 var subDocs = subCollector.ToTopDocs();
                 foreach (var sd in subDocs.ScoreDocs)
@@ -955,7 +959,7 @@ public sealed class IndexSearcher : IDisposable
             }
             case DisjunctionMaxQuery dmq:
             {
-                var subCollector = new TopNCollector(10000);
+                var subCollector = new TopNCollector(reader.MaxDoc);
                 ExecuteDisjunctionMaxQuery(dmq, reader, globalDFs, ref subCollector);
                 var subDocs = subCollector.ToTopDocs();
                 foreach (var sd in subDocs.ScoreDocs)
@@ -964,7 +968,7 @@ public sealed class IndexSearcher : IDisposable
             }
             case RegexpQuery rxq:
             {
-                var subCollector = new TopNCollector(10000);
+                var subCollector = new TopNCollector(reader.MaxDoc);
                 ExecuteRegexpQuery(rxq, reader, globalDFs, ref subCollector);
                 var subDocs = subCollector.ToTopDocs();
                 foreach (var sd in subDocs.ScoreDocs)
@@ -973,7 +977,7 @@ public sealed class IndexSearcher : IDisposable
             }
             case FunctionScoreQuery fsq:
             {
-                var subCollector = new TopNCollector(10000);
+                var subCollector = new TopNCollector(reader.MaxDoc);
                 ExecuteFunctionScoreQuery(fsq, reader, globalDFs, ref subCollector);
                 var subDocs = subCollector.ToTopDocs();
                 foreach (var sd in subDocs.ScoreDocs)
@@ -982,7 +986,7 @@ public sealed class IndexSearcher : IDisposable
             }
             case SpanNearQuery snq:
             {
-                var subCollector = new TopNCollector(10000);
+                var subCollector = new TopNCollector(reader.MaxDoc);
                 ExecuteSpanNearQuery(snq, reader, globalDFs, ref subCollector);
                 var subDocs = subCollector.ToTopDocs();
                 foreach (var sd in subDocs.ScoreDocs)
@@ -991,7 +995,7 @@ public sealed class IndexSearcher : IDisposable
             }
             case SpanOrQuery soq:
             {
-                var subCollector = new TopNCollector(10000);
+                var subCollector = new TopNCollector(reader.MaxDoc);
                 ExecuteSpanOrQuery(soq, reader, globalDFs, ref subCollector);
                 var subDocs = subCollector.ToTopDocs();
                 foreach (var sd in subDocs.ScoreDocs)
@@ -1000,7 +1004,7 @@ public sealed class IndexSearcher : IDisposable
             }
             case SpanNotQuery snotq:
             {
-                var subCollector = new TopNCollector(10000);
+                var subCollector = new TopNCollector(reader.MaxDoc);
                 ExecuteSpanNotQuery(snotq, reader, globalDFs, ref subCollector);
                 var subDocs = subCollector.ToTopDocs();
                 foreach (var sd in subDocs.ScoreDocs)
@@ -1120,45 +1124,48 @@ public sealed class IndexSearcher : IDisposable
     {
         if (termCount == 1) return true;
 
-        // For 2 terms (common case): optimised inline check
+        // For 2 terms (common case): O(n+m) two-pointer merge on sorted positions
         if (termCount == 2)
         {
             var pos0 = postings[0].GetCurrentPositions();
             var pos1 = postings[1].GetCurrentPositions();
+            int j = 0;
             for (int i = 0; i < pos0.Length; i++)
             {
-                for (int j = 0; j < pos1.Length; j++)
-                {
-                    int diff = pos1[j] - pos0[i] - 1;
-                    if (slop == 0 ? diff == 0 : Math.Abs(diff) <= slop)
-                        return true;
-                }
+                int target = pos0[i] + 1;
+                int lowerBound = target - slop;
+                int upperBound = target + slop;
+                while (j < pos1.Length && pos1[j] < lowerBound)
+                    j++;
+                if (j >= pos1.Length) break;
+                if (pos1[j] <= upperBound)
+                    return true;
             }
             return false;
         }
 
-        // 3-term specialisation: inline check without ArrayPool
+        // 3-term specialisation: two-pointer chain O(p0 + p1 + p2)
         if (termCount == 3)
         {
             var p0 = postings[0].GetCurrentPositions();
             var p1 = postings[1].GetCurrentPositions();
             var p2 = postings[2].GetCurrentPositions();
+            int j = 0, k = 0;
             for (int i = 0; i < p0.Length; i++)
             {
                 int target1 = p0[i] + 1;
-                for (int j = 0; j < p1.Length; j++)
-                {
-                    int diff1 = p1[j] - target1;
-                    if (slop == 0 ? diff1 != 0 : Math.Abs(diff1) > slop)
-                        continue;
-                    int target2 = p1[j] + 1;
-                    for (int k = 0; k < p2.Length; k++)
-                    {
-                        int diff2 = p2[k] - target2;
-                        if (slop == 0 ? diff2 == 0 : Math.Abs(diff2) <= slop)
-                            return true;
-                    }
-                }
+                int lo1 = target1 - slop;
+                int hi1 = target1 + slop;
+                while (j < p1.Length && p1[j] < lo1) j++;
+                if (j >= p1.Length) break;
+                if (p1[j] > hi1) continue;
+
+                int target2 = p1[j] + 1;
+                int lo2 = target2 - slop;
+                int hi2 = target2 + slop;
+                while (k < p2.Length && p2[k] < lo2) k++;
+                if (k >= p2.Length) break;
+                if (p2[k] <= hi2) return true;
             }
             return false;
         }
@@ -1433,62 +1440,6 @@ public sealed class IndexSearcher : IDisposable
         }
     }
 
-    private static bool ContainsPhrase(string text, string[] terms)
-    {
-        // Tokenise the text and look for consecutive matches without LINQ
-        var textSpan = text.AsSpan();
-        // Count words first
-        int wordCount = 0;
-        int idx = 0;
-        while (idx < textSpan.Length)
-        {
-            while (idx < textSpan.Length && textSpan[idx] == ' ') idx++;
-            if (idx >= textSpan.Length) break;
-            wordCount++;
-            while (idx < textSpan.Length && textSpan[idx] != ' ') idx++;
-        }
-
-        if (wordCount < terms.Length) return false;
-
-        // Extract word boundaries
-        var starts = new int[wordCount];
-        var lengths = new int[wordCount];
-        int wi = 0;
-        idx = 0;
-        while (idx < textSpan.Length)
-        {
-            while (idx < textSpan.Length && textSpan[idx] == ' ') idx++;
-            if (idx >= textSpan.Length) break;
-            int start = idx;
-            while (idx < textSpan.Length && textSpan[idx] != ' ') idx++;
-            starts[wi] = start;
-            lengths[wi] = idx - start;
-            wi++;
-        }
-
-        for (int i = 0; i <= wordCount - terms.Length; i++)
-        {
-            bool match = true;
-            for (int j = 0; j < terms.Length; j++)
-            {
-                var wordSpan = textSpan.Slice(starts[i + j], lengths[i + j]);
-                // Trim punctuation from word boundaries
-                while (wordSpan.Length > 0 && !char.IsLetterOrDigit(wordSpan[^1]))
-                    wordSpan = wordSpan[..^1];
-                while (wordSpan.Length > 0 && !char.IsLetterOrDigit(wordSpan[0]))
-                    wordSpan = wordSpan[1..];
-
-                if (!wordSpan.Equals(terms[j].AsSpan(), StringComparison.OrdinalIgnoreCase))
-                {
-                    match = false;
-                    break;
-                }
-            }
-            if (match) return true;
-        }
-        return false;
-    }
-
     private static bool HasPositionsWithinSlop(List<int[]> termPositions, ReadOnlySpan<int> actualLengths, int slop)
     {
         int firstTermLength = actualLengths[0];
@@ -1583,35 +1534,8 @@ public sealed class IndexSearcher : IDisposable
 
     private List<string> LoadLatestCommit()
     {
-        var files = Directory.GetFiles(_directory.DirectoryPath, "segments_*");
-        if (files.Length == 0) return [];
-
-        // Manual loop avoids LINQ allocation overhead
-        var latestFile = (string?)null;
-        var latestGen = -1;
-        foreach (var file in files)
-        {
-            var fileName = Path.GetFileName(file);
-            if (int.TryParse(fileName.Replace("segments_", ""), out int gen) && gen > latestGen)
-            {
-                latestGen = gen;
-                latestFile = file;
-            }
-        }
-
-        if (latestFile == null) return [];
-
-        var json = File.ReadAllText(latestFile);
-        using var doc = JsonDocument.Parse(json);
-        var segments = doc.RootElement.GetProperty("Segments");
-        var result = new List<string>();
-        foreach (var element in segments.EnumerateArray())
-        {
-            var segmentId = element.GetString();
-            if (segmentId != null)
-                result.Add(segmentId);
-        }
-        return result;
+        var recovery = IndexRecovery.RecoverLatestCommit(_directory.DirectoryPath);
+        return recovery?.SegmentIds ?? [];
     }
 
     public void Dispose()

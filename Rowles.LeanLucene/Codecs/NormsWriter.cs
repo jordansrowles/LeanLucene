@@ -13,6 +13,8 @@ public static class NormsWriter
     {
         using var output = new IndexOutput(filePath);
         
+        CodecConstants.WriteHeader(output, CodecConstants.NormsVersion);
+        
         output.WriteInt32(fieldNorms.Count);
         
         foreach (var (fieldName, norms) in fieldNorms)

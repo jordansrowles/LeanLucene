@@ -165,9 +165,15 @@ internal sealed class PostingAccumulator
 
     /// <summary>Gets the payload for a specific position index of a given posting entry.</summary>
     public byte[]? GetPayload(int docIndex, int positionIndex)
-        => _payloads != null && docIndex < _count && _payloads[docIndex] != null
-            ? _payloads[docIndex][positionIndex]
-            : null;
+    {
+        if (_payloads == null || (uint)docIndex >= (uint)_count || _payloads[docIndex] == null)
+            return null;
+        var docPayloads = _payloads[docIndex];
+        if ((uint)positionIndex >= (uint)docPayloads.Length)
+            throw new ArgumentOutOfRangeException(nameof(positionIndex),
+                $"Position index {positionIndex} is out of range for doc entry with {docPayloads.Length} positions.");
+        return docPayloads[positionIndex];
+    }
 
     public bool HasPayloads => _payloads != null;
 

@@ -212,6 +212,9 @@ public sealed class SegmentMerger
         const int SkipInterval = 128;
         using (var posStream = new BinaryWriter(File.Create(basePath + ".pos")))
         {
+            // Write header at the start of the file
+            CodecConstants.WriteHeader(posStream, CodecConstants.PostingsVersion);
+            
             foreach (var qt in sortedTerms)
             {
                 postingsOffsets[qt] = posStream.BaseStream.Position;

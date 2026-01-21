@@ -38,16 +38,45 @@ public sealed class StoredFieldsReader : IDisposable
         using var fdxStream = new FileStream(fdxPath, FileMode.Open, FileAccess.Read, FileShare.Read);
         using var fdxReader = new BinaryReader(fdxStream, System.Text.Encoding.UTF8, leaveOpen: false);
 
-        _ = fdxReader.ReadByte(); // format marker
-        int blockSize = fdxReader.ReadInt32();
-        _ = fdxReader.ReadInt32(); // docCount
-        int blockCount = fdxReader.ReadInt32();
+        // Check if this is the new format (magic number) or old format (version byte)
+        int firstInt = fdxReader.ReadInt32();
+        int blockSize;
+        int docCount;
+        int blockCount;
+        
+        if (firstInt == CodecConstants.Magic)
+        {
+            // New format: validate version
+            byte version = fdxReader.ReadByte();
+            if (version > CodecConstants.StoredFieldsVersion)
+                throw new InvalidDataException(
+                    $"Unsupported stored fields format version {version}. " +
+                    $"This build supports up to version {CodecConstants.StoredFieldsVersion}. " +
+                    "Please upgrade LeanLucene.");
+            
+            blockSize = fdxReader.ReadInt32();
+            docCount = fdxReader.ReadInt32();
+            blockCount = fdxReader.ReadInt32();
+        }
+        else
+        {
+            // Old format: first int is version byte (3) in the low byte
+            // The old format was: [byte version][int blockSize][int docCount][int blockCount]
+            // But we read it as int, so we need to reconstruct
+            fdxStream.Seek(0, SeekOrigin.Begin);
+            byte oldVersion = fdxReader.ReadByte();
+            blockSize = fdxReader.ReadInt32();
+            docCount = fdxReader.ReadInt32();
+            blockCount = fdxReader.ReadInt32();
+        }
+        
         var blockOffsets = new long[blockCount];
         for (int i = 0; i < blockCount; i++)
             blockOffsets[i] = fdxReader.ReadInt64();
 
         var fs = new FileStream(fdtPath, FileMode.Open, FileAccess.Read, FileShare.Read);
         var reader = new BinaryReader(fs, System.Text.Encoding.UTF8, leaveOpen: true);
+        
         return new StoredFieldsReader(fs, reader, blockSize, blockOffsets);
     }
 

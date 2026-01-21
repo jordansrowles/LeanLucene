@@ -23,7 +23,7 @@ public static class StoredFieldsWriter
         using var fdtStream = new FileStream(fdtPath, FileMode.Create, FileAccess.Write, FileShare.None);
         using var fdtWriter = new BinaryWriter(fdtStream, System.Text.Encoding.UTF8, leaveOpen: false);
 
-        fdtWriter.Write((byte)3);
+        CodecConstants.WriteHeader(fdtWriter, CodecConstants.StoredFieldsVersion);
         fdtWriter.Write(blockSize);
 
         var blockOffsets = new List<long>();
@@ -118,7 +118,7 @@ public static class StoredFieldsWriter
         using var fdxStream = new FileStream(fdxPath, FileMode.Create, FileAccess.Write, FileShare.None);
         using var fdxWriter = new BinaryWriter(fdxStream, System.Text.Encoding.UTF8, leaveOpen: false);
 
-        fdxWriter.Write((byte)3);
+        CodecConstants.WriteHeader(fdxWriter, CodecConstants.StoredFieldsVersion);
         fdxWriter.Write(blockSize);
         fdxWriter.Write(docCount);
         fdxWriter.Write(blockOffsets.Count);
@@ -132,8 +132,8 @@ public static class StoredFieldsWriter
         using var fdtStream = new FileStream(fdtPath, FileMode.Create, FileAccess.Write, FileShare.None);
         using var fdtWriter = new BinaryWriter(fdtStream, System.Text.Encoding.UTF8, leaveOpen: false);
 
-        // Header: version + block size
-        fdtWriter.Write((byte)3); // version 3 = compressed + multi-valued
+        // Header: codec header + block size
+        CodecConstants.WriteHeader(fdtWriter, CodecConstants.StoredFieldsVersion);
         fdtWriter.Write(blockSize);
 
         var blockOffsets = new List<long>();
@@ -208,11 +208,11 @@ public static class StoredFieldsWriter
 
         fdtWriter.Flush();
 
-        // Write .fdx: [int: version][int: blockSize][int: blockCount][long[]: blockOffsets]
+        // Write .fdx: [header][int: blockSize][int: docCount][int: blockCount][long[]: blockOffsets]
         using var fdxStream = new FileStream(fdxPath, FileMode.Create, FileAccess.Write, FileShare.None);
         using var fdxWriter = new BinaryWriter(fdxStream, System.Text.Encoding.UTF8, leaveOpen: false);
 
-        fdxWriter.Write((byte)3); // version
+        CodecConstants.WriteHeader(fdxWriter, CodecConstants.StoredFieldsVersion);
         fdxWriter.Write(blockSize);
         fdxWriter.Write(docs.Count);
         fdxWriter.Write(blockOffsets.Count);

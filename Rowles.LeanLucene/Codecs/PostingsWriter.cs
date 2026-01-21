@@ -11,6 +11,8 @@ public static class PostingsWriter
         using var fs = new FileStream(filePath, FileMode.Create, FileAccess.Write, FileShare.None);
         using var writer = new BinaryWriter(fs, System.Text.Encoding.UTF8, leaveOpen: false);
 
+        CodecConstants.WriteHeader(writer, CodecConstants.PostingsVersion);
+
         writer.Write(term.Length);
         writer.Write(term.ToCharArray());
         writer.Write(docIds.Length);

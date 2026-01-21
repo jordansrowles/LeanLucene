@@ -10,6 +10,8 @@ public static class PostingsReader
         using var fs = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read);
         using var reader = new BinaryReader(fs, System.Text.Encoding.UTF8, leaveOpen: false);
 
+        CodecConstants.ValidateHeader(reader, CodecConstants.PostingsVersion, "postings (.pos)");
+
         int termLen = reader.ReadInt32();
         var chars = reader.ReadChars(termLen);
         string storedTerm = new string(chars);

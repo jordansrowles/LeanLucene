@@ -25,6 +25,8 @@ public sealed class TermDictionaryReader : IDisposable
     {
         using var input = new IndexInput(filePath);
 
+        CodecConstants.ValidateHeader(input, CodecConstants.TermDictionaryVersion, "term dictionary (.dic)");
+
         int skipCount = input.ReadInt32();
 
         // Skip past the skip index entries to reach term data
@@ -101,8 +103,8 @@ public sealed class TermDictionaryReader : IDisposable
         {
             if (_allTerms[i].AsSpan().StartsWith(qualifiedPrefix))
                 results.Add((_allTerms[i], _allOffsets[i]));
-            else if (i > start || _allTerms[i].AsSpan().SequenceCompareTo(qualifiedPrefix) > 0)
-                break;
+            else
+                break; // sorted array: first non-match after LowerBound means no more matches
         }
 
         return results;

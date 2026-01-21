@@ -13,6 +13,9 @@ internal static class SortedDocValuesWriter
     public static void Write(string filePath, IReadOnlyDictionary<string, string?[]> fields, int docCount)
     {
         using var output = new IndexOutput(filePath);
+        
+        CodecConstants.WriteHeader(output, CodecConstants.SortedDocValuesVersion);
+        
         output.WriteInt32(fields.Count);
 
         foreach (var (fieldName, values) in fields)
@@ -89,6 +92,9 @@ internal static class SortedDocValuesReader
         if (!File.Exists(filePath)) return result;
 
         using var input = new IndexInput(filePath);
+        
+        CodecConstants.ValidateHeader(input, CodecConstants.SortedDocValuesVersion, "sorted doc values (.dvs)");
+        
         int fieldCount = input.ReadInt32();
 
         for (int f = 0; f < fieldCount; f++)

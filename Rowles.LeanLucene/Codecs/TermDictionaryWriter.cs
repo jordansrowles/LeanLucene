@@ -4,7 +4,7 @@ namespace Rowles.LeanLucene.Codecs;
 
 /// <summary>
 /// Writes a sorted term dictionary with a sparse skip index for fast lookups.
-/// Format: [int: skipEntryCount][skip entries][term entries].
+/// Format: [magic][version][int: skipEntryCount][skip entries][term entries].
 /// Each skip entry: [int: termLength][chars: term][long: fileOffset].
 /// Each term entry: [int: termLength][chars: term][long: postingsOffset].
 /// </summary>
@@ -31,9 +31,12 @@ public static class TermDictionaryWriter
         termWriter.Flush();
 
         // Second pass: compute header size, adjust skip offsets, then write the file.
-        long headerSize = ComputeHeaderSize(skipEntries);
+        long headerSize = CodecConstants.HeaderSize + ComputeSkipIndexSize(skipEntries);
 
         using var output = new IndexOutput(filePath);
+
+        // Write codec header
+        CodecConstants.WriteHeader(output, CodecConstants.TermDictionaryVersion);
 
         // Write skip index header.
         output.WriteInt32(skipEntries.Count);
@@ -60,13 +63,12 @@ public static class TermDictionaryWriter
         writer.Write(postingsOffset);
     }
 
-    private static long ComputeHeaderSize(List<(string Term, long Offset)> skipEntries)
+    private static long ComputeSkipIndexSize(List<(string Term, long Offset)> skipEntries)
     {
         // int: skipEntryCount
         long size = sizeof(int);
         foreach (var (term, _) in skipEntries)
         {
-            // int: termLength + UTF-8 encoded chars + long: fileOffset
             int charByteCount = System.Text.Encoding.UTF8.GetByteCount(term);
             size += sizeof(int) + charByteCount + sizeof(long);
         }

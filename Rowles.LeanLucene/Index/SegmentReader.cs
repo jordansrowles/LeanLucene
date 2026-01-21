@@ -21,20 +21,18 @@ public sealed class SegmentReader : IDisposable
     private readonly Dictionary<(string, string), string> _qualifiedTermCache = new();
     private LiveDocs? _liveDocs;
 
-    // 16-entry open-addressing term offset cache (replaces single-entry cache)
-    private const int TermCacheSize = 16;
+    // 64-entry open-addressing term offset cache
+    private const int TermCacheSize = 64;
     private const int TermCacheMask = TermCacheSize - 1;
     private readonly string?[] _termCacheKeys = new string?[TermCacheSize];
     private readonly long[] _termCacheOffsets = new long[TermCacheSize];
     private readonly bool[] _termCacheHits = new bool[TermCacheSize];
 
-    // Lazy-loaded Stage 2 features to avoid startup regression
+    // Lazy-loaded Stage 2 features (thread-safe via LazyInitializer)
     private Dictionary<string, Dictionary<int, double>>? _numericIndex;
-    private bool _numericIndexInitialized;
     private Dictionary<string, double[]>? _numericDocValues;
-    private bool _numericDocValuesInitialized;
     private Dictionary<string, string[]>? _sortedDocValues;
-    private bool _sortedDocValuesInitialized;
+    private object? _lazyInitLock;
     private readonly string _basePath;
 
     public int DocBase { get; set; }
@@ -45,38 +43,27 @@ public sealed class SegmentReader : IDisposable
     /// <summary>Lazy-loads the numeric index (.num) for range queries.</summary>
     private Dictionary<string, Dictionary<int, double>> EnsureNumericIndex()
     {
-        if (!_numericIndexInitialized)
+        return LazyInitializer.EnsureInitialized(ref _numericIndex, ref _lazyInitLock, () =>
         {
-            _numericIndexInitialized = true;
             var numPath = _basePath + ".num";
-            if (File.Exists(numPath))
-                _numericIndex = ReadNumericIndex(numPath);
-            else
-                _numericIndex = new Dictionary<string, Dictionary<int, double>>();
-        }
-        return _numericIndex!;
+            return File.Exists(numPath)
+                ? ReadNumericIndex(numPath)
+                : new Dictionary<string, Dictionary<int, double>>();
+        })!;
     }
 
     /// <summary>Lazy-loads numeric doc values (.dvn) for per-document numeric retrieval.</summary>
     private Dictionary<string, double[]> EnsureNumericDocValues()
     {
-        if (!_numericDocValuesInitialized)
-        {
-            _numericDocValuesInitialized = true;
-            _numericDocValues = NumericDocValuesReader.Read(_basePath + ".dvn");
-        }
-        return _numericDocValues!;
+        return LazyInitializer.EnsureInitialized(ref _numericDocValues, ref _lazyInitLock,
+            () => NumericDocValuesReader.Read(_basePath + ".dvn"))!;
     }
 
     /// <summary>Lazy-loads sorted doc values (.dvs) for per-document string retrieval.</summary>
     private Dictionary<string, string[]> EnsureSortedDocValues()
     {
-        if (!_sortedDocValuesInitialized)
-        {
-            _sortedDocValuesInitialized = true;
-            _sortedDocValues = SortedDocValuesReader.Read(_basePath + ".dvs");
-        }
-        return _sortedDocValues!;
+        return LazyInitializer.EnsureInitialized(ref _sortedDocValues, ref _lazyInitLock,
+            () => SortedDocValuesReader.Read(_basePath + ".dvs"))!;
     }
 
     public SegmentReader(MMapDirectory directory, SegmentInfo info)

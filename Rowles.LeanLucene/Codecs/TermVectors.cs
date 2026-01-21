@@ -17,6 +17,8 @@ public static class TermVectorsWriter
         using var tvdFs = new FileStream(tvdPath, FileMode.Create, FileAccess.Write, FileShare.None);
         using var tvdWriter = new BinaryWriter(tvdFs, System.Text.Encoding.UTF8, leaveOpen: false);
 
+        CodecConstants.WriteHeader(tvdWriter, CodecConstants.TermVectorsVersion);
+
         var offsets = new long[docs.Count];
 
         for (int d = 0; d < docs.Count; d++)
@@ -42,6 +44,9 @@ public static class TermVectorsWriter
         // Write .tvx index
         using var tvxFs = new FileStream(tvxPath, FileMode.Create, FileAccess.Write, FileShare.None);
         using var tvxWriter = new BinaryWriter(tvxFs, System.Text.Encoding.UTF8, leaveOpen: false);
+        
+        CodecConstants.WriteHeader(tvxWriter, CodecConstants.TermVectorsVersion);
+        
         tvxWriter.Write(docs.Count);
         foreach (var offset in offsets)
             tvxWriter.Write(offset);
@@ -67,6 +72,8 @@ public sealed class TermVectorsReader : IDisposable
         using var tvxFs = new FileStream(tvxPath, FileMode.Open, FileAccess.Read, FileShare.Read);
         using var tvxReader = new BinaryReader(tvxFs, System.Text.Encoding.UTF8, leaveOpen: false);
 
+        CodecConstants.ValidateHeader(tvxReader, CodecConstants.TermVectorsVersion, "term vectors index (.tvx)");
+
         int docCount = tvxReader.ReadInt32();
         var offsets = new long[docCount];
         for (int i = 0; i < docCount; i++)
@@ -74,6 +81,10 @@ public sealed class TermVectorsReader : IDisposable
 
         var tvdFs = new FileStream(tvdPath, FileMode.Open, FileAccess.Read, FileShare.Read);
         var tvdReader = new BinaryReader(tvdFs, System.Text.Encoding.UTF8, leaveOpen: true);
+        
+        // Validate .tvd header
+        CodecConstants.ValidateHeader(tvdReader, CodecConstants.TermVectorsVersion, "term vectors data (.tvd)");
+        
         return new TermVectorsReader(tvdFs, tvdReader, offsets);
     }
 

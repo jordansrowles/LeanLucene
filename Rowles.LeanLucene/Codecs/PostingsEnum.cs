@@ -24,6 +24,8 @@ public unsafe struct PostingsEnum : IDisposable
     private int[]? _positionCounts;
     private byte* _posBasePtr;
     private int[]? _lazyPosBuffer;
+    // Prevents the IndexInput from being disposed/GC'd while this PostingsEnum holds a raw pointer
+    private IndexInput? _sourceInput;
 
     public int DocFreq => _count;
     public int DocId => _index >= 0 && _index < _count ? _docIds![_index] : -1;
@@ -44,10 +46,11 @@ public unsafe struct PostingsEnum : IDisposable
         _positionCounts = null;
         _posBasePtr = null;
         _lazyPosBuffer = null;
+        _sourceInput = null;
     }
 
     private PostingsEnum(int[]? docIds, int[]? freqs, int count,
-        long[]? positionByteOffsets, int[]? positionCounts, byte* posBasePtr)
+        long[]? positionByteOffsets, int[]? positionCounts, byte* posBasePtr, IndexInput? sourceInput)
     {
         _docIds = docIds;
         _freqs = freqs;
@@ -60,6 +63,7 @@ public unsafe struct PostingsEnum : IDisposable
         _positionCounts = positionCounts;
         _posBasePtr = posBasePtr;
         _lazyPosBuffer = null;
+        _sourceInput = sourceInput;
     }
 
     /// <summary>Creates a PostingsEnum by reading from a memory-mapped IndexInput at the specified offset.</summary>
@@ -146,7 +150,7 @@ public unsafe struct PostingsEnum : IDisposable
                 input.ReadVarInt();
         }
 
-        return new PostingsEnum(docIds, freqs, count, positionByteOffsets, positionCounts, input.BasePointer);
+        return new PostingsEnum(docIds, freqs, count, positionByteOffsets, positionCounts, input.BasePointer, input);
     }
 
     /// <summary>
@@ -315,4 +319,14 @@ public unsafe struct PostingsEnum : IDisposable
     }
 
     public static PostingsEnum Empty => new(null, null, 0);
+
+    /// <summary>
+    /// Validates the postings file header. Should be called when opening a segment,
+    /// before using Create/CreateWithPositions which seek to absolute term offsets.
+    /// </summary>
+    public static void ValidateFileHeader(IndexInput input)
+    {
+        input.Seek(0);
+        CodecConstants.ValidateHeader(input, CodecConstants.PostingsVersion, "postings (.pos)");
+    }
 }

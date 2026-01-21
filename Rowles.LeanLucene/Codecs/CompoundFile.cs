@@ -11,6 +11,8 @@ public static class CompoundFileWriter
         using var cfsFs = new FileStream(cfsPath, FileMode.Create, FileAccess.Write, FileShare.None);
         using var writer = new BinaryWriter(cfsFs, System.Text.Encoding.UTF8, leaveOpen: false);
 
+        CodecConstants.WriteHeader(writer, CodecConstants.CompoundFileVersion);
+
         // Collect files that exist
         var entries = new List<(string Name, string FullPath)>();
         foreach (var ext in extensions)
@@ -76,6 +78,8 @@ public sealed class CompoundFileReader : IDisposable
     {
         var fs = new FileStream(cfsPath, FileMode.Open, FileAccess.Read, FileShare.Read);
         var reader = new BinaryReader(fs, System.Text.Encoding.UTF8, leaveOpen: true);
+
+        CodecConstants.ValidateHeader(reader, CodecConstants.CompoundFileVersion, "compound file (.cfs)");
 
         int entryCount = reader.ReadInt32();
         var entries = new Dictionary<string, (long, long)>(entryCount, StringComparer.Ordinal);
