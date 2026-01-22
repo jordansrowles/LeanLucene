@@ -14,13 +14,19 @@ namespace Rowles.LeanLucene.Analysis;
 public sealed class StandardAnalyser : IAnalyser
 {
     private readonly Tokeniser _tokeniser = new();
-    private readonly StopWordFilter _stopWordFilter = new();
+    private readonly StopWordFilter _stopWordFilter;
     private char[] _lowerBuf = new char[64];
     private readonly List<(int Start, int End)> _offsetBuf = new();
     private readonly List<Token> _tokensBuf = new();
     // Intern cache for frequently seen token strings to reduce per-token string allocation
     private readonly Dictionary<int, string> _internCache = new();
-    private const int MaxInternCacheSize = 4096;
+    private readonly int _maxInternCacheSize;
+
+    public StandardAnalyser(int internCacheSize = 4096, IEnumerable<string>? stopWords = null)
+    {
+        _maxInternCacheSize = internCacheSize;
+        _stopWordFilter = new StopWordFilter(stopWords);
+    }
 
     public List<Token> Analyse(ReadOnlySpan<char> input)
     {
@@ -55,7 +61,7 @@ public sealed class StandardAnalyser : IAnalyser
             else
             {
                 text = new string(lowerSpan);
-                if (_internCache.Count < MaxInternCacheSize)
+                if (_internCache.Count < _maxInternCacheSize)
                     _internCache[hash] = text;
             }
 

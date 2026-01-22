@@ -7,7 +7,7 @@ using Lucene.Net.Store;
 using Lucene.Net.Util;
 using IODirectory = System.IO.Directory;
 using LeanDocument = Rowles.LeanLucene.Document.LeanDocument;
-using LeanIndexSearcher = Rowles.LeanLucene.Search.IndexSearcher;
+using LeanIndexSearcher = Rowles.LeanLucene.Search.Searcher.IndexSearcher;
 using LeanMMapDirectory = Rowles.LeanLucene.Store.MMapDirectory;
 using LeanStringField = Rowles.LeanLucene.Document.StringField;
 using LeanTextField = Rowles.LeanLucene.Document.TextField;
@@ -69,7 +69,7 @@ public class FuzzyQueryBenchmarks
     [Benchmark(Baseline = true)]
     public int LeanLucene_FuzzyQuery()
     {
-        var query = new Rowles.LeanLucene.Search.FuzzyQuery("body", QueryTerm, maxEdits: 2);
+        var query = new Rowles.LeanLucene.Search.Queries.FuzzyQuery("body", QueryTerm, maxEdits: 2);
         return _leanSearcher!.Search(query, TopN).TotalHits;
     }
 
@@ -86,9 +86,9 @@ public class FuzzyQueryBenchmarks
         IODirectory.CreateDirectory(_leanIndexPath);
 
         _leanDirectory = new LeanMMapDirectory(_leanIndexPath);
-        using (var writer = new Rowles.LeanLucene.Index.IndexWriter(
+        using (var writer = new Rowles.LeanLucene.Index.Indexer.IndexWriter(
             _leanDirectory,
-            new Rowles.LeanLucene.Index.IndexWriterConfig { MaxBufferedDocs = 10_000, RamBufferSizeMB = 256 }))
+            new Rowles.LeanLucene.Index.Indexer.IndexWriterConfig { MaxBufferedDocs = 10_000, RamBufferSizeMB = 256 }))
         {
             for (int i = 0; i < documents.Length; i++)
             {

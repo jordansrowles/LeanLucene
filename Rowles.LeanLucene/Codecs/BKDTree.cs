@@ -7,9 +7,10 @@ namespace Rowles.LeanLucene.Codecs;
 /// </summary>
 public static class BKDWriter
 {
-    private const int MaxLeafSize = 512;
+    /// <summary>Default max leaf size for BKD tree nodes.</summary>
+    public const int DefaultMaxLeafSize = 512;
 
-    internal static void Write(string filePath, Dictionary<string, List<(double Value, int DocId)>> fieldPoints)
+    internal static void Write(string filePath, Dictionary<string, List<(double Value, int DocId)>> fieldPoints, int maxLeafSize = DefaultMaxLeafSize)
     {
         using var fs = new FileStream(filePath, FileMode.Create, FileAccess.Write, FileShare.None);
         using var writer = new BinaryWriter(fs, System.Text.Encoding.UTF8, leaveOpen: false);
@@ -21,14 +22,14 @@ public static class BKDWriter
         {
             writer.Write(field);
             points.Sort((a, b) => a.Value.CompareTo(b.Value));
-            WriteNode(writer, points, 0, points.Count);
+            WriteNode(writer, points, 0, points.Count, maxLeafSize);
         }
     }
 
-    private static void WriteNode(BinaryWriter writer, List<(double Value, int DocId)> points, int start, int end)
+    private static void WriteNode(BinaryWriter writer, List<(double Value, int DocId)> points, int start, int end, int maxLeafSize)
     {
         int count = end - start;
-        if (count <= MaxLeafSize)
+        if (count <= maxLeafSize)
         {
             // Leaf node
             writer.Write((byte)1); // leaf marker
@@ -45,8 +46,8 @@ public static class BKDWriter
             int mid = start + count / 2;
             writer.Write((byte)0); // internal marker
             writer.Write(points[mid].Value); // split value
-            WriteNode(writer, points, start, mid);
-            WriteNode(writer, points, mid, end);
+            WriteNode(writer, points, start, mid, maxLeafSize);
+            WriteNode(writer, points, mid, end, maxLeafSize);
         }
     }
 }

@@ -7,7 +7,7 @@ using Lucene.Net.Store;
 using Lucene.Net.Util;
 using IODirectory = System.IO.Directory;
 using LeanDocument = Rowles.LeanLucene.Document.LeanDocument;
-using LeanIndexSearcher = Rowles.LeanLucene.Search.IndexSearcher;
+using LeanIndexSearcher = Rowles.LeanLucene.Search.Searcher.IndexSearcher;
 using LeanMMapDirectory = Rowles.LeanLucene.Store.MMapDirectory;
 using LeanStringField = Rowles.LeanLucene.Document.StringField;
 using LeanTextField = Rowles.LeanLucene.Document.TextField;
@@ -70,7 +70,7 @@ public class WildcardQueryBenchmarks
     [Benchmark(Baseline = true)]
     public int LeanLucene_WildcardQuery()
     {
-        var query = new Rowles.LeanLucene.Search.WildcardQuery("body", WildcardPattern);
+        var query = new Rowles.LeanLucene.Search.Queries.WildcardQuery("body", WildcardPattern);
         return _leanSearcher!.Search(query, TopN).TotalHits;
     }
 
@@ -87,9 +87,9 @@ public class WildcardQueryBenchmarks
         IODirectory.CreateDirectory(_leanIndexPath);
 
         _leanDirectory = new LeanMMapDirectory(_leanIndexPath);
-        using (var writer = new Rowles.LeanLucene.Index.IndexWriter(
+        using (var writer = new Rowles.LeanLucene.Index.Indexer.IndexWriter(
             _leanDirectory,
-            new Rowles.LeanLucene.Index.IndexWriterConfig { MaxBufferedDocs = 10_000, RamBufferSizeMB = 256 }))
+            new Rowles.LeanLucene.Index.Indexer.IndexWriterConfig { MaxBufferedDocs = 10_000, RamBufferSizeMB = 256 }))
         {
             for (int i = 0; i < documents.Length; i++)
             {

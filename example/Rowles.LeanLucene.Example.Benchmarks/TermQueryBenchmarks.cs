@@ -8,10 +8,10 @@ using Lucene.Net.Store;
 using Lucene.Net.Util;
 using Rowles.LeanLucene.Index;
 using LeanDocument = Rowles.LeanLucene.Document.LeanDocument;
-using LeanIndexSearcher = Rowles.LeanLucene.Search.IndexSearcher;
+using LeanIndexSearcher = Rowles.LeanLucene.Search.Searcher.IndexSearcher;
 using LeanMMapDirectory = Rowles.LeanLucene.Store.MMapDirectory;
 using LeanStringField = Rowles.LeanLucene.Document.StringField;
-using LeanTermQuery = Rowles.LeanLucene.Search.TermQuery;
+using LeanTermQuery = Rowles.LeanLucene.Search.Queries.TermQuery;
 using LeanTextField = Rowles.LeanLucene.Document.TextField;
 using LuceneIndexSearcher = Lucene.Net.Search.IndexSearcher;
 using LuceneStringField = Lucene.Net.Documents.StringField;
@@ -90,9 +90,9 @@ public class TermQueryBenchmarks
         System.IO.Directory.CreateDirectory(_leanIndexPath);
 
         _leanDirectory = new LeanMMapDirectory(_leanIndexPath);
-        using (var writer = new Rowles.LeanLucene.Index.IndexWriter(
+        using (var writer = new Rowles.LeanLucene.Index.Indexer.IndexWriter(
             _leanDirectory,
-            new Rowles.LeanLucene.Index.IndexWriterConfig
+            new Rowles.LeanLucene.Index.Indexer.IndexWriterConfig
             {
                 MaxBufferedDocs = 10_000,
                 RamBufferSizeMB = 256

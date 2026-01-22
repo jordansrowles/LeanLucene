@@ -47,9 +47,9 @@ public class DeletionBenchmarks
         try
         {
             var directory = new LeanMMapDirectory(path);
-            using var writer = new Rowles.LeanLucene.Index.IndexWriter(
+            using var writer = new Rowles.LeanLucene.Index.Indexer.IndexWriter(
                 directory,
-                new Rowles.LeanLucene.Index.IndexWriterConfig { MaxBufferedDocs = 10_000, RamBufferSizeMB = 256 });
+                new Rowles.LeanLucene.Index.Indexer.IndexWriterConfig { MaxBufferedDocs = 10_000, RamBufferSizeMB = 256 });
 
             for (int i = 0; i < _documents.Length; i++)
             {
@@ -62,7 +62,7 @@ public class DeletionBenchmarks
 
             int deleteCount = DocumentCount / 10;
             for (int i = 0; i < deleteCount; i++)
-                writer.DeleteDocuments(new Rowles.LeanLucene.Search.TermQuery("id", i.ToString(System.Globalization.CultureInfo.InvariantCulture)));
+                writer.DeleteDocuments(new Rowles.LeanLucene.Search.Queries.TermQuery("id", i.ToString(System.Globalization.CultureInfo.InvariantCulture)));
             writer.Commit();
 
             return deleteCount;

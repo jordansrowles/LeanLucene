@@ -41,9 +41,9 @@ public class IndexingBenchmarks
         try
         {
             var directory = new MMapDirectory(path);
-            using var writer = new Rowles.LeanLucene.Index.IndexWriter(
+            using var writer = new Rowles.LeanLucene.Index.Indexer.IndexWriter(
                 directory,
-                new Rowles.LeanLucene.Index.IndexWriterConfig
+                new Rowles.LeanLucene.Index.Indexer.IndexWriterConfig
                 {
                     MaxBufferedDocs = 10_000,
                     RamBufferSizeMB = 256

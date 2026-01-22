@@ -7,7 +7,7 @@ using Lucene.Net.Store;
 using Lucene.Net.Util;
 using IODirectory = System.IO.Directory;
 using LeanDocument = Rowles.LeanLucene.Document.LeanDocument;
-using LeanIndexSearcher = Rowles.LeanLucene.Search.IndexSearcher;
+using LeanIndexSearcher = Rowles.LeanLucene.Search.Searcher.IndexSearcher;
 using LeanMMapDirectory = Rowles.LeanLucene.Store.MMapDirectory;
 using LeanStringField = Rowles.LeanLucene.Document.StringField;
 using LeanTextField = Rowles.LeanLucene.Document.TextField;
@@ -68,9 +68,9 @@ public class BooleanQueryBenchmarks
     [Benchmark(Baseline = true)]
     public int LeanLucene_Must()
     {
-        var bq = new Rowles.LeanLucene.Search.BooleanQuery();
-        bq.Add(new Rowles.LeanLucene.Search.TermQuery("body", "search"), Rowles.LeanLucene.Search.Occur.Must);
-        bq.Add(new Rowles.LeanLucene.Search.TermQuery("body", "benchmark"), Rowles.LeanLucene.Search.Occur.Must);
+        var bq = new Rowles.LeanLucene.Search.Queries.BooleanQuery();
+        bq.Add(new Rowles.LeanLucene.Search.Queries.TermQuery("body", "search"), Rowles.LeanLucene.Search.Occur.Must);
+        bq.Add(new Rowles.LeanLucene.Search.Queries.TermQuery("body", "benchmark"), Rowles.LeanLucene.Search.Occur.Must);
         return _leanSearcher!.Search(bq, TopN).TotalHits;
     }
 
@@ -90,9 +90,9 @@ public class BooleanQueryBenchmarks
     [Benchmark]
     public int LeanLucene_Should()
     {
-        var bq = new Rowles.LeanLucene.Search.BooleanQuery();
-        bq.Add(new Rowles.LeanLucene.Search.TermQuery("body", "search"), Rowles.LeanLucene.Search.Occur.Should);
-        bq.Add(new Rowles.LeanLucene.Search.TermQuery("body", "vector"), Rowles.LeanLucene.Search.Occur.Should);
+        var bq = new Rowles.LeanLucene.Search.Queries.BooleanQuery();
+        bq.Add(new Rowles.LeanLucene.Search.Queries.TermQuery("body", "search"), Rowles.LeanLucene.Search.Occur.Should);
+        bq.Add(new Rowles.LeanLucene.Search.Queries.TermQuery("body", "vector"), Rowles.LeanLucene.Search.Occur.Should);
         return _leanSearcher!.Search(bq, TopN).TotalHits;
     }
 
@@ -112,9 +112,9 @@ public class BooleanQueryBenchmarks
     [Benchmark]
     public int LeanLucene_MustNot()
     {
-        var bq = new Rowles.LeanLucene.Search.BooleanQuery();
-        bq.Add(new Rowles.LeanLucene.Search.TermQuery("body", "benchmark"), Rowles.LeanLucene.Search.Occur.Must);
-        bq.Add(new Rowles.LeanLucene.Search.TermQuery("body", "vector"), Rowles.LeanLucene.Search.Occur.MustNot);
+        var bq = new Rowles.LeanLucene.Search.Queries.BooleanQuery();
+        bq.Add(new Rowles.LeanLucene.Search.Queries.TermQuery("body", "benchmark"), Rowles.LeanLucene.Search.Occur.Must);
+        bq.Add(new Rowles.LeanLucene.Search.Queries.TermQuery("body", "vector"), Rowles.LeanLucene.Search.Occur.MustNot);
         return _leanSearcher!.Search(bq, TopN).TotalHits;
     }
 
@@ -137,9 +137,9 @@ public class BooleanQueryBenchmarks
         IODirectory.CreateDirectory(_leanIndexPath);
 
         _leanDirectory = new LeanMMapDirectory(_leanIndexPath);
-        using (var writer = new Rowles.LeanLucene.Index.IndexWriter(
+        using (var writer = new Rowles.LeanLucene.Index.Indexer.IndexWriter(
             _leanDirectory,
-            new Rowles.LeanLucene.Index.IndexWriterConfig { MaxBufferedDocs = 10_000, RamBufferSizeMB = 256 }))
+            new Rowles.LeanLucene.Index.Indexer.IndexWriterConfig { MaxBufferedDocs = 10_000, RamBufferSizeMB = 256 }))
         {
             for (int i = 0; i < documents.Length; i++)
             {
