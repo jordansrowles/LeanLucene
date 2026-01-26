@@ -19,6 +19,25 @@ public sealed class VectorQuery : Query
         TopK = topK;
     }
 
+    public override bool Equals(object? obj) =>
+        obj is VectorQuery other &&
+        string.Equals(Field, other.Field, StringComparison.Ordinal) &&
+        TopK == other.TopK && Boost == other.Boost &&
+        QueryVector.AsSpan().SequenceEqual(other.QueryVector);
+
+    public override int GetHashCode()
+    {
+        var h = new HashCode();
+        h.Add(nameof(VectorQuery));
+        h.Add(Field);
+        h.Add(TopK);
+        // Hash first few elements for performance
+        int len = Math.Min(QueryVector.Length, 8);
+        for (int i = 0; i < len; i++) h.Add(QueryVector[i]);
+        h.Add(QueryVector.Length);
+        return CombineBoost(h.ToHashCode());
+    }
+
     /// <summary>
     /// Computes cosine similarity between two vectors using SIMD where available.
     /// </summary>

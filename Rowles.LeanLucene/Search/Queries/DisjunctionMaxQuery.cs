@@ -31,4 +31,20 @@ public sealed class DisjunctionMaxQuery : Query
         _disjuncts.Add(query);
         return this;
     }
+
+    public override bool Equals(object? obj) =>
+        obj is DisjunctionMaxQuery other &&
+        TieBreakerMultiplier == other.TieBreakerMultiplier &&
+        Boost == other.Boost &&
+        _disjuncts.Count == other._disjuncts.Count &&
+        _disjuncts.SequenceEqual(other._disjuncts);
+
+    public override int GetHashCode()
+    {
+        var h = new HashCode();
+        h.Add(nameof(DisjunctionMaxQuery));
+        h.Add(TieBreakerMultiplier);
+        foreach (var d in _disjuncts) h.Add(d);
+        return CombineBoost(h.ToHashCode());
+    }
 }

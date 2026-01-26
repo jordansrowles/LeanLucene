@@ -28,6 +28,15 @@ public sealed class FunctionScoreQuery : Query
         Mode = mode;
     }
 
+    public override bool Equals(object? obj) =>
+        obj is FunctionScoreQuery other &&
+        Inner.Equals(other.Inner) &&
+        string.Equals(NumericField, other.NumericField, StringComparison.Ordinal) &&
+        Mode == other.Mode && Boost == other.Boost;
+
+    public override int GetHashCode() =>
+        CombineBoost(HashCode.Combine(nameof(FunctionScoreQuery), Inner, NumericField, Mode));
+
     public static float Combine(float queryScore, double fieldValue, ScoreMode mode) => mode switch
     {
         ScoreMode.Multiply => queryScore * (float)fieldValue,

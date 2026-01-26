@@ -14,6 +14,14 @@ public sealed class WildcardQuery : Query
         Pattern = pattern;
     }
 
+    public override bool Equals(object? obj) =>
+        obj is WildcardQuery other &&
+        string.Equals(Field, other.Field, StringComparison.Ordinal) &&
+        string.Equals(Pattern, other.Pattern, StringComparison.Ordinal) &&
+        Boost == other.Boost;
+
+    public override int GetHashCode() => CombineBoost(HashCode.Combine(nameof(WildcardQuery), Field, Pattern));
+
     /// <summary>Tests whether a term matches the wildcard pattern.</summary>
     public static bool Matches(ReadOnlySpan<char> term, ReadOnlySpan<char> pattern)
     {

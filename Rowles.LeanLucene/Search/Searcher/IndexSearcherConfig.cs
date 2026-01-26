@@ -19,4 +19,21 @@ public sealed class IndexSearcherConfig
     /// -1 means use Environment.ProcessorCount. Default: -1.
     /// </summary>
     public int MaxConcurrency { get; set; } = -1;
+
+    /// <summary>
+    /// Enable the query result cache. When true, repeat queries against the same
+    /// commit generation return cached results. Default: false.
+    /// </summary>
+    public bool EnableQueryCache { get; set; }
+
+    /// <summary>
+    /// Maximum number of entries in the query result cache. Default: 1024.
+    /// </summary>
+    public int QueryCacheMaxEntries { get; set; } = 1024;
+
+    /// <summary>
+    /// Metrics collector for search latency, cache hit/miss, etc.
+    /// Default: <see cref="Diagnostics.NullMetricsCollector"/> (no-op).
+    /// </summary>
+    public Diagnostics.IMetricsCollector Metrics { get; set; } = Diagnostics.NullMetricsCollector.Instance;
 }

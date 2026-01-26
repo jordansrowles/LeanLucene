@@ -44,6 +44,12 @@ public sealed partial class IndexWriter
                 case VectorField vf:
                     _bufferedVectors[localDocId] = (vf.Name, vf.Value);
                     break;
+                case GeoPointField gf:
+                    IndexNumericField(gf.LatFieldName, gf.Latitude, localDocId);
+                    IndexNumericField(gf.LonFieldName, gf.Longitude, localDocId);
+                    if (gf.IsStored)
+                        AppendStoredField(gf.Name, gf.Value);
+                    break;
             }
         }
 
@@ -63,12 +69,23 @@ public sealed partial class IndexWriter
 
     private void IndexTextField(string fieldName, string value, int docId)
     {
+        // Apply char filters before tokenisation
+        ReadOnlySpan<char> input = value.AsSpan();
+        string? filtered = null;
+        if (_config.CharFilters.Count > 0)
+        {
+            filtered = value;
+            foreach (var cf in _config.CharFilters)
+                filtered = cf.Filter(filtered.AsSpan());
+            input = filtered.AsSpan();
+        }
+
         if (!_analyserCache.TryGetValue(fieldName, out var analyser))
         {
             analyser = _config.FieldAnalysers.GetValueOrDefault(fieldName, _defaultAnalyser);
             _analyserCache[fieldName] = analyser;
         }
-        var tokens = analyser.Analyse(value.AsSpan());
+        var tokens = analyser.Analyse(input);
 
         // Track per-field token count for O(1) per-field norm computation
         // Pre-allocate to MaxBufferedDocs to avoid resize overhead during indexing
@@ -115,6 +132,15 @@ public sealed partial class IndexWriter
             _postings[pooledTerm] = acc;
         }
         acc.AddDocOnly(docId);
+
+        // Also populate SortedDocValues for collapsing/faceting
+        if (!_sortedDocValues.TryGetValue(fieldName, out var dvList))
+        {
+            dvList = new List<string?>();
+            _sortedDocValues[fieldName] = dvList;
+        }
+        while (dvList.Count <= docId) dvList.Add(null);
+        dvList[docId] = value;
     }
 
     private void IndexNumericField(string fieldName, double value, int docId)

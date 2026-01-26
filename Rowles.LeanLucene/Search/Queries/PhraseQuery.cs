@@ -23,4 +23,21 @@ public sealed class PhraseQuery : Query
         Slop = slop;
         Terms = terms;
     }
+
+    public override bool Equals(object? obj) =>
+        obj is PhraseQuery other &&
+        string.Equals(Field, other.Field, StringComparison.Ordinal) &&
+        Slop == other.Slop &&
+        Boost == other.Boost &&
+        Terms.AsSpan().SequenceEqual(other.Terms);
+
+    public override int GetHashCode()
+    {
+        var h = new HashCode();
+        h.Add(nameof(PhraseQuery));
+        h.Add(Field);
+        h.Add(Slop);
+        foreach (var t in Terms) h.Add(t);
+        return CombineBoost(h.ToHashCode());
+    }
 }

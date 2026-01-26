@@ -16,4 +16,12 @@ public sealed class TermQuery : Query
         Field = field;
         Term = term;
     }
+
+    public override bool Equals(object? obj) =>
+        obj is TermQuery other &&
+        string.Equals(Field, other.Field, StringComparison.Ordinal) &&
+        string.Equals(Term, other.Term, StringComparison.Ordinal) &&
+        Boost == other.Boost;
+
+    public override int GetHashCode() => CombineBoost(HashCode.Combine(nameof(TermQuery), Field, Term));
 }

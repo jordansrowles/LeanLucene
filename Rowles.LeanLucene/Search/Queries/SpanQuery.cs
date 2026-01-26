@@ -23,6 +23,14 @@ public sealed class SpanTermQuery : SpanQuery
         Field = field;
         Term = term;
     }
+
+    public override bool Equals(object? obj) =>
+        obj is SpanTermQuery other &&
+        string.Equals(Field, other.Field, StringComparison.Ordinal) &&
+        string.Equals(Term, other.Term, StringComparison.Ordinal) &&
+        Boost == other.Boost;
+
+    public override int GetHashCode() => CombineBoost(HashCode.Combine(nameof(SpanTermQuery), Field, Term));
 }
 
 /// <summary>
@@ -45,6 +53,22 @@ public sealed class SpanNearQuery : SpanQuery
         Slop = slop;
         InOrder = inOrder;
     }
+
+    public override bool Equals(object? obj) =>
+        obj is SpanNearQuery other &&
+        Slop == other.Slop && InOrder == other.InOrder && Boost == other.Boost &&
+        Clauses.Count == other.Clauses.Count &&
+        Clauses.SequenceEqual(other.Clauses);
+
+    public override int GetHashCode()
+    {
+        var h = new HashCode();
+        h.Add(nameof(SpanNearQuery));
+        h.Add(Slop);
+        h.Add(InOrder);
+        foreach (var c in Clauses) h.Add(c);
+        return CombineBoost(h.ToHashCode());
+    }
 }
 
 /// <summary>Matches documents that match any of the provided span sub-queries.</summary>
@@ -58,6 +82,19 @@ public sealed class SpanOrQuery : SpanQuery
     {
         ArgumentNullException.ThrowIfNull(clauses);
         Clauses = clauses;
+    }
+
+    public override bool Equals(object? obj) =>
+        obj is SpanOrQuery other && Boost == other.Boost &&
+        Clauses.Count == other.Clauses.Count &&
+        Clauses.SequenceEqual(other.Clauses);
+
+    public override int GetHashCode()
+    {
+        var h = new HashCode();
+        h.Add(nameof(SpanOrQuery));
+        foreach (var c in Clauses) h.Add(c);
+        return CombineBoost(h.ToHashCode());
     }
 }
 
@@ -78,4 +115,12 @@ public sealed class SpanNotQuery : SpanQuery
         Include = include;
         Exclude = exclude;
     }
+
+    public override bool Equals(object? obj) =>
+        obj is SpanNotQuery other &&
+        Include.Equals(other.Include) && Exclude.Equals(other.Exclude) &&
+        Boost == other.Boost;
+
+    public override int GetHashCode() =>
+        CombineBoost(HashCode.Combine(nameof(SpanNotQuery), Include, Exclude));
 }

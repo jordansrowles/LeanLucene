@@ -4,6 +4,11 @@ namespace Rowles.LeanLucene.Analysis.Filters;
 /// Expands tokens with their configured synonyms, inserting synonym tokens at the
 /// same position as the source token so that phrase queries still work correctly.
 /// </summary>
+/// <remarks>
+/// Consider using <see cref="SynonymGraphFilter"/> instead, which supports
+/// multi-token source phrases via trie-based longest-match.
+/// </remarks>
+[Obsolete("Use SynonymGraphFilter with SynonymMap for multi-token synonym support.")]
 public sealed class SynonymFilter : ITokenFilter
 {
     private readonly IReadOnlyDictionary<string, string[]> _synonyms;

@@ -1,6 +1,7 @@
 using System.Runtime.CompilerServices;
 using Rowles.LeanLucene.Codecs;
 using Rowles.LeanLucene.Index;
+using Rowles.LeanLucene.Search.Geo;
 
 namespace Rowles.LeanLucene.Search.Searcher;
 
@@ -119,6 +120,12 @@ public sealed partial class IndexSearcher
                 break;
             case SpanNotQuery snotq:
                 ExecuteSpanNotQuery(snotq, reader, globalDFs, ref collector);
+                break;
+            case GeoBoundingBoxQuery gbbq:
+                ExecuteGeoBoundingBoxQuery(gbbq, reader, ref collector);
+                break;
+            case GeoDistanceQuery gdq:
+                ExecuteGeoDistanceQuery(gdq, reader, ref collector);
                 break;
         }
     }

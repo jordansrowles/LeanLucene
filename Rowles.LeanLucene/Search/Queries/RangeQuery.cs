@@ -15,4 +15,11 @@ public sealed class RangeQuery : Query
         Min = min;
         Max = max;
     }
+
+    public override bool Equals(object? obj) =>
+        obj is RangeQuery other &&
+        string.Equals(Field, other.Field, StringComparison.Ordinal) &&
+        Min == other.Min && Max == other.Max && Boost == other.Boost;
+
+    public override int GetHashCode() => CombineBoost(HashCode.Combine(nameof(RangeQuery), Field, Min, Max));
 }

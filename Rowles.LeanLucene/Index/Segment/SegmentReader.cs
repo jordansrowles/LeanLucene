@@ -31,6 +31,7 @@ public sealed partial class SegmentReader : IDisposable
     private Dictionary<string, Dictionary<int, double>>? _numericIndex;
     private Dictionary<string, double[]>? _numericDocValues;
     private Dictionary<string, string[]>? _sortedDocValues;
+    private TermVectorsReader? _termVectorsReader;
     private object? _lazyInitLock;
     private readonly string _basePath;
 
@@ -61,17 +62,25 @@ public sealed partial class SegmentReader : IDisposable
         // Load per-field norms
         _fieldNorms = NormsReader.Read(_basePath + ".nrm");
 
-        // Precompute per-field lengths from norms to avoid per-doc float division in scoring
-        _fieldLengthsPerField = new Dictionary<string, int[]>(_fieldNorms.Count, StringComparer.Ordinal);
-        foreach (var (fieldName, norms) in _fieldNorms)
+        // Prefer exact field lengths from .fln; fall back to quantised norms
+        var exactLengths = FieldLengthReader.TryRead(_basePath + ".fln");
+        if (exactLengths is not null)
         {
-            var fieldLengths = new int[norms.Length];
-            for (int i = 0; i < norms.Length; i++)
+            _fieldLengthsPerField = exactLengths;
+        }
+        else
+        {
+            _fieldLengthsPerField = new Dictionary<string, int[]>(_fieldNorms.Count, StringComparer.Ordinal);
+            foreach (var (fieldName, norms) in _fieldNorms)
             {
-                float n = norms[i] / 255f;
-                fieldLengths[i] = n <= 0f ? 1 : Math.Max(1, (int)MathF.Round(1.0f / n - 1.0f));
+                var fieldLengths = new int[norms.Length];
+                for (int i = 0; i < norms.Length; i++)
+                {
+                    float n = norms[i] / 255f;
+                    fieldLengths[i] = n <= 0f ? 1 : Math.Max(1, (int)MathF.Round(1.0f / n - 1.0f));
+                }
+                _fieldLengthsPerField[fieldName] = fieldLengths;
             }
-            _fieldLengthsPerField[fieldName] = fieldLengths;
         }
 
         var vecPath = _basePath + ".vec";
@@ -130,6 +139,35 @@ public sealed partial class SegmentReader : IDisposable
                 return fieldLengths[docId];
         }
         return 1;
+    }
+
+    /// <summary>
+    /// Returns term vectors for a document, or null if term vectors are not stored for this segment.
+    /// Lazily opens the .tvd/.tvx files on first access.
+    /// </summary>
+    public Dictionary<string, List<TermVectorEntry>>? GetTermVectors(int docId)
+    {
+        var reader = EnsureTermVectorsReader();
+        return reader?.GetTermVector(docId);
+    }
+
+    /// <summary>Whether this segment has term vector files.</summary>
+    public bool HasTermVectors => File.Exists(_basePath + ".tvd") && File.Exists(_basePath + ".tvx");
+
+    private TermVectorsReader? EnsureTermVectorsReader()
+    {
+        if (_termVectorsReader is not null) return _termVectorsReader;
+
+        var tvdPath = _basePath + ".tvd";
+        var tvxPath = _basePath + ".tvx";
+        if (!File.Exists(tvdPath) || !File.Exists(tvxPath)) return null;
+
+        var lockObj = LazyInitializer.EnsureInitialized(ref _lazyInitLock)!;
+        lock (lockObj)
+        {
+            _termVectorsReader ??= TermVectorsReader.Open(tvdPath, tvxPath);
+        }
+        return _termVectorsReader;
     }
 
     /// <summary>
@@ -216,6 +254,7 @@ public sealed partial class SegmentReader : IDisposable
         _dicReader.Dispose();
         _storedReader?.Dispose();
         _vectorReader?.Dispose();
+        _termVectorsReader?.Dispose();
     }
 
     private static void ValidateSegmentFiles(string basePath, int docCount)

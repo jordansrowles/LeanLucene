@@ -20,6 +20,7 @@ public static class CodecConstants
     public const byte NumericDocValuesVersion = 1;
     public const byte SortedDocValuesVersion = 1;
     public const byte BKDVersion = 1;
+    public const byte FieldLengthVersion = 1;
 
     /// <summary>Header size in bytes: 4 (magic) + 1 (version).</summary>
     public const int HeaderSize = 5;

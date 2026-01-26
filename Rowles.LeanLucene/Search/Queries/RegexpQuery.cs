@@ -17,8 +17,14 @@ public sealed class RegexpQuery : Query
     {
         Field = field;
         Pattern = pattern;
-        // Compile once; anchor to full term match automatically via Regex.IsMatch behaviour.
-        // Callers should use ^ / $ anchors in the pattern if full-string matching is desired.
         CompiledRegex = new Regex(pattern, options | RegexOptions.Compiled, TimeSpan.FromSeconds(1));
     }
+
+    public override bool Equals(object? obj) =>
+        obj is RegexpQuery other &&
+        string.Equals(Field, other.Field, StringComparison.Ordinal) &&
+        string.Equals(Pattern, other.Pattern, StringComparison.Ordinal) &&
+        Boost == other.Boost;
+
+    public override int GetHashCode() => CombineBoost(HashCode.Combine(nameof(RegexpQuery), Field, Pattern));
 }

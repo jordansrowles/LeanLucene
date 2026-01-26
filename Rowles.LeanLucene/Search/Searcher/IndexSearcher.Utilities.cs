@@ -1,6 +1,8 @@
 using Rowles.LeanLucene.Analysis;
 using Rowles.LeanLucene.Codecs;
 using Rowles.LeanLucene.Index;
+using Rowles.LeanLucene.Search.Aggregations;
+using Rowles.LeanLucene.Search.Geo;
 
 namespace Rowles.LeanLucene.Search.Searcher;
 
@@ -160,6 +162,75 @@ public sealed partial class IndexSearcher
         return (results, facetsCollector.GetResults());
     }
 
+    // --- Aggregations ---
+
+    /// <summary>
+    /// Executes a search query and computes numeric aggregations over matching documents.
+    /// </summary>
+    public (TopDocs Results, AggregationResult[] Aggregations) SearchWithAggregations(
+        Query query, int topN, params AggregationRequest[] aggregations)
+    {
+        var results = Search(query, topN);
+        if (aggregations.Length == 0 || results.TotalHits == 0)
+            return (results, []);
+
+        var matchingDocIds = new int[results.ScoreDocs.Length];
+        for (int i = 0; i < results.ScoreDocs.Length; i++)
+            matchingDocIds[i] = results.ScoreDocs[i].DocId;
+
+        var aggs = NumericAggregator.Aggregate(
+            matchingDocIds, aggregations, _readers, _docBases, _totalDocCount);
+
+        return (results, aggs);
+    }
+
+    // --- Result Collapsing ---
+
+    /// <summary>
+    /// Executes a search and collapses results so only the best document per unique field value is returned.
+    /// Uses SortedDocValues for the collapse field.
+    /// </summary>
+    public TopDocs SearchWithCollapse(Query query, int topN, CollapseField collapse)
+    {
+        // Over-fetch to have enough candidates after collapsing
+        var allResults = Search(query, topN * 10);
+        if (allResults.TotalHits == 0)
+            return allResults;
+
+        var bestPerGroup = new Dictionary<string, ScoreDoc>(StringComparer.Ordinal);
+        bool isTopScore = collapse.Mode == CollapseMode.TopScore;
+
+        foreach (var scoreDoc in allResults.ScoreDocs)
+        {
+            int readerIdx = ResolveReaderIndex(scoreDoc.DocId);
+            var reader = _readers[readerIdx];
+            int localDocId = scoreDoc.DocId - _docBases[readerIdx];
+
+            if (!reader.TryGetSortedDocValue(collapse.FieldName, localDocId, out string groupValue))
+                groupValue = "__null__";
+
+            if (!bestPerGroup.TryGetValue(groupValue, out var existing))
+            {
+                bestPerGroup[groupValue] = scoreDoc;
+            }
+            else
+            {
+                bool replace = isTopScore
+                    ? scoreDoc.Score > existing.Score
+                    : scoreDoc.Score < existing.Score;
+                if (replace)
+                    bestPerGroup[groupValue] = scoreDoc;
+            }
+        }
+
+        var collapsed = bestPerGroup.Values
+            .OrderByDescending(sd => sd.Score)
+            .Take(topN)
+            .ToArray();
+
+        return new TopDocs(bestPerGroup.Count, collapsed);
+    }
+
     private int ResolveReaderIndex(int globalDocId)
     {
         for (int i = _docBases.Length - 1; i >= 0; i--)
@@ -168,5 +239,75 @@ public sealed partial class IndexSearcher
                 return i;
         }
         return 0;
+    }
+
+    // --- MoreLikeThis ---
+
+    /// <summary>
+    /// Convenience API: finds documents similar to the given document.
+    /// Extracts significant terms from term vectors and re-queries the index.
+    /// </summary>
+    public TopDocs MoreLikeThis(int docId, string[] fields, int topN,
+        MoreLikeThisParameters? parameters = null)
+    {
+        return Search(new MoreLikeThisQuery(docId, fields, parameters), topN);
+    }
+
+    internal TopDocs ExecuteMoreLikeThis(MoreLikeThisQuery mlt, int topN)
+    {
+        var p = mlt.Parameters;
+        int readerIdx = ResolveReaderIndex(mlt.DocId);
+        var reader = _readers[readerIdx];
+        int localDocId = mlt.DocId - _docBases[readerIdx];
+
+        // Collect (term, field, tfidfScore) across all requested fields
+        var candidates = new List<(string Field, string Term, float Score)>();
+
+        foreach (var field in mlt.Fields)
+        {
+            var tv = reader.GetTermVectors(localDocId);
+            if (tv is null || !tv.TryGetValue(field, out var entries)) continue;
+
+            foreach (var entry in entries)
+            {
+                if (entry.Term.Length < p.MinWordLength) continue;
+                if (entry.Freq < p.MinTermFreq) continue;
+
+                // Compute document frequency across all segments
+                var qt = string.Concat(field, "\x00", entry.Term);
+                int docFreq = 0;
+                foreach (var r in _readers)
+                    docFreq += r.GetDocFreqByQualified(qt);
+
+                if (docFreq < p.MinDocFreq || docFreq > p.MaxDocFreq) continue;
+
+                float tf = entry.Freq;
+                float idf = MathF.Log((float)_totalDocCount / (docFreq + 1));
+                candidates.Add((field, entry.Term, tf * idf));
+            }
+        }
+
+        if (candidates.Count == 0)
+            return TopDocs.Empty;
+
+        // Sort by score descending, take top N terms
+        candidates.Sort((a, b) => b.Score.CompareTo(a.Score));
+        int termCount = Math.Min(candidates.Count, p.MaxQueryTerms);
+
+        // Build a BooleanQuery with Should clauses
+        var boolQ = new BooleanQuery();
+        float maxScore = candidates[0].Score;
+
+        for (int i = 0; i < termCount; i++)
+        {
+            var (field, term, score) = candidates[i];
+            var tq = new TermQuery(field, term);
+            if (p.BoostByScore && maxScore > 0)
+                tq.Boost = score / maxScore;
+            boolQ.Add(tq, Occur.Should);
+        }
+
+        // Execute via the existing search path (bypasses cache to avoid recursion)
+        return SearchCore(boolQ, topN + 1);
     }
 }

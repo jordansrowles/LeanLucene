@@ -15,4 +15,12 @@ public sealed class FuzzyQuery : Query
         Term = term;
         MaxEdits = maxEdits;
     }
+
+    public override bool Equals(object? obj) =>
+        obj is FuzzyQuery other &&
+        string.Equals(Field, other.Field, StringComparison.Ordinal) &&
+        string.Equals(Term, other.Term, StringComparison.Ordinal) &&
+        MaxEdits == other.MaxEdits && Boost == other.Boost;
+
+    public override int GetHashCode() => CombineBoost(HashCode.Combine(nameof(FuzzyQuery), Field, Term, MaxEdits));
 }

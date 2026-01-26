@@ -21,4 +21,16 @@ public sealed class TermRangeQuery : Query
         IncludeLower = includeLower;
         IncludeUpper = includeUpper;
     }
+
+    public override bool Equals(object? obj) =>
+        obj is TermRangeQuery other &&
+        string.Equals(Field, other.Field, StringComparison.Ordinal) &&
+        string.Equals(LowerTerm, other.LowerTerm, StringComparison.Ordinal) &&
+        string.Equals(UpperTerm, other.UpperTerm, StringComparison.Ordinal) &&
+        IncludeLower == other.IncludeLower &&
+        IncludeUpper == other.IncludeUpper &&
+        Boost == other.Boost;
+
+    public override int GetHashCode() =>
+        CombineBoost(HashCode.Combine(nameof(TermRangeQuery), Field, LowerTerm, UpperTerm, IncludeLower, IncludeUpper));
 }

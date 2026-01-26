@@ -1,4 +1,5 @@
 using Rowles.LeanLucene.Analysis;
+using Rowles.LeanLucene.Codecs;
 using Rowles.LeanLucene.Search;
 
 namespace Rowles.LeanLucene.Index.Indexer;
@@ -45,8 +46,25 @@ public sealed class IndexWriterConfig
     /// <summary>
     /// Brotli compression level for stored fields. Default: <see cref="System.IO.Compression.CompressionLevel.Fastest"/>.
     /// Higher levels reduce disk size at the cost of slower writes; decompression speed is unaffected.
+    /// For simpler configuration, use <see cref="CompressionPolicy"/> instead.
     /// </summary>
     public System.IO.Compression.CompressionLevel StoredFieldCompressionLevel { get; set; } = System.IO.Compression.CompressionLevel.Fastest;
+
+    /// <summary>
+    /// Simplified compression policy. Setting this overrides <see cref="StoredFieldCompressionLevel"/>.
+    /// Default: null (uses <see cref="StoredFieldCompressionLevel"/> directly).
+    /// </summary>
+    public FieldCompressionPolicy? CompressionPolicy
+    {
+        get => _compressionPolicy;
+        set
+        {
+            _compressionPolicy = value;
+            if (value.HasValue)
+                StoredFieldCompressionLevel = value.Value.ToCompressionLevel();
+        }
+    }
+    private FieldCompressionPolicy? _compressionPolicy;
 
     /// <summary>
     /// Number of documents per stored field block. Larger blocks compress better but
@@ -83,4 +101,16 @@ public sealed class IndexWriterConfig
     /// stop word list is used. Set to an empty list to disable stop word removal.
     /// </summary>
     public IReadOnlyList<string>? StopWords { get; set; }
+
+    /// <summary>
+    /// Metrics collector for flush, merge, and commit latency tracking.
+    /// Default: <see cref="Diagnostics.NullMetricsCollector"/> (no-op).
+    /// </summary>
+    public Diagnostics.IMetricsCollector Metrics { get; set; } = Diagnostics.NullMetricsCollector.Instance;
+
+    /// <summary>
+    /// Character-level filters applied to text before tokenisation.
+    /// Runs in order before the analyser. Default: empty (no char filters).
+    /// </summary>
+    public IReadOnlyList<ICharFilter> CharFilters { get; set; } = [];
 }

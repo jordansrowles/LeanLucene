@@ -21,9 +21,20 @@ public sealed partial class IndexSearcher : IDisposable
     private readonly IndexSearcherConfig _config;
     private PostingsEnum[]? _postingsBuffer;
     private ScoreDoc[]? _collectorHeapCache;
+    private readonly QueryCache? _queryCache;
 
     /// <summary>Corpus-wide statistics computed at construction.</summary>
     public IndexStats Stats => _stats;
+
+    /// <summary>The query result cache, or null if caching is disabled.</summary>
+    public QueryCache? Cache => _queryCache;
+
+    /// <summary>The metrics collector for this searcher.</summary>
+    public Diagnostics.IMetricsCollector Metrics => _config.Metrics;
+
+    /// <summary>Calculates the on-disk size of the index.</summary>
+    public Diagnostics.IndexSizeReport GetIndexSize()
+        => Diagnostics.IndexSizeCalculator.Calculate(_directory.DirectoryPath);
 
     public IndexSearcher(MMapDirectory directory, ISimilarity? similarity = null)
         : this(directory, new IndexSearcherConfig { Similarity = similarity ?? Bm25Similarity.Instance })
@@ -36,7 +47,7 @@ public sealed partial class IndexSearcher : IDisposable
         _config = config;
         _similarity = config.Similarity;
 
-        var segmentIds = LoadLatestCommit();
+        var (segmentIds, generation) = LoadLatestCommitWithGeneration();
         foreach (var segId in segmentIds)
         {
             var segPath = Path.Combine(directory.DirectoryPath, segId + ".seg");
@@ -49,7 +60,13 @@ public sealed partial class IndexSearcher : IDisposable
         _totalDocCount = _docBases.Length > 0
             ? _docBases[^1] + _readers[^1].MaxDoc
             : 0;
-        _stats = ComputeStats();
+
+        // Try to load persisted stats first; fall back to expensive recomputation
+        var statsPath = IndexStats.GetStatsPath(directory.DirectoryPath, generation);
+        _stats = IndexStats.TryLoadFrom(statsPath) ?? ComputeStats();
+
+        if (config.EnableQueryCache)
+            _queryCache = new QueryCache(config.QueryCacheMaxEntries);
     }
 
     public IndexSearcher(MMapDirectory directory, IReadOnlyList<SegmentInfo> segments, ISimilarity? similarity = null)
@@ -70,6 +87,9 @@ public sealed partial class IndexSearcher : IDisposable
             ? _docBases[^1] + _readers[^1].MaxDoc
             : 0;
         _stats = ComputeStats();
+
+        if (config.EnableQueryCache)
+            _queryCache = new QueryCache(config.QueryCacheMaxEntries);
     }
 
     private int[] AssignDocBases()
@@ -89,6 +109,33 @@ public sealed partial class IndexSearcher : IDisposable
     {
         if (topN <= 0 || _readers.Count == 0)
             return TopDocs.Empty;
+
+        // Check query cache
+        if (_queryCache is not null)
+        {
+            var cached = _queryCache.TryGet(query, topN);
+            if (cached is not null)
+            {
+                _config.Metrics.RecordCacheHit();
+                return cached;
+            }
+            _config.Metrics.RecordCacheMiss();
+        }
+
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        var result = SearchCore(query, topN);
+        sw.Stop();
+        _config.Metrics.RecordSearchLatency(sw.Elapsed);
+
+        _queryCache?.Put(query, topN, result);
+        return result;
+    }
+
+    private TopDocs SearchCore(Query query, int topN)
+    {
+        // MoreLikeThis is a cross-segment query: extract terms, build BooleanQuery, delegate
+        if (query is MoreLikeThisQuery mlt)
+            return ExecuteMoreLikeThis(mlt, topN);
 
         // Fast path for the most common query type — avoids
         // PrecomputeGlobalDocFreqs allocation and does only 1 dictionary
@@ -219,10 +266,18 @@ public sealed partial class IndexSearcher : IDisposable
         return new IndexStats(_totalDocCount, liveDocCount, avgFieldLengths, fieldDocCounts);
     }
 
-    private List<string> LoadLatestCommit()
+    private (List<string> SegmentIds, int Generation) LoadLatestCommitWithGeneration()
     {
         var recovery = IndexRecovery.RecoverLatestCommit(_directory.DirectoryPath);
-        return recovery?.SegmentIds ?? [];
+        return recovery is not null
+            ? (recovery.SegmentIds, recovery.Generation)
+            : ([], 0);
+    }
+
+    private List<string> LoadLatestCommit()
+    {
+        var (ids, _) = LoadLatestCommitWithGeneration();
+        return ids;
     }
 
     public void Dispose()

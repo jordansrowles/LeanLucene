@@ -137,6 +137,17 @@ public sealed partial class IndexWriter
         }
         NormsWriter.Write(basePath + ".nrm", fieldNorms);
 
+        // Write exact field lengths (.fln) for precise BM25 scoring
+        var fieldLengths = new Dictionary<string, int[]>(_docTokenCounts.Count, StringComparer.Ordinal);
+        foreach (var (fieldName, counts) in _docTokenCounts)
+        {
+            var lengths = new int[_bufferedDocCount];
+            for (int i = 0; i < _bufferedDocCount; i++)
+                lengths[i] = i < counts.Length ? counts[i] : 0;
+            fieldLengths[fieldName] = lengths;
+        }
+        FieldLengthWriter.Write(basePath + ".fln", fieldLengths);
+
         // Write stored fields (.fdt + .fdx) from flat buffer
         StoredFieldsWriter.Write(basePath + ".fdt", basePath + ".fdx",
             _sfDocStarts, _sfFieldIds, _sfValues, _sfFieldIdToName,

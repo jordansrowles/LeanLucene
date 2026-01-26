@@ -189,7 +189,10 @@ public sealed partial class IndexWriter : IDisposable
         ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
         lock (_writeLock)
         {
+            var sw = System.Diagnostics.Stopwatch.StartNew();
             CommitCore();
+            sw.Stop();
+            _config.Metrics.RecordCommit(sw.Elapsed);
         }
     }
 
@@ -227,8 +230,51 @@ public sealed partial class IndexWriter : IDisposable
         File.WriteAllText(tempFile, commitData);
         File.Move(tempFile, commitFile, overwrite: true);
 
+        // Persist index statistics alongside the commit so IndexSearcher can
+        // skip the expensive full-segment scan on construction.
+        WriteCommitStats(_commitGeneration);
+
         // Apply deletion policy to prune old commit files
         _config.DeletionPolicy.OnCommit(_directory.DirectoryPath, _commitGeneration);
+    }
+
+    /// <summary>
+    /// Computes current index statistics from committed segments and writes
+    /// a stats_N.json file for the given commit generation.
+    /// </summary>
+    private void WriteCommitStats(int generation)
+    {
+        int totalDocCount = 0;
+        int liveDocCount = 0;
+        var fieldLengthSums = new Dictionary<string, long>(StringComparer.Ordinal);
+        var fieldDocCounts = new Dictionary<string, int>(StringComparer.Ordinal);
+
+        foreach (var seg in _committedSegments)
+        {
+            using var reader = new SegmentReader(_directory, seg);
+            totalDocCount += reader.MaxDoc;
+            for (int docId = 0; docId < reader.MaxDoc; docId++)
+            {
+                if (!reader.IsLive(docId)) continue;
+                liveDocCount++;
+                foreach (var field in seg.FieldNames)
+                {
+                    int len = reader.GetFieldLength(docId, field);
+                    fieldLengthSums[field] = fieldLengthSums.GetValueOrDefault(field) + len;
+                    fieldDocCounts[field] = fieldDocCounts.GetValueOrDefault(field) + 1;
+                }
+            }
+        }
+
+        var avgFieldLengths = new Dictionary<string, float>(StringComparer.Ordinal);
+        foreach (var (field, sum) in fieldLengthSums)
+        {
+            int count = fieldDocCounts.GetValueOrDefault(field, 1);
+            avgFieldLengths[field] = count > 0 ? (float)sum / count : 1.0f;
+        }
+
+        var stats = new IndexStats(totalDocCount, liveDocCount, avgFieldLengths, fieldDocCounts);
+        stats.WriteTo(IndexStats.GetStatsPath(_directory.DirectoryPath, generation));
     }
 
     public void Dispose()

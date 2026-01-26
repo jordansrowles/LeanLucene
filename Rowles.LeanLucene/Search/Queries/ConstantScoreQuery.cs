@@ -18,4 +18,12 @@ public sealed class ConstantScoreQuery : Query
         Inner = inner;
         ConstantScore = score;
     }
+
+    public override bool Equals(object? obj) =>
+        obj is ConstantScoreQuery other &&
+        Inner.Equals(other.Inner) &&
+        ConstantScore == other.ConstantScore &&
+        Boost == other.Boost;
+
+    public override int GetHashCode() => CombineBoost(HashCode.Combine(nameof(ConstantScoreQuery), Inner, ConstantScore));
 }

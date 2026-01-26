@@ -1,5 +1,6 @@
 using Rowles.LeanLucene.Codecs;
 using Rowles.LeanLucene.Index;
+using Rowles.LeanLucene.Search.Geo;
 
 namespace Rowles.LeanLucene.Search.Searcher;
 
@@ -295,6 +296,58 @@ public sealed partial class IndexSearcher
             {
                 collector.Collect(sd.DocId, sd.Score * query.Boost);
             }
+        }
+    }
+
+    private void ExecuteGeoBoundingBoxQuery(GeoBoundingBoxQuery query, SegmentReader reader, ref TopNCollector collector)
+    {
+        int docBase = reader.DocBase;
+        float score = query.Boost != 1.0f ? query.Boost : 1.0f;
+        string latField = query.Field + "_lat";
+        string lonField = query.Field + "_lon";
+
+        // Use numeric range index on lat to get candidates
+        var latCandidates = reader.GetNumericRange(latField, query.MinLat, query.MaxLat);
+        if (latCandidates.Count == 0) return;
+
+        foreach (var (docId, lat) in latCandidates)
+        {
+            if (!reader.IsLive(docId)) continue;
+            if (!reader.TryGetNumericValue(lonField, docId, out double lon)) continue;
+            if (lon >= query.MinLon && lon <= query.MaxLon)
+                collector.Collect(docBase + docId, score);
+        }
+    }
+
+    private void ExecuteGeoDistanceQuery(GeoDistanceQuery query, SegmentReader reader, ref TopNCollector collector)
+    {
+        int docBase = reader.DocBase;
+        float score = query.Boost != 1.0f ? query.Boost : 1.0f;
+        string latField = query.Field + "_lat";
+        string lonField = query.Field + "_lon";
+
+        // Compute a conservative bounding box for the distance to narrow candidates
+        double latDelta = query.RadiusMetres / 111_320.0; // ~111km per degree lat
+        double lonDelta = query.RadiusMetres / (111_320.0 * Math.Cos(query.CentreLat * Math.PI / 180.0));
+        double minLat = query.CentreLat - latDelta;
+        double maxLat = query.CentreLat + latDelta;
+
+        var latCandidates = reader.GetNumericRange(latField, minLat, maxLat);
+        if (latCandidates.Count == 0) return;
+
+        double minLon = query.CentreLon - lonDelta;
+        double maxLon = query.CentreLon + lonDelta;
+
+        foreach (var (docId, lat) in latCandidates)
+        {
+            if (!reader.IsLive(docId)) continue;
+            if (!reader.TryGetNumericValue(lonField, docId, out double lon)) continue;
+            if (lon < minLon || lon > maxLon) continue;
+
+            // Precise Haversine check
+            double dist = GeoEncodingUtils.HaversineDistance(query.CentreLat, query.CentreLon, lat, lon);
+            if (dist <= query.RadiusMetres)
+                collector.Collect(docBase + docId, score);
         }
     }
 }
