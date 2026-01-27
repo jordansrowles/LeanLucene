@@ -1,4 +1,4 @@
-using Rowles.LeanLucene.Codecs;
+using Rowles.LeanLucene.Codecs.Postings;
 using Rowles.LeanLucene.Index;
 
 namespace Rowles.LeanLucene.Search.Searcher;

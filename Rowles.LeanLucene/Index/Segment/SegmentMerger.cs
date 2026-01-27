@@ -1,6 +1,9 @@
 using System.Buffers;
 using System.Text.Json;
 using Rowles.LeanLucene.Codecs;
+using Rowles.LeanLucene.Codecs.DocValues;
+using Rowles.LeanLucene.Codecs.Postings;
+using Rowles.LeanLucene.Codecs.StoredFields;
 using Rowles.LeanLucene.Store;
 
 namespace Rowles.LeanLucene.Index.Segment;

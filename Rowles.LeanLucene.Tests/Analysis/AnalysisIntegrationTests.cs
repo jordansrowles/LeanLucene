@@ -1,5 +1,7 @@
 using Rowles.LeanLucene.Analysis;
+using Rowles.LeanLucene.Analysis.Tokenisers;
 using Rowles.LeanLucene.Document;
+using Rowles.LeanLucene.Document.Fields;
 using Rowles.LeanLucene.Index;
 using Rowles.LeanLucene.Search;
 using Rowles.LeanLucene.Store;
@@ -10,7 +12,7 @@ namespace Rowles.LeanLucene.Tests.Analysis;
 
 /// <summary>
 /// End-to-end integration tests verifying that custom analysers (SynonymFilter,
-/// NGramTokenizer, EdgeNGramTokenizer, AccentFoldingFilter) work correctly through
+/// NGramTokeniser, EdgeNGramTokeniser, AccentFoldingFilter) work correctly through
 /// the full index→search pipeline.
 /// </summary>
 [Trait("Category", "Analysis")]
@@ -134,12 +136,12 @@ public sealed class AnalysisIntegrationTests : IClassFixture<TestDirectoryFixtur
         }
     }
 
-    // ── NGramTokenizer end-to-end ───────────────────────────────────────────
+    // ── NGramTokeniser end-to-end ───────────────────────────────────────────
 
     [Fact]
-    public void NGramTokenizer_Index_PartialWordSearchFindsDocument()
+    public void NGramTokeniser_Index_PartialWordSearchFindsDocument()
     {
-        var analyser = new Analyser(new NGramTokenizer(2, 3));
+        var analyser = new Analyser(new NGramTokeniser(2, 3));
         var dir = new MMapDirectory(SubDir("ngram_e2e"));
         var config = new IndexWriterConfig { DefaultAnalyser = analyser };
 
@@ -165,9 +167,9 @@ public sealed class AnalysisIntegrationTests : IClassFixture<TestDirectoryFixtur
     }
 
     [Fact]
-    public void NGramTokenizer_BigramOnIndex_MatchesExpectedDocs()
+    public void NGramTokeniser_BigramOnIndex_MatchesExpectedDocs()
     {
-        var analyser = new Analyser(new NGramTokenizer(2, 2));
+        var analyser = new Analyser(new NGramTokeniser(2, 2));
         var dir = new MMapDirectory(SubDir("ngram_bigram"));
         var config = new IndexWriterConfig { DefaultAnalyser = analyser };
 
@@ -196,12 +198,12 @@ public sealed class AnalysisIntegrationTests : IClassFixture<TestDirectoryFixtur
         Assert.Equal(2, results.TotalHits);
     }
 
-    // ── EdgeNGramTokenizer end-to-end ───────────────────────────────────────
+    // ── EdgeNGramTokeniser end-to-end ───────────────────────────────────────
 
     [Fact]
-    public void EdgeNGramTokenizer_PrefixAutocomplete_TermQueryFindsDoc()
+    public void EdgeNGramTokeniser_PrefixAutocomplete_TermQueryFindsDoc()
     {
-        var analyser = new Analyser(new EdgeNGramTokenizer(1, 4));
+        var analyser = new Analyser(new EdgeNGramTokeniser(1, 4));
         var dir = new MMapDirectory(SubDir("edgengram_e2e"));
         var config = new IndexWriterConfig { DefaultAnalyser = analyser };
 
@@ -227,9 +229,9 @@ public sealed class AnalysisIntegrationTests : IClassFixture<TestDirectoryFixtur
     }
 
     [Fact]
-    public void EdgeNGramTokenizer_NonEdgeSubstring_DoesNotMatch()
+    public void EdgeNGramTokeniser_NonEdgeSubstring_DoesNotMatch()
     {
-        var analyser = new Analyser(new EdgeNGramTokenizer(2, 3));
+        var analyser = new Analyser(new EdgeNGramTokeniser(2, 3));
         var dir = new MMapDirectory(SubDir("edgengram_nonedge"));
         var config = new IndexWriterConfig { DefaultAnalyser = analyser };
 

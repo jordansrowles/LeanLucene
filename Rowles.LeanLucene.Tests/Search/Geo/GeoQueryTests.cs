@@ -1,4 +1,5 @@
 using Rowles.LeanLucene.Document;
+using Rowles.LeanLucene.Document.Fields;
 using Rowles.LeanLucene.Search;
 using Rowles.LeanLucene.Search.Geo;
 using Rowles.LeanLucene.Store;

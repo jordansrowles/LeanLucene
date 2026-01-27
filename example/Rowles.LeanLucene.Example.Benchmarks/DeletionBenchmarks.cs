@@ -7,8 +7,8 @@ using Lucene.Net.Util;
 using IODirectory = System.IO.Directory;
 using LeanDocument = Rowles.LeanLucene.Document.LeanDocument;
 using LeanMMapDirectory = Rowles.LeanLucene.Store.MMapDirectory;
-using LeanStringField = Rowles.LeanLucene.Document.StringField;
-using LeanTextField = Rowles.LeanLucene.Document.TextField;
+using LeanStringField = Rowles.LeanLucene.Document.Fields.StringField;
+using LeanTextField = Rowles.LeanLucene.Document.Fields.TextField;
 using LuceneStringField = Lucene.Net.Documents.StringField;
 using LuceneTextField = Lucene.Net.Documents.TextField;
 

@@ -1,3 +1,5 @@
+using Rowles.LeanLucene.Analysis.Tokenisers;
+
 namespace Rowles.LeanLucene.Analysis;
 
 /// <summary>

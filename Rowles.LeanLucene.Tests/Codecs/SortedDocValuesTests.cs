@@ -1,4 +1,4 @@
-using Rowles.LeanLucene.Codecs;
+using Rowles.LeanLucene.Codecs.DocValues;
 using Rowles.LeanLucene.Store;
 
 namespace Rowles.LeanLucene.Tests.Codecs;

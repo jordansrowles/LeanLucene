@@ -35,7 +35,7 @@ public static class Bm25Scorer
     }
 
     /// <summary>
-    /// Scores with precomputed IDF and normalization factor. Avoids per-doc division.
+    /// Scores with precomputed IDF and normalisation factor. Avoids per-doc division.
     /// </summary>
     [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
     public static float ScorePrecomputed(float idf, float k1BOverAvgDL, int termFreq, int docLength)

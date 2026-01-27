@@ -1,4 +1,5 @@
 using Rowles.LeanLucene.Document;
+using Rowles.LeanLucene.Document.Fields;
 using Rowles.LeanLucene.Index;
 using Rowles.LeanLucene.Search;
 using Rowles.LeanLucene.Store;
@@ -424,7 +425,7 @@ public sealed class SearchTests : IClassFixture<TestDirectoryFixture>
         var results = searcher.Search(new TermQuery("body", "search"), 10);
 
         Assert.Equal(2, results.TotalHits);
-        // Shorter doc should rank higher (BM25 length normalization)
+        // Shorter doc should rank higher (BM25 length normalisation)
         Assert.Equal(0, results.ScoreDocs[0].DocId);
     }
 

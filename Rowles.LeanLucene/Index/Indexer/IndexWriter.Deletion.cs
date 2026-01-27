@@ -1,4 +1,5 @@
 using Rowles.LeanLucene.Codecs;
+using Rowles.LeanLucene.Codecs.StoredFields;
 using Rowles.LeanLucene.Store;
 
 namespace Rowles.LeanLucene.Index.Indexer;

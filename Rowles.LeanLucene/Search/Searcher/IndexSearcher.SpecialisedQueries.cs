@@ -1,11 +1,11 @@
-using Rowles.LeanLucene.Codecs;
+using Rowles.LeanLucene.Codecs.Postings;
 using Rowles.LeanLucene.Index;
 using Rowles.LeanLucene.Search.Geo;
 
 namespace Rowles.LeanLucene.Search.Searcher;
 
 /// <summary>
-/// Partial class containing specialized query execution methods (Prefix, Wildcard, Fuzzy, Range, Regex, etc.).
+/// Partial class containing specialised query execution methods (Prefix, Wildcard, Fuzzy, Range, Regex, etc.).
 /// </summary>
 public sealed partial class IndexSearcher
 {

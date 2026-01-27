@@ -1,5 +1,5 @@
 using System.Runtime.CompilerServices;
-using Rowles.LeanLucene.Codecs;
+using Rowles.LeanLucene.Codecs.Postings;
 using Rowles.LeanLucene.Index;
 using Rowles.LeanLucene.Search.Geo;
 

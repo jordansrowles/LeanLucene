@@ -1,3 +1,6 @@
+using Rowles.LeanLucene.Analysis.Stemmers;
+using Rowles.LeanLucene.Analysis.Tokenisers;
+
 namespace Rowles.LeanLucene.Analysis;
 
 /// <summary>

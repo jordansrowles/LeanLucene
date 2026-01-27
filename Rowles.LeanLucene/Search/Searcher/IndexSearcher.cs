@@ -1,7 +1,7 @@
 using System.Buffers;
 using System.Runtime.CompilerServices;
 using Rowles.LeanLucene.Analysis;
-using Rowles.LeanLucene.Codecs;
+using Rowles.LeanLucene.Codecs.Postings;
 using Rowles.LeanLucene.Index;
 using Rowles.LeanLucene.Store;
 

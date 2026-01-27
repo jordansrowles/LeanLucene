@@ -1,5 +1,6 @@
-using Rowles.LeanLucene.Codecs;
+using Rowles.LeanLucene.Codecs.Postings;
 using Rowles.LeanLucene.Document;
+using Rowles.LeanLucene.Document.Fields;
 using Rowles.LeanLucene.Store;
 
 namespace Rowles.LeanLucene.Tests.Search;

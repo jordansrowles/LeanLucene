@@ -1,6 +1,8 @@
 using Rowles.LeanLucene.Analysis;
 using Rowles.LeanLucene.Codecs;
+using Rowles.LeanLucene.Codecs.StoredFields;
 using Rowles.LeanLucene.Document;
+using Rowles.LeanLucene.Document.Fields;
 using Rowles.LeanLucene.Index;
 using Rowles.LeanLucene.Store;
 

@@ -1,5 +1,6 @@
 using Rowles.LeanLucene.Analysis;
 using Rowles.LeanLucene.Document;
+using Rowles.LeanLucene.Document.Fields;
 
 namespace Rowles.LeanLucene.Index.Indexer;
 

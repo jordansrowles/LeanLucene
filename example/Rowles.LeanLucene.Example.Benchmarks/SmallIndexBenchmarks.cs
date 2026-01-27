@@ -3,8 +3,8 @@ using Rowles.LeanLucene.Index;
 using Rowles.LeanLucene.Search;
 using LeanDocument = Rowles.LeanLucene.Document.LeanDocument;
 using LeanMMapDirectory = Rowles.LeanLucene.Store.MMapDirectory;
-using LeanStringField = Rowles.LeanLucene.Document.StringField;
-using LeanTextField = Rowles.LeanLucene.Document.TextField;
+using LeanStringField = Rowles.LeanLucene.Document.Fields.StringField;
+using LeanTextField = Rowles.LeanLucene.Document.Fields.TextField;
 
 namespace Rowles.LeanLucene.Example.Benchmarks;
 

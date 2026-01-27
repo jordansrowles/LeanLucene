@@ -1,5 +1,5 @@
 using System.Runtime.CompilerServices;
-using Rowles.LeanLucene.Codecs;
+using Rowles.LeanLucene.Codecs.DocValues;
 
 namespace Rowles.LeanLucene.Index.Segment;
 

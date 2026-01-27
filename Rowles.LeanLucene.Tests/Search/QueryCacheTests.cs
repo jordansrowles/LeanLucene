@@ -1,4 +1,5 @@
 using Rowles.LeanLucene.Document;
+using Rowles.LeanLucene.Document.Fields;
 using Rowles.LeanLucene.Index.Indexer;
 using Rowles.LeanLucene.Search;
 using Rowles.LeanLucene.Search.Scoring;

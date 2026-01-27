@@ -2,7 +2,9 @@ using System.Runtime.CompilerServices;
 using System.Text.Json;
 using Rowles.LeanLucene.Analysis;
 using Rowles.LeanLucene.Codecs;
+using Rowles.LeanLucene.Codecs.StoredFields;
 using Rowles.LeanLucene.Document;
+using Rowles.LeanLucene.Document.Fields;
 using Rowles.LeanLucene.Store;
 
 namespace Rowles.LeanLucene.Index.Indexer;
