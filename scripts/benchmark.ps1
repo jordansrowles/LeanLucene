@@ -247,7 +247,7 @@ if ($DocCount -gt 0) {
 }
 
 $projectPath = [System.IO.Path]::GetFullPath(
-    (Join-Path $PSScriptRoot "..\example\Rowles.LeanLucene.Example.Benchmarks\Rowles.LeanLucene.Example.Benchmarks.csproj")
+    (Join-Path $PSScriptRoot "..\src\Rowles.LeanLucene.Example.Benchmarks\Rowles.LeanLucene.Example.Benchmarks.csproj")
 )
 
 if (-not (Test-Path $projectPath)) {
