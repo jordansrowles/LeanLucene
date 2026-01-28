@@ -1,0 +1,11 @@
+using Rowles.LeanLucene.Analysis.Filters;
+
+namespace Rowles.LeanLucene.Analysis.Stemmers;
+
+/// <summary>
+/// English stemmer wrapping the existing Porter stemmer implementation.
+/// </summary>
+public sealed class EnglishStemmer : IStemmer
+{
+    public string Stem(string word) => PorterStemmerFilter.Stem(word);
+}
