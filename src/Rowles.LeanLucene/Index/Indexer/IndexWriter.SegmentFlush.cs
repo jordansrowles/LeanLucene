@@ -252,8 +252,9 @@ public sealed partial class IndexWriter
             if (existingExtensions.Length > 0)
             {
                 CompoundFileWriter.Write(basePath + ".cfs", basePath, existingExtensions);
-                foreach (var ext in existingExtensions)
-                    try { File.Delete(basePath + ext); } catch { /* best-effort */ }
+                // Individual files are kept because SegmentReader does not yet
+                // support reading from compound files.  Once the read path is
+                // compound-aware, the originals can be cleaned up here.
             }
         }
 

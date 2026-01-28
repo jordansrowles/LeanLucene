@@ -20,14 +20,17 @@ public sealed class StandardAnalyser : IAnalyser
     private char[] _lowerBuf = new char[64];
     private readonly List<(int Start, int End)> _offsetBuf = new();
     private readonly List<Token> _tokensBuf = new();
-    // Intern cache for frequently seen token strings to reduce per-token string allocation
-    private readonly Dictionary<int, string> _internCache = new();
+    // Intern cache keyed by string value to avoid hash-collision misses.
+    // Uses AlternateLookup<ReadOnlySpan<char>> for zero-alloc cache hits.
+    private readonly Dictionary<string, string> _internCache = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, string>.AlternateLookup<ReadOnlySpan<char>> _internLookup;
     private readonly int _maxInternCacheSize;
 
     public StandardAnalyser(int internCacheSize = 4096, IEnumerable<string>? stopWords = null)
     {
         _maxInternCacheSize = internCacheSize;
         _stopWordFilter = new StopWordFilter(stopWords);
+        _internLookup = _internCache.GetAlternateLookup<ReadOnlySpan<char>>();
     }
 
     public List<Token> Analyse(ReadOnlySpan<char> input)
@@ -54,9 +57,8 @@ public sealed class StandardAnalyser : IAnalyser
             var lowerSpan = _lowerBuf.AsSpan(0, len);
 
             // Try intern cache to reuse string objects for repeated tokens
-            int hash = string.GetHashCode(lowerSpan);
             string text;
-            if (_internCache.TryGetValue(hash, out var cached) && cached.AsSpan().SequenceEqual(lowerSpan))
+            if (_internLookup.TryGetValue(lowerSpan, out var cached))
             {
                 text = cached;
             }
@@ -64,7 +66,7 @@ public sealed class StandardAnalyser : IAnalyser
             {
                 text = new string(lowerSpan);
                 if (_internCache.Count < _maxInternCacheSize)
-                    _internCache[hash] = text;
+                    _internLookup[lowerSpan] = text;
             }
 
             _tokensBuf.Add(new Token(text, start, end));

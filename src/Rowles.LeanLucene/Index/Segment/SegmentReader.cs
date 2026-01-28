@@ -20,6 +20,7 @@ public sealed partial class SegmentReader : IDisposable
     private readonly Dictionary<string, int[]> _fieldLengthsPerField;
     private readonly VectorReader? _vectorReader;
     private readonly Dictionary<(string, string), string> _qualifiedTermCache = new();
+    private const int MaxQualifiedTermCacheSize = 8192;
     private LiveDocs? _liveDocs;
 
     // 64-entry open-addressing term offset cache
@@ -180,6 +181,8 @@ public sealed partial class SegmentReader : IDisposable
         var key = (field, term);
         if (!_qualifiedTermCache.TryGetValue(key, out var qt))
         {
+            if (_qualifiedTermCache.Count >= MaxQualifiedTermCacheSize)
+                _qualifiedTermCache.Clear();
             qt = string.Concat(field, "\x00", term);
             _qualifiedTermCache[key] = qt;
         }

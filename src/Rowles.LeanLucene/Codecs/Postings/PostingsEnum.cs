@@ -8,6 +8,12 @@ namespace Rowles.LeanLucene.Codecs.Postings;
 /// Forward-only cursor over a postings list. Decodes doc IDs and frequencies
 /// once into ArrayPool-rented buffers, then yields (DocId, Freq) pairs via MoveNext().
 /// Optionally decodes positions when created via <see cref="CreateWithPositions"/>.
+/// 
+/// <para><b>Lifetime contract:</b> When using the lazy position path, this struct holds a raw
+/// <c>byte*</c> pointer into a memory-mapped <see cref="IndexInput"/>. The source input
+/// (<see cref="_sourceInput"/>) must remain open and un-disposed for the entire lifetime
+/// of this PostingsEnum. Callers must not dispose the IndexInput while any PostingsEnum
+/// referencing it is still alive.</para>
 /// </summary>
 public unsafe struct PostingsEnum : IDisposable
 {
@@ -159,7 +165,7 @@ public unsafe struct PostingsEnum : IDisposable
     /// </summary>
     public ReadOnlySpan<int> GetCurrentPositions()
     {
-        if (_index < 0 || _index >= _count)
+        if (_disposed || _index < 0 || _index >= _count)
             return ReadOnlySpan<int>.Empty;
 
         // Eager path (pre-decoded positions)
