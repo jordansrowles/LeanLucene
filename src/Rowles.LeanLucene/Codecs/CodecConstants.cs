@@ -10,7 +10,7 @@ public static class CodecConstants
     public const int Magic = 0x4C4C_4E31; // "LLN1" in ASCII
 
     // Per-format version numbers — increment when the binary layout changes.
-    public const byte TermDictionaryVersion = 1;
+    public const byte TermDictionaryVersion = 2;
     public const byte PostingsVersion = 1;
     public const byte NormsVersion = 1;
     public const byte VectorVersion = 1;
