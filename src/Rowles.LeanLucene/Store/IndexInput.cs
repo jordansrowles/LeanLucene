@@ -144,6 +144,46 @@ public sealed unsafe class IndexInput : IDisposable
         return value;
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public double ReadDouble()
+    {
+        if (_position + sizeof(double) > _length)
+            ThrowEndOfStream();
+        double value = Unsafe.ReadUnaligned<double>(_ptr + _position);
+        _position += sizeof(double);
+        return value;
+    }
+
+    /// <summary>
+    /// Reads a length-prefixed UTF-8 string as written by <see cref="BinaryWriter.Write(string)"/>.
+    /// The length prefix uses 7-bit encoded integer format.
+    /// </summary>
+    public string ReadLengthPrefixedString()
+    {
+        int byteLength = Read7BitEncodedInt();
+        if (byteLength == 0) return string.Empty;
+        if (_position + byteLength > _length)
+            ThrowEndOfStream();
+        var span = new ReadOnlySpan<byte>(_ptr + _position, byteLength);
+        _position += byteLength;
+        return System.Text.Encoding.UTF8.GetString(span);
+    }
+
+    private int Read7BitEncodedInt()
+    {
+        int result = 0;
+        int shift = 0;
+        byte b;
+        do
+        {
+            if (_position >= _length) ThrowEndOfStream();
+            b = _ptr[_position++];
+            result |= (b & 0x7F) << shift;
+            shift += 7;
+        } while ((b & 0x80) != 0);
+        return result;
+    }
+
     /// <summary>
     /// Reads <paramref name="charCount"/> chars encoded as UTF-8 (as written by BinaryWriter.Write(char[])).
     /// Returns a newly allocated string. Used for one-time skip index loading.

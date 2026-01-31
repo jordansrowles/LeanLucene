@@ -1,4 +1,5 @@
 using System.Collections;
+using Rowles.LeanLucene.Store;
 
 namespace Rowles.LeanLucene.Index.Segment;
 
@@ -54,9 +55,9 @@ public sealed class LiveDocs
 
     public static LiveDocs Deserialise(string filePath, int maxDoc)
     {
-        using var reader = new BinaryReader(File.OpenRead(filePath));
-        var length = reader.ReadInt32();
-        var bytes = reader.ReadBytes((length + 7) / 8);
+        using var input = new IndexInput(filePath);
+        var length = input.ReadInt32();
+        var bytes = input.ReadBytes((length + 7) / 8);
         var bits = new BitArray(bytes) { Length = length };
         return new LiveDocs(bits);
     }

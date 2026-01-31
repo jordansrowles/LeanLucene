@@ -54,37 +54,35 @@ public static class BKDWriter
 
 /// <summary>
 /// Reads a 1-dimensional BKD tree for efficient numeric range lookups.
+/// Uses memory-mapped IndexInput for zero-copy seeks.
 /// </summary>
 public sealed class BKDReader : IDisposable
 {
-    private readonly FileStream _fs;
-    private readonly BinaryReader _reader;
+    private readonly Store.IndexInput _input;
     private readonly Dictionary<string, long> _fieldOffsets;
 
-    private BKDReader(FileStream fs, BinaryReader reader, Dictionary<string, long> fieldOffsets)
+    private BKDReader(Store.IndexInput input, Dictionary<string, long> fieldOffsets)
     {
-        _fs = fs;
-        _reader = reader;
+        _input = input;
         _fieldOffsets = fieldOffsets;
     }
 
     public static BKDReader Open(string filePath)
     {
-        var fs = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read);
-        var reader = new BinaryReader(fs, System.Text.Encoding.UTF8, leaveOpen: true);
+        var input = new Store.IndexInput(filePath);
 
-        CodecConstants.ValidateHeader(reader, CodecConstants.BKDVersion, "BKD tree (.bkd)");
+        CodecConstants.ValidateHeader(input, CodecConstants.BKDVersion, "BKD tree (.bkd)");
 
-        int fieldCount = reader.ReadInt32();
+        int fieldCount = input.ReadInt32();
         var offsets = new Dictionary<string, long>(fieldCount, StringComparer.Ordinal);
         for (int f = 0; f < fieldCount; f++)
         {
-            string fieldName = reader.ReadString();
-            offsets[fieldName] = fs.Position;
-            SkipNode(reader); // skip past this field's tree
+            string fieldName = input.ReadLengthPrefixedString();
+            offsets[fieldName] = input.Position;
+            SkipNode(input);
         }
 
-        return new BKDReader(fs, reader, offsets);
+        return new BKDReader(input, offsets);
     }
 
     /// <summary>Returns all (docId, value) pairs in [min, max] range for the given field.</summary>
@@ -94,62 +92,57 @@ public sealed class BKDReader : IDisposable
         if (!_fieldOffsets.TryGetValue(field, out long offset))
             return results;
 
-        _fs.Seek(offset, SeekOrigin.Begin);
-        SearchNode(_reader, min, max, results);
+        _input.Seek(offset);
+        SearchNode(_input, min, max, results);
         return results;
     }
 
     public bool HasField(string field) => _fieldOffsets.ContainsKey(field);
 
-    private static void SearchNode(BinaryReader reader, double min, double max, List<(int, double)> results)
+    private static void SearchNode(Store.IndexInput input, double min, double max, List<(int, double)> results)
     {
-        byte marker = reader.ReadByte();
+        byte marker = input.ReadByte();
         if (marker == 1) // leaf
         {
-            int count = reader.ReadInt32();
+            int count = input.ReadInt32();
             for (int i = 0; i < count; i++)
             {
-                double value = reader.ReadDouble();
-                int docId = reader.ReadInt32();
+                double value = input.ReadDouble();
+                int docId = input.ReadInt32();
                 if (value >= min && value <= max)
                     results.Add((docId, value));
             }
         }
         else // internal
         {
-            double splitValue = reader.ReadDouble();
+            double splitValue = input.ReadDouble();
             if (min <= splitValue)
-                SearchNode(reader, min, max, results); // left child
+                SearchNode(input, min, max, results);
             else
-                SkipNode(reader); // skip left child
+                SkipNode(input);
 
             if (max >= splitValue)
-                SearchNode(reader, min, max, results); // right child
+                SearchNode(input, min, max, results);
             else
-                SkipNode(reader); // skip right child
+                SkipNode(input);
         }
     }
 
-    private static void SkipNode(BinaryReader reader)
+    private static void SkipNode(Store.IndexInput input)
     {
-        byte marker = reader.ReadByte();
+        byte marker = input.ReadByte();
         if (marker == 1) // leaf
         {
-            int count = reader.ReadInt32();
-            // each entry = 8 bytes (double) + 4 bytes (int) = 12 bytes
-            reader.BaseStream.Seek(count * 12L, SeekOrigin.Current);
+            int count = input.ReadInt32();
+            input.Seek(input.Position + count * 12L);
         }
         else // internal
         {
-            reader.ReadDouble(); // split value
-            SkipNode(reader); // left child
-            SkipNode(reader); // right child
+            input.ReadDouble(); // split value
+            SkipNode(input);
+            SkipNode(input);
         }
     }
 
-    public void Dispose()
-    {
-        _reader.Dispose();
-        _fs.Dispose();
-    }
+    public void Dispose() => _input.Dispose();
 }

@@ -53,39 +53,34 @@ public static class TermVectorsWriter
     }
 }
 
-/// <summary>Reads per-document term vectors from .tvd/.tvx files.</summary>
+/// <summary>Reads per-document term vectors from .tvd/.tvx files using memory-mapped I/O.</summary>
 public sealed class TermVectorsReader : IDisposable
 {
-    private readonly FileStream _tvdFs;
-    private readonly BinaryReader _tvdReader;
+    private readonly Store.IndexInput _tvdInput;
     private readonly long[] _offsets;
 
-    private TermVectorsReader(FileStream tvdFs, BinaryReader tvdReader, long[] offsets)
+    private TermVectorsReader(Store.IndexInput tvdInput, long[] offsets)
     {
-        _tvdFs = tvdFs;
-        _tvdReader = tvdReader;
+        _tvdInput = tvdInput;
         _offsets = offsets;
     }
 
     public static TermVectorsReader Open(string tvdPath, string tvxPath)
     {
-        using var tvxFs = new FileStream(tvxPath, FileMode.Open, FileAccess.Read, FileShare.Read);
-        using var tvxReader = new BinaryReader(tvxFs, System.Text.Encoding.UTF8, leaveOpen: false);
+        // Read offsets from .tvx index file
+        using var tvxInput = new Store.IndexInput(tvxPath);
+        CodecConstants.ValidateHeader(tvxInput, CodecConstants.TermVectorsVersion, "term vectors index (.tvx)");
 
-        CodecConstants.ValidateHeader(tvxReader, CodecConstants.TermVectorsVersion, "term vectors index (.tvx)");
-
-        int docCount = tvxReader.ReadInt32();
+        int docCount = tvxInput.ReadInt32();
         var offsets = new long[docCount];
         for (int i = 0; i < docCount; i++)
-            offsets[i] = tvxReader.ReadInt64();
+            offsets[i] = tvxInput.ReadInt64();
 
-        var tvdFs = new FileStream(tvdPath, FileMode.Open, FileAccess.Read, FileShare.Read);
-        var tvdReader = new BinaryReader(tvdFs, System.Text.Encoding.UTF8, leaveOpen: true);
-        
-        // Validate .tvd header
-        CodecConstants.ValidateHeader(tvdReader, CodecConstants.TermVectorsVersion, "term vectors data (.tvd)");
-        
-        return new TermVectorsReader(tvdFs, tvdReader, offsets);
+        // Open .tvd data file as mmap
+        var tvdInput = new Store.IndexInput(tvdPath);
+        CodecConstants.ValidateHeader(tvdInput, CodecConstants.TermVectorsVersion, "term vectors data (.tvd)");
+
+        return new TermVectorsReader(tvdInput, offsets);
     }
 
     /// <summary>Returns all term vectors for a document across all stored fields.</summary>
@@ -94,23 +89,23 @@ public sealed class TermVectorsReader : IDisposable
         if ((uint)docId >= (uint)_offsets.Length)
             return new();
 
-        _tvdFs.Seek(_offsets[docId], SeekOrigin.Begin);
-        int fieldCount = _tvdReader.ReadInt32();
+        _tvdInput.Seek(_offsets[docId]);
+        int fieldCount = _tvdInput.ReadInt32();
         var result = new Dictionary<string, List<TermVectorEntry>>(fieldCount, StringComparer.Ordinal);
 
         for (int f = 0; f < fieldCount; f++)
         {
-            string fieldName = _tvdReader.ReadString();
-            int termCount = _tvdReader.ReadInt32();
+            string fieldName = _tvdInput.ReadLengthPrefixedString();
+            int termCount = _tvdInput.ReadInt32();
             var entries = new List<TermVectorEntry>(termCount);
             for (int t = 0; t < termCount; t++)
             {
-                string term = _tvdReader.ReadString();
-                int freq = _tvdReader.ReadInt32();
-                int posCount = _tvdReader.ReadInt32();
+                string term = _tvdInput.ReadLengthPrefixedString();
+                int freq = _tvdInput.ReadInt32();
+                int posCount = _tvdInput.ReadInt32();
                 var positions = new int[posCount];
                 for (int p = 0; p < posCount; p++)
-                    positions[p] = _tvdReader.ReadInt32();
+                    positions[p] = _tvdInput.ReadInt32();
                 entries.Add(new TermVectorEntry(term, freq, positions));
             }
             result[fieldName] = entries;
@@ -126,9 +121,5 @@ public sealed class TermVectorsReader : IDisposable
         return all.GetValueOrDefault(field);
     }
 
-    public void Dispose()
-    {
-        _tvdReader.Dispose();
-        _tvdFs.Dispose();
-    }
+    public void Dispose() => _tvdInput.Dispose();
 }
