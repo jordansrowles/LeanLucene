@@ -35,7 +35,7 @@ public sealed partial class SegmentReader
         if (!TryGetCachedOffset(qualifiedTerm, out long offset))
             return PostingsEnum.Empty;
 
-        return PostingsEnum.CreateWithPositions(_posInput, offset);
+        return PostingsEnum.CreateWithPositions(_posInput, offset, _postingsVersion);
     }
 
     /// <summary>Returns positional data for a term in a specific document, or null if unavailable.</summary>
@@ -157,13 +157,26 @@ public sealed partial class SegmentReader
         }
 
         bool hasPositions = _posInput.ReadBoolean();
+
+        bool hasPayloads = false;
+        if (_postingsVersion >= 2)
+            hasPayloads = _posInput.ReadBoolean();
+
         if (!hasPositions) return null;
 
         for (int i = 0; i < targetIndex; i++)
         {
             int posCount = _posInput.ReadVarInt();
             for (int j = 0; j < posCount; j++)
-                _posInput.ReadVarInt();
+            {
+                _posInput.ReadVarInt(); // position delta
+                if (hasPayloads)
+                {
+                    int payloadLen = _posInput.ReadVarInt();
+                    if (payloadLen > 0)
+                        _posInput.Seek(_posInput.Position + payloadLen);
+                }
+            }
         }
 
         int targetPosCount = _posInput.ReadVarInt();
@@ -173,6 +186,12 @@ public sealed partial class SegmentReader
         {
             prevPos += _posInput.ReadVarInt();
             positions[i] = prevPos;
+            if (hasPayloads)
+            {
+                int payloadLen = _posInput.ReadVarInt();
+                if (payloadLen > 0)
+                    _posInput.Seek(_posInput.Position + payloadLen);
+            }
         }
 
         return positions;

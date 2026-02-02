@@ -195,6 +195,19 @@ public sealed class TermDictionaryReader : IDisposable
         return GetTermsWithPrefix(fieldPrefix.AsSpan());
     }
 
+    /// <summary>Enumerates all terms and their postings offsets. Used by SegmentMerger.</summary>
+    public List<(string Term, long Offset)> EnumerateAllTerms()
+    {
+        if (_fstReader is not null)
+            return _fstReader.EnumerateAllTerms();
+
+        // v1 fallback
+        var results = new List<(string, long)>(_allTerms!.Length);
+        for (int i = 0; i < _allTerms.Length; i++)
+            results.Add((_allTerms[i], _allOffsets![i]));
+        return results;
+    }
+
     // ── Range Scan ──────────────────────────────────────────────────────────
 
     public List<(string Term, long Offset)> GetTermsInRange(

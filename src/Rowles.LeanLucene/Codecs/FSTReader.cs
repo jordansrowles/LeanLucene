@@ -164,6 +164,20 @@ internal sealed class FSTReader
         return GetTermsWithPrefix(fieldPrefix.AsSpan());
     }
 
+    /// <summary>Enumerates all terms and their postings offsets in sorted order.</summary>
+    public List<(string Term, long Offset)> EnumerateAllTerms()
+    {
+        var results = new List<(string, long)>(_termCount);
+        for (int i = 0; i < _termCount; i++)
+        {
+            int start = _keyStarts[i];
+            int len = _keyStarts[i + 1] - start;
+            string term = System.Text.Encoding.UTF8.GetString(_keyData, start, len);
+            results.Add((term, _offsets[i]));
+        }
+        return results;
+    }
+
     /// <summary>Returns terms whose bare value falls within a lexicographic range.</summary>
     public List<(string Term, long Offset)> GetTermsInRange(
         string fieldPrefix,

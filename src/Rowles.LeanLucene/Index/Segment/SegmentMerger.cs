@@ -279,10 +279,11 @@ public sealed class SegmentMerger
                     posStream.Write(false);
                 }
 
-                // Preserve positional data through merges
+                // Preserve positional data through merges (v2 format: hasPositions + hasPayloads)
                 if (allPositions.TryGetValue(qt, out var posMap) && posMap.Count > 0)
                 {
                     posStream.Write(true); // hasPositions
+                    posStream.Write(false); // hasPayloads (not preserved through merge yet)
                     foreach (var id in ids)
                     {
                         var positions = posMap.GetValueOrDefault(id, []);
@@ -297,7 +298,8 @@ public sealed class SegmentMerger
                 }
                 else
                 {
-                    posStream.Write(false);
+                    posStream.Write(false); // hasPositions
+                    posStream.Write(false); // hasPayloads
                 }
             }
         }
@@ -361,131 +363,113 @@ public sealed class SegmentMerger
         Dictionary<string, Dictionary<int, int>> allFreqs,
         Dictionary<string, Dictionary<int, int[]>> allPositions)
     {
-        using var dicFs = new FileStream(dicPath, FileMode.Open, FileAccess.Read, FileShare.Read);
-        using var dicBr = new BinaryReader(dicFs, System.Text.Encoding.UTF8, leaveOpen: false);
+        // Use TermDictionaryReader to enumerate terms (handles v1 and v2 .dic format)
+        using var dicReader = TermDictionaryReader.Open(dicPath);
+        var allTerms = dicReader.EnumerateAllTerms();
 
-        int skipCount = dicBr.ReadInt32();
-        for (int i = 0; i < skipCount; i++)
+        // Open .pos file with mmap
+        using var posInput = new Store.IndexInput(posPath);
+        byte postingsVersion = CodecConstants.ReadHeaderVersion(
+            posInput, CodecConstants.PostingsVersion, "postings (.pos)");
+
+        foreach (var (qualifiedTerm, postingsOffset) in allTerms)
         {
-            int termLen = dicBr.ReadInt32();
-            dicBr.ReadChars(termLen);
-            dicBr.ReadInt64();
-        }
+            posInput.Seek(postingsOffset);
 
-        // Open the .pos file once and reuse across all terms
-        using var posFs = new FileStream(posPath, FileMode.Open, FileAccess.Read, FileShare.Read);
-        using var posBr = new BinaryReader(posFs, System.Text.Encoding.UTF8, leaveOpen: false);
+            int count = posInput.ReadInt32();
+            int postingSkipCount = posInput.ReadInt32();
+            if (postingSkipCount > 0)
+                posInput.Seek(posInput.Position + postingSkipCount * 8L);
 
-        // Reusable char buffer for term strings (avoids per-term allocation)
-        var charBuf = ArrayPool<char>.Shared.Rent(256);
-        try
-        {
-        while (dicFs.Position < dicFs.Length)
-        {
-            int termLen;
-            try { termLen = dicBr.ReadInt32(); }
-            catch (EndOfStreamException) { break; }
-
-            // #3: Read chars into pooled buffer, create string once
-            if (termLen > charBuf.Length)
-            {
-                ArrayPool<char>.Shared.Return(charBuf);
-                charBuf = ArrayPool<char>.Shared.Rent(termLen);
-            }
-            for (int c = 0; c < termLen; c++)
-                charBuf[c] = dicBr.ReadChar();
-            long postingsOffset = dicBr.ReadInt64();
-            string qualifiedTerm = new string(charBuf, 0, termLen);
-
-            posFs.Seek(postingsOffset, SeekOrigin.Begin);
-
-            int count = posBr.ReadInt32();
-            int postingSkipCount = posBr.ReadInt32();
-            // Skip past skip entries (each is 2 × int32 = 8 bytes)
-            posFs.Seek(postingSkipCount * 8L, SeekOrigin.Current);
-
-            // #7: Use ArrayPool for per-term arrays
             var oldIds = ArrayPool<int>.Shared.Rent(count);
             var freqs = ArrayPool<int>.Shared.Rent(count);
             try
             {
-            int prev = 0;
-            for (int j = 0; j < count; j++)
-            {
-                int delta = PostingsReader.ReadVarInt(posBr);
-                prev += delta;
-                oldIds[j] = prev;
-            }
-
-            bool hasFreqs = posBr.ReadBoolean();
-            if (hasFreqs)
-            {
-                for (int j = 0; j < count; j++)
-                    freqs[j] = PostingsReader.ReadVarInt(posBr);
-            }
-            else
-            {
-                Array.Fill(freqs, 1, 0, count);
-            }
-
-            // Read positional data if present
-            bool hasPositions = posBr.ReadBoolean();
-            int[][]? positions = null;
-            if (hasPositions)
-            {
-                positions = new int[count][];
+                int prev = 0;
                 for (int j = 0; j < count; j++)
                 {
-                    int posCount = PostingsReader.ReadVarInt(posBr);
-                    positions[j] = new int[posCount];
-                    int prevPos = 0;
-                    for (int k = 0; k < posCount; k++)
+                    prev += posInput.ReadVarInt();
+                    oldIds[j] = prev;
+                }
+
+                bool hasFreqs = posInput.ReadBoolean();
+                if (hasFreqs)
+                {
+                    for (int j = 0; j < count; j++)
+                        freqs[j] = posInput.ReadVarInt();
+                }
+                else
+                {
+                    Array.Fill(freqs, 1, 0, count);
+                }
+
+                bool hasPositions = posInput.ReadBoolean();
+
+                bool hasPayloads = false;
+                if (postingsVersion >= 2)
+                    hasPayloads = posInput.ReadBoolean();
+
+                int[][]? positions = null;
+                byte[]?[][]? payloads = null;
+                if (hasPositions)
+                {
+                    positions = new int[count][];
+                    if (hasPayloads) payloads = new byte[]?[count][];
+
+                    for (int j = 0; j < count; j++)
                     {
-                        prevPos += PostingsReader.ReadVarInt(posBr);
-                        positions[j][k] = prevPos;
+                        int posCount = posInput.ReadVarInt();
+                        positions[j] = new int[posCount];
+                        if (hasPayloads) payloads![j] = new byte[]?[posCount];
+                        int prevPos = 0;
+                        for (int k = 0; k < posCount; k++)
+                        {
+                            prevPos += posInput.ReadVarInt();
+                            positions[j][k] = prevPos;
+                            if (hasPayloads)
+                            {
+                                int payloadLen = posInput.ReadVarInt();
+                                if (payloadLen > 0)
+                                    payloads![j][k] = posInput.ReadBytes(payloadLen);
+                            }
+                        }
+                    }
+                }
+
+                if (!allPostings.TryGetValue(qualifiedTerm, out var mergedList))
+                {
+                    mergedList = new List<int>();
+                    allPostings[qualifiedTerm] = mergedList;
+                }
+
+                if (!allFreqs.TryGetValue(qualifiedTerm, out var mergedFreqs))
+                {
+                    mergedFreqs = new Dictionary<int, int>();
+                    allFreqs[qualifiedTerm] = mergedFreqs;
+                }
+
+                if (!allPositions.TryGetValue(qualifiedTerm, out var mergedPositions))
+                {
+                    mergedPositions = new Dictionary<int, int[]>();
+                    allPositions[qualifiedTerm] = mergedPositions;
+                }
+
+                for (int j = 0; j < count; j++)
+                {
+                    if (docIdMap.TryGetValue(oldIds[j], out int newId))
+                    {
+                        mergedList.Add(newId);
+                        mergedFreqs[newId] = freqs[j];
+                        if (positions is not null)
+                            mergedPositions[newId] = positions[j];
                     }
                 }
             }
-
-            if (!allPostings.TryGetValue(qualifiedTerm, out var mergedList))
-            {
-                mergedList = new List<int>();
-                allPostings[qualifiedTerm] = mergedList;
-            }
-
-            if (!allFreqs.TryGetValue(qualifiedTerm, out var mergedFreqs))
-            {
-                mergedFreqs = new Dictionary<int, int>();
-                allFreqs[qualifiedTerm] = mergedFreqs;
-            }
-
-            if (!allPositions.TryGetValue(qualifiedTerm, out var mergedPositions))
-            {
-                mergedPositions = new Dictionary<int, int[]>();
-                allPositions[qualifiedTerm] = mergedPositions;
-            }
-
-            for (int j = 0; j < count; j++)
-            {
-                if (docIdMap.TryGetValue(oldIds[j], out int newId))
-                {
-                    mergedList.Add(newId);
-                    mergedFreqs[newId] = freqs[j];
-                    if (positions is not null)
-                        mergedPositions[newId] = positions[j];
-                }
-            }
-            } // try oldIds/freqs
             finally
             {
                 ArrayPool<int>.Shared.Return(oldIds);
                 ArrayPool<int>.Shared.Return(freqs);
             }
-        }
-        } // try charBuf
-        finally
-        {
-            ArrayPool<char>.Shared.Return(charBuf);
         }
 
         foreach (var (_, list) in allPostings)

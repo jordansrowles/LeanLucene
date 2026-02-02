@@ -105,6 +105,10 @@ public sealed partial class IndexWriter
 
                 bool hasPositions = acc.HasPositions;
                 posOutput.WriteBoolean(hasPositions);
+
+                bool hasPayloads = acc.HasPayloads;
+                posOutput.WriteBoolean(hasPayloads);
+
                 if (hasPositions)
                 {
                     for (int i = 0; i < ids.Length; i++)
@@ -112,10 +116,24 @@ public sealed partial class IndexWriter
                         var positions = acc.GetPositions(i);
                         posOutput.WriteVarInt(positions.Length);
                         int prevPos = 0;
-                        foreach (var p in positions)
+                        for (int pi = 0; pi < positions.Length; pi++)
                         {
-                            posOutput.WriteVarInt(p - prevPos);
-                            prevPos = p;
+                            posOutput.WriteVarInt(positions[pi] - prevPos);
+                            prevPos = positions[pi];
+
+                            if (hasPayloads)
+                            {
+                                var payload = acc.GetPayload(i, pi);
+                                if (payload is { Length: > 0 })
+                                {
+                                    posOutput.WriteVarInt(payload.Length);
+                                    posOutput.WriteBytes(payload);
+                                }
+                                else
+                                {
+                                    posOutput.WriteVarInt(0);
+                                }
+                            }
                         }
                     }
                 }

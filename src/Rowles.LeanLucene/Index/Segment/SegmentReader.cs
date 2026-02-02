@@ -15,6 +15,7 @@ public sealed partial class SegmentReader : IDisposable
     private readonly SegmentInfo _info;
     private readonly TermDictionaryReader _dicReader;
     private readonly IndexInput _posInput;
+    private readonly byte _postingsVersion;
     private readonly StoredFieldsReader? _storedReader;
     private readonly Dictionary<string, byte[]> _fieldNorms;
     private readonly Dictionary<string, int[]> _fieldLengthsPerField;
@@ -52,6 +53,7 @@ public sealed partial class SegmentReader : IDisposable
         ValidateSegmentFiles(_basePath, info.DocCount);
         _dicReader = TermDictionaryReader.Open(_basePath + ".dic");
         _posInput = directory.OpenInput(info.SegmentId + ".pos");
+        _postingsVersion = PostingsEnum.ValidateFileHeader(_posInput);
 
         var fdtPath = _basePath + ".fdt";
         var fdxPath = _basePath + ".fdx";

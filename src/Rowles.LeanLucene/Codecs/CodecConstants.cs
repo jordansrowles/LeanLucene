@@ -11,7 +11,7 @@ public static class CodecConstants
 
     // Per-format version numbers — increment when the binary layout changes.
     public const byte TermDictionaryVersion = 2;
-    public const byte PostingsVersion = 1;
+    public const byte PostingsVersion = 2;
     public const byte NormsVersion = 1;
     public const byte VectorVersion = 1;
     public const byte StoredFieldsVersion = 4; // was 3 (pre-magic), now 4 with magic header
@@ -37,6 +37,23 @@ public static class CodecConstants
     {
         writer.Write(Magic);
         writer.Write(version);
+    }
+
+    /// <summary>Validates the magic number and returns the version byte from an IndexInput.</summary>
+    public static byte ReadHeaderVersion(Store.IndexInput input, byte maxSupportedVersion, string fileType)
+    {
+        int magic = input.ReadInt32();
+        if (magic != Magic)
+            throw new InvalidDataException(
+                $"Invalid {fileType} file: expected magic 0x{Magic:X8}, got 0x{magic:X8}. " +
+                "The file may be corrupted or from an incompatible version.");
+        byte version = input.ReadByte();
+        if (version > maxSupportedVersion)
+            throw new InvalidDataException(
+                $"Unsupported {fileType} format version {version}. " +
+                $"This build supports up to version {maxSupportedVersion}. " +
+                "Please upgrade LeanLucene.");
+        return version;
     }
 
     /// <summary>Validates the magic number and version from an IndexInput. Throws on mismatch.</summary>
