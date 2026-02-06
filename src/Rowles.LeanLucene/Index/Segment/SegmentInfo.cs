@@ -13,6 +13,18 @@ public sealed class SegmentInfo
     public int CommitGeneration { get; init; }
     public List<string> FieldNames { get; init; } = [];
 
+    /// <summary>
+    /// Whether this segment's data files have been packed into a compound file (.cfs).
+    /// When true, <see cref="SegmentReader"/> reads sub-files from the .cfs container.
+    /// </summary>
+    public bool IsCompoundFile { get; init; }
+
+    /// <summary>
+    /// Serialised index sort fields for this segment. Null if the segment is unsorted.
+    /// Each entry is "Type:FieldName:Descending" (e.g. "Numeric:price:True").
+    /// </summary>
+    public List<string>? IndexSortFields { get; init; }
+
     public void WriteTo(string filePath)
     {
         var json = JsonSerializer.Serialize(this);

@@ -46,6 +46,8 @@ public sealed partial class IndexWriter : IDisposable
     private Dictionary<string, List<string?>> _sortedDocValues = new(StringComparer.Ordinal);
     private readonly Dictionary<string, IAnalyser> _analyserCache = new(StringComparer.Ordinal);
     private readonly List<string> _sortedTermsBuffer = new(capacity: 10000);
+    // Parent bitset for block-join indexing: tracks which buffered doc IDs are parent docs
+    private HashSet<int>? _parentDocIds;
 
     private int _bufferedDocCount;
     private long _estimatedRamBytes;
@@ -103,6 +105,7 @@ public sealed partial class IndexWriter : IDisposable
     public void AddDocument(LeanDocument doc)
     {
         ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
+        _config.Schema?.Validate(doc);
 
         // Apply backpressure if enabled: wait for a semaphore slot before acquiring the write lock.
         // This prevents unbounded memory growth when documents are queued faster than they can be flushed.
@@ -169,6 +172,56 @@ public sealed partial class IndexWriter : IDisposable
                 lock (_writeLock)
                 {
                     _semaphoreSlotsHeld -= documents.Count;
+                }
+            }
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Indexes a block of child documents followed by a parent document atomically.
+    /// The last document in <paramref name="block"/> is the parent; all preceding
+    /// documents are children. Children are stored contiguously before their parent
+    /// in the segment, enabling block-join queries.
+    /// </summary>
+    /// <exception cref="ArgumentException">Thrown if the block has fewer than 2 documents.</exception>
+    public void AddDocumentBlock(IReadOnlyList<LeanDocument> block)
+    {
+        ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
+        if (block.Count < 2)
+            throw new ArgumentException("A document block requires at least one child and one parent document.", nameof(block));
+
+        if (_backpressureSemaphore is not null)
+        {
+            for (int i = 0; i < block.Count; i++)
+                _backpressureSemaphore.Wait();
+        }
+
+        try
+        {
+            lock (_writeLock)
+            {
+                if (_backpressureSemaphore is not null)
+                    _semaphoreSlotsHeld += block.Count;
+
+                // Index all docs in the block contiguously
+                for (int i = 0; i < block.Count; i++)
+                    AddDocumentCore(block[i]);
+
+                // Mark the last doc (the parent) in the parent bitset
+                int parentDocId = _bufferedDocCount - 1;
+                _parentDocIds ??= new HashSet<int>();
+                _parentDocIds.Add(parentDocId);
+            }
+        }
+        catch
+        {
+            if (_backpressureSemaphore is not null)
+            {
+                _backpressureSemaphore.Release(block.Count);
+                lock (_writeLock)
+                {
+                    _semaphoreSlotsHeld -= block.Count;
                 }
             }
             throw;
@@ -323,6 +376,7 @@ public sealed partial class IndexWriter : IDisposable
         _bufferedDocCount = 0;
         _estimatedRamBytes = 0;
         _docTokenCounts.Clear();
+        _parentDocIds = null;
     }
 
     private void LoadLatestCommit()

@@ -36,4 +36,16 @@ public sealed class IndexSearcherConfig
     /// Default: <see cref="Diagnostics.NullMetricsCollector"/> (no-op).
     /// </summary>
     public Diagnostics.IMetricsCollector Metrics { get; set; } = Diagnostics.NullMetricsCollector.Instance;
+
+    /// <summary>
+    /// Optional slow query log. When set, queries exceeding the configured threshold
+    /// are written as JSON lines to the log output. Default: null (disabled).
+    /// </summary>
+    public Diagnostics.SlowQueryLog? SlowQueryLog { get; set; }
+
+    /// <summary>
+    /// Optional per-search event analytics. When set, each search produces a
+    /// <see cref="Diagnostics.SearchEvent"/> in a bounded ring buffer. Default: null (disabled).
+    /// </summary>
+    public Diagnostics.SearchAnalytics? SearchAnalytics { get; set; }
 }

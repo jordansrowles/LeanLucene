@@ -1,4 +1,6 @@
 using Rowles.LeanLucene.Index;
+using Rowles.LeanLucene.Index.Indexer;
+using Rowles.LeanLucene.Search.Scoring;
 
 namespace Rowles.LeanLucene.Search.Searcher;
 
@@ -9,12 +11,21 @@ public sealed partial class IndexSearcher
 {
     /// <summary>
     /// Searches with a custom sort order instead of relevance ranking.
-    /// First finds all matches, then sorts by the specified field.
+    /// If all segments share an index-time sort matching the requested sort,
+    /// results are returned directly with early termination (no post-sort needed).
     /// </summary>
     public TopDocs Search(Query query, int topN, SortField sort)
     {
         if (sort.Type == SortFieldType.Score)
             return Search(query, topN);
+
+        // Check for index-time sorted segments matching the requested sort
+        if (CanEarlyTerminate(sort))
+        {
+            var results = Search(query, topN);
+            // Documents are already in the correct order from sorted segments
+            return results;
+        }
 
         // Collect all matching docs — use a generous limit to capture enough for re-sorting
         var allDocs = Search(query, Math.Max(topN, _totalDocCount));
@@ -28,8 +39,36 @@ public sealed partial class IndexSearcher
             _ => allDocs.ScoreDocs
         };
 
-        var results = sorted.Length > topN ? sorted[..topN] : sorted;
-        return new TopDocs(allDocs.TotalHits, results);
+        var results2 = sorted.Length > topN ? sorted[..topN] : sorted;
+        return new TopDocs(allDocs.TotalHits, results2);
+    }
+
+    /// <summary>
+    /// Returns true if all segments are index-time sorted in an order that
+    /// matches the requested <paramref name="sort"/>, allowing early termination.
+    /// </summary>
+    private bool CanEarlyTerminate(SortField sort)
+    {
+        if (_readers.Count == 0) return false;
+
+        foreach (var reader in _readers)
+        {
+            var sortFields = reader.Info.IndexSortFields;
+            if (sortFields is null || sortFields.Count == 0) return false;
+
+            // The requested sort must match the first index sort field
+            var first = sortFields[0];
+            var parts = first.Split(':');
+            if (parts.Length < 3) return false;
+
+            if (!Enum.TryParse<SortFieldType>(parts[0], out var segType)) return false;
+            var segField = parts[1];
+            var segDesc = bool.TryParse(parts[2], out var d) && d;
+
+            if (segType != sort.Type || segField != sort.FieldName || segDesc != sort.Descending)
+                return false;
+        }
+        return true;
     }
 
     private static ScoreDoc[] SortByDocId(ScoreDoc[] docs, bool descending)

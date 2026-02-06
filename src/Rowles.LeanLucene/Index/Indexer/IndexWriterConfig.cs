@@ -113,4 +113,29 @@ public sealed class IndexWriterConfig
     /// Runs in order before the analyser. Default: empty (no char filters).
     /// </summary>
     public IReadOnlyList<ICharFilter> CharFilters { get; set; } = [];
+
+    /// <summary>
+    /// Maximum number of tokens allowed per text field per document.
+    /// 0 means unlimited (no budget enforcement). Default: 0.
+    /// </summary>
+    public int MaxTokensPerDocument { get; set; }
+
+    /// <summary>
+    /// Action taken when a document exceeds <see cref="MaxTokensPerDocument"/>.
+    /// Default: <see cref="TokenBudgetPolicy.Truncate"/>.
+    /// </summary>
+    public TokenBudgetPolicy TokenBudgetPolicy { get; set; } = TokenBudgetPolicy.Truncate;
+
+    /// <summary>
+    /// Optional schema defining per-field types and validation rules.
+    /// When null (default), documents are accepted without schema validation.
+    /// </summary>
+    public IndexSchema? Schema { get; set; }
+
+    /// <summary>
+    /// Optional index-time sort order. When set, documents within each segment
+    /// are physically reordered at flush time, enabling early termination for
+    /// searches that match this sort. Default: null (insertion order).
+    /// </summary>
+    public IndexSort? IndexSort { get; set; }
 }

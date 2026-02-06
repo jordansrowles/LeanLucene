@@ -88,6 +88,23 @@ public sealed partial class IndexWriter
         }
         var tokens = analyser.Analyse(input);
 
+        // Enforce token budget if configured
+        int budget = _config.MaxTokensPerDocument;
+        if (budget > 0 && tokens.Count > budget)
+        {
+            switch (_config.TokenBudgetPolicy)
+            {
+                case Analysis.TokenBudgetPolicy.Truncate:
+                    tokens.RemoveRange(budget, tokens.Count - budget);
+                    break;
+                case Analysis.TokenBudgetPolicy.Warn:
+                    // Continue with all tokens; caller can observe via metrics
+                    break;
+                case Analysis.TokenBudgetPolicy.Reject:
+                    throw new Analysis.TokenBudgetExceededException(tokens.Count, budget);
+            }
+        }
+
         // Track per-field token count for O(1) per-field norm computation
         // Pre-allocate to MaxBufferedDocs to avoid resize overhead during indexing
         if (!_docTokenCounts.TryGetValue(fieldName, out var counts))

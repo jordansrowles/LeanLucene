@@ -32,6 +32,9 @@ public sealed partial class IndexSearcher : IDisposable
     /// <summary>The metrics collector for this searcher.</summary>
     public Diagnostics.IMetricsCollector Metrics => _config.Metrics;
 
+    /// <summary>Exposes the underlying segment readers for advanced use (e.g., spelling suggestions).</summary>
+    internal IReadOnlyList<SegmentReader> GetSegmentReaders() => _readers;
+
     /// <summary>Calculates the on-disk size of the index.</summary>
     public Diagnostics.IndexSizeReport GetIndexSize()
         => Diagnostics.IndexSizeCalculator.Calculate(_directory.DirectoryPath);
@@ -127,6 +130,10 @@ public sealed partial class IndexSearcher : IDisposable
         sw.Stop();
         _config.Metrics.RecordSearchLatency(sw.Elapsed);
 
+        _config.SlowQueryLog?.MaybeLog(query, sw.Elapsed, result.TotalHits);
+        _config.SearchAnalytics?.Record(query, sw.Elapsed, result.TotalHits,
+            _queryCache is not null && _queryCache.TryGet(query, topN) is not null);
+
         _queryCache?.Put(query, topN, result);
         return result;
     }
@@ -136,6 +143,14 @@ public sealed partial class IndexSearcher : IDisposable
         // MoreLikeThis is a cross-segment query: extract terms, build BooleanQuery, delegate
         if (query is MoreLikeThisQuery mlt)
             return ExecuteMoreLikeThis(mlt, topN);
+
+        // RRF: execute each child query independently, then fuse by rank
+        if (query is RrfQuery rrf)
+            return ExecuteRrfQuery(rrf, topN);
+
+        // Block join: execute child query, map results to parent docs
+        if (query is BlockJoinQuery bjq)
+            return ExecuteBlockJoinQuery(bjq, topN);
 
         // Fast path for the most common query type — avoids
         // PrecomputeGlobalDocFreqs allocation and does only 1 dictionary
@@ -284,6 +299,61 @@ public sealed partial class IndexSearcher : IDisposable
     {
         foreach (var reader in _readers)
             reader.Dispose();
+    }
+
+    private TopDocs ExecuteRrfQuery(RrfQuery rrf, int topN)
+    {
+        if (rrf.Queries.Count == 0) return TopDocs.Empty;
+
+        // Execute each child query independently to get ranked result lists
+        var childResults = new TopDocs[rrf.Queries.Count];
+        for (int i = 0; i < rrf.Queries.Count; i++)
+            childResults[i] = SearchCore(rrf.Queries[i], topN);
+
+        return RrfQuery.Combine(childResults, topN, rrf.K);
+    }
+
+    private TopDocs ExecuteBlockJoinQuery(BlockJoinQuery bjq, int topN)
+    {
+        // 1. Execute the child query to find matching child docs
+        // Use totalDocCount as limit rather than int.MaxValue to avoid OOM
+        var childResults = SearchCore(bjq.ChildQuery, _totalDocCount);
+        if (childResults.TotalHits == 0) return TopDocs.Empty;
+
+        // 2. Map each child doc to its parent doc using the parent bitset
+        var parentDocs = new HashSet<int>();
+        foreach (var scoreDoc in childResults.ScoreDocs)
+        {
+            int globalDocId = scoreDoc.DocId;
+
+            // Find which segment this doc belongs to
+            for (int r = 0; r < _readers.Count; r++)
+            {
+                int nextBase = r + 1 < _docBases.Length ? _docBases[r + 1] : _totalDocCount;
+                if (globalDocId >= _docBases[r] && globalDocId < nextBase)
+                {
+                    int localDocId = globalDocId - _docBases[r];
+                    var pbs = _readers[r].GetParentBitSet();
+                    if (pbs is not null)
+                    {
+                        int parentLocal = pbs.NextParent(localDocId);
+                        if (parentLocal >= 0)
+                            parentDocs.Add(_docBases[r] + parentLocal);
+                    }
+                    break;
+                }
+            }
+        }
+
+        if (parentDocs.Count == 0) return TopDocs.Empty;
+
+        // 3. Score parent docs: simple count of matching children
+        var scoreDocs = new ScoreDoc[Math.Min(parentDocs.Count, topN)];
+        var sorted = parentDocs.OrderBy(d => d).Take(topN).ToList();
+        for (int i = 0; i < sorted.Count; i++)
+            scoreDocs[i] = new ScoreDoc(sorted[i], 1.0f * bjq.Boost);
+
+        return new TopDocs(parentDocs.Count, scoreDocs);
     }
 
     // Reusable buffer for PrecomputeGlobalDocFreqs to avoid per-call HashSet allocation

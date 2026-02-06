@@ -23,6 +23,7 @@ public sealed partial class SegmentReader : IDisposable
     private readonly Dictionary<(string, string), string> _qualifiedTermCache = new();
     private const int MaxQualifiedTermCacheSize = 8192;
     private LiveDocs? _liveDocs;
+    private readonly CompoundFileReader? _cfsReader;
 
     // 64-entry open-addressing term offset cache
     private const int TermCacheSize = 64;
@@ -38,6 +39,8 @@ public sealed partial class SegmentReader : IDisposable
     private TermVectorsReader? _termVectorsReader;
     private object? _lazyInitLock;
     private readonly string _basePath;
+    private ParentBitSet? _parentBitSet;
+    private bool _parentBitSetLoaded;
 
     public int DocBase { get; set; }
 
@@ -49,6 +52,17 @@ public sealed partial class SegmentReader : IDisposable
         _directory = directory;
         _info = info;
         _basePath = Path.Combine(directory.DirectoryPath, info.SegmentId);
+
+        // Open compound file reader if this is a compound segment
+        if (info.IsCompoundFile)
+        {
+            var cfsPath = _basePath + ".cfs";
+            if (File.Exists(cfsPath))
+            {
+                _cfsReader = CompoundFileReader.Open(cfsPath);
+                ExtractCompoundFiles();
+            }
+        }
 
         ValidateSegmentFiles(_basePath, info.DocCount);
         _dicReader = TermDictionaryReader.Open(_basePath + ".dic");
@@ -101,6 +115,20 @@ public sealed partial class SegmentReader : IDisposable
 
     /// <summary>True when this segment has no deleted documents, allowing callers to skip per-doc IsLive checks.</summary>
     public bool HasDeletions => _liveDocs is not null;
+
+    /// <summary>
+    /// Returns the parent bitset for block-join indexing, or null if this segment
+    /// has no block documents.
+    /// </summary>
+    public ParentBitSet? GetParentBitSet()
+    {
+        if (_parentBitSetLoaded) return _parentBitSet;
+        var pbsPath = _basePath + ".pbs";
+        if (File.Exists(pbsPath))
+            _parentBitSet = ParentBitSet.ReadFrom(pbsPath);
+        _parentBitSetLoaded = true;
+        return _parentBitSet;
+    }
 
     /// <summary>Returns the quantised norm value for a document in a specific field (0..1 range).</summary>
     public float GetNorm(int docId, string field)
@@ -262,6 +290,24 @@ public sealed partial class SegmentReader : IDisposable
         _storedReader?.Dispose();
         _vectorReader?.Dispose();
         _termVectorsReader?.Dispose();
+        _cfsReader?.Dispose();
+    }
+
+    /// <summary>
+    /// Extracts sub-files from the compound file to individual files on disc so existing
+    /// readers (TermDictionaryReader, NormsReader, etc.) can open them normally.
+    /// Only extracts files that don't already exist.
+    /// </summary>
+    private void ExtractCompoundFiles()
+    {
+        if (_cfsReader is null) return;
+        foreach (var ext in _cfsReader.ListFiles())
+        {
+            var targetPath = _basePath + ext;
+            if (File.Exists(targetPath)) continue;
+            var data = _cfsReader.ReadFile(ext);
+            File.WriteAllBytes(targetPath, data);
+        }
     }
 
     private static void ValidateSegmentFiles(string basePath, int docCount)

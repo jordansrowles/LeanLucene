@@ -1,0 +1,99 @@
+using Rowles.LeanLucene.Search;
+using Rowles.LeanLucene.Search.Queries;
+
+namespace Rowles.LeanLucene.Tests.Search;
+
+public sealed class QueryBuilderTests
+{
+    [Fact]
+    public void Term_CreatesTermQuery()
+    {
+        var q = QueryBuilder.Term("body", "hello");
+        Assert.Equal("body", q.Field);
+        Assert.Equal("hello", q.Term);
+    }
+
+    [Fact]
+    public void Phrase_CreatesPhraseQuery()
+    {
+        var q = QueryBuilder.Phrase("body", "quick", "fox");
+        Assert.Equal("body", q.Field);
+        Assert.Equal(new[] { "quick", "fox" }, q.Terms);
+    }
+
+    [Fact]
+    public void Bool_Builder_CreatesValidBooleanQuery()
+    {
+        var q = QueryBuilder.Bool(b => b
+            .Must(QueryBuilder.Term("title", "hello"))
+            .Should(QueryBuilder.Term("body", "world"))
+            .MustNot(QueryBuilder.Term("status", "deleted")));
+
+        Assert.Equal(3, q.Clauses.Count);
+        Assert.Equal(Occur.Must, q.Clauses[0].Occur);
+        Assert.Equal(Occur.Should, q.Clauses[1].Occur);
+        Assert.Equal(Occur.MustNot, q.Clauses[2].Occur);
+    }
+
+    [Fact]
+    public void WithBoost_SetsBoostAndReturnsSameQuery()
+    {
+        var q = QueryBuilder.Term("body", "hello").WithBoost(2.5f);
+        Assert.Equal(2.5f, q.Boost);
+        Assert.IsType<TermQuery>(q);
+    }
+
+    [Fact]
+    public void And_CombinesQueriesWithMust()
+    {
+        var left = QueryBuilder.Term("body", "hello");
+        var right = QueryBuilder.Term("body", "world");
+        var combined = left.And(right);
+
+        Assert.Equal(2, combined.Clauses.Count);
+        Assert.All(combined.Clauses, c => Assert.Equal(Occur.Must, c.Occur));
+    }
+
+    [Fact]
+    public void Or_CombinesQueriesWithShould()
+    {
+        var left = QueryBuilder.Term("body", "hello");
+        var right = QueryBuilder.Term("body", "world");
+        var combined = left.Or(right);
+
+        Assert.Equal(2, combined.Clauses.Count);
+        Assert.All(combined.Clauses, c => Assert.Equal(Occur.Should, c.Occur));
+    }
+
+    [Fact]
+    public void Not_CreatesMustAndMustNotClauses()
+    {
+        var main = QueryBuilder.Term("body", "hello");
+        var excluded = QueryBuilder.Term("status", "deleted");
+        var combined = main.Not(excluded);
+
+        Assert.Equal(2, combined.Clauses.Count);
+        Assert.Equal(Occur.Must, combined.Clauses[0].Occur);
+        Assert.Equal(Occur.MustNot, combined.Clauses[1].Occur);
+    }
+
+    [Fact]
+    public void DisMax_CombinesDisjuncts()
+    {
+        var q = QueryBuilder.DisMax(0.1f,
+            QueryBuilder.Term("title", "hello"),
+            QueryBuilder.Term("body", "hello"));
+
+        Assert.Equal(2, q.Disjuncts.Count);
+        Assert.Equal(0.1f, q.TieBreakerMultiplier);
+    }
+
+    [Fact]
+    public void Range_CreatesRangeQuery()
+    {
+        var q = QueryBuilder.Range("price", 10, 100);
+        Assert.Equal("price", q.Field);
+        Assert.Equal(10, q.Min);
+        Assert.Equal(100, q.Max);
+    }
+}
