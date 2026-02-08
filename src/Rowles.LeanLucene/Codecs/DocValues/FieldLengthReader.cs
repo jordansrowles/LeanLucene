@@ -8,7 +8,7 @@ namespace Rowles.LeanLucene.Codecs.DocValues;
 /// Returns <c>Dictionary&lt;string, int[]&gt;</c> keyed by field name.
 /// Falls back gracefully when the file does not exist (caller should use quantised norms).
 /// </summary>
-public static class FieldLengthReader
+internal static class FieldLengthReader
 {
     /// <summary>
     /// Tries to load exact field lengths. Returns null if the file does not exist.

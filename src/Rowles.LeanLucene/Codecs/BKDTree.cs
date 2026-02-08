@@ -5,7 +5,7 @@ namespace Rowles.LeanLucene.Codecs;
 /// File format (.bkd): [fieldCount:int32] per field: [fieldName:string] [nodeCount:int32] [nodes...]
 /// Each leaf stores sorted (value, docId) pairs; internal nodes store split values.
 /// </summary>
-public static class BKDWriter
+internal static class BKDWriter
 {
     /// <summary>Default max leaf size for BKD tree nodes.</summary>
     public const int DefaultMaxLeafSize = 512;
@@ -56,7 +56,7 @@ public static class BKDWriter
 /// Reads a 1-dimensional BKD tree for efficient numeric range lookups.
 /// Uses memory-mapped IndexInput for zero-copy seeks.
 /// </summary>
-public sealed class BKDReader : IDisposable
+internal sealed class BKDReader : IDisposable
 {
     private readonly Store.IndexInput _input;
     private readonly Dictionary<string, long> _fieldOffsets;

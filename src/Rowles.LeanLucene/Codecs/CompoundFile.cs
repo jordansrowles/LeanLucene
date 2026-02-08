@@ -4,7 +4,7 @@ namespace Rowles.LeanLucene.Codecs;
 /// Combines multiple segment files into a single compound file (.cfs) to reduce file descriptor pressure.
 /// Format: [entryCount:int32] per entry: [name:string] [offset:int64] [length:int64] [concatenated data...]
 /// </summary>
-public static class CompoundFileWriter
+internal static class CompoundFileWriter
 {
     internal static void Write(string cfsPath, string basePath, string[] extensions)
     {
@@ -63,7 +63,7 @@ public static class CompoundFileWriter
 /// <summary>
 /// Reads individual files from a compound file (.cfs) by seeking to the correct offset.
 /// </summary>
-public sealed class CompoundFileReader : IDisposable
+internal sealed class CompoundFileReader : IDisposable
 {
     private readonly FileStream _fs;
     private readonly Dictionary<string, (long Offset, long Length)> _entries;

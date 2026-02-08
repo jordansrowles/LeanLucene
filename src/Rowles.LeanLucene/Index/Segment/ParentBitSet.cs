@@ -5,7 +5,7 @@ namespace Rowles.LeanLucene.Index.Segment;
 /// Used by the block-join indexing pattern where child documents are stored
 /// immediately before their parent document.
 /// </summary>
-public sealed class ParentBitSet
+internal sealed class ParentBitSet
 {
     private readonly long[] _bits;
     private readonly int _length;

@@ -4,54 +4,54 @@ namespace Rowles.LeanLucene.Index.Indexer;
 
 /// <summary>
 /// Accumulates doc IDs, term frequencies, and positions for a single qualified term
-/// during indexing. Uses a single flat position buffer to avoid per-posting small array allocations.
+/// during indexing. Uses ArrayPool-backed buffers to avoid GC pressure from repeated
+/// resize-copy-abandon cycles. Call <see cref="ReturnBuffers"/> after flush to return
+/// rented arrays.
 /// </summary>
 internal sealed class PostingAccumulator
 {
+    private static readonly ArrayPool<int> Pool = ArrayPool<int>.Shared;
+
     private int[] _docIds;
     private int[] _freqs;
-    // Per-posting index into flat position buffer: (start offset, allocated length)
     private int[] _posStarts;
     private int[] _posLengths;
-    // Single flat buffer for ALL positions across all postings
     private int[] _posBuf;
     private int _posBufUsed;
-    private byte[]?[][]? _payloads; // lazily allocated when payloads are used
+    private byte[]?[][]? _payloads;
     private int _count;
+    private int _docIdsLen; // logical length (may be < rented array length)
+    private int _posBufLen;
 
     private const int NoPositionSentinel = -1;
 
     public PostingAccumulator()
     {
-        _docIds = new int[4];
-        _freqs = new int[4];
-        _posStarts = new int[4];
-        _posLengths = new int[4];
-        _posBuf = new int[8]; // shared flat buffer for all positions
+        _docIds = Pool.Rent(4);
+        _freqs = Pool.Rent(4);
+        _posStarts = Pool.Rent(4);
+        _posLengths = Pool.Rent(4);
+        _posBuf = Pool.Rent(8);
+        _docIdsLen = 4;
+        _posBufLen = 8;
         _posBufUsed = 0;
         _count = 0;
     }
 
     public int Count => _count;
 
-    /// <summary>
-    /// Adds or updates a posting for the given doc ID at the given position.
-    /// </summary>
     public void Add(int docId, int position)
     {
         if (_count > 0 && _docIds[_count - 1] == docId)
         {
-            // Same doc — increment freq and append position to flat buffer
             _freqs[_count - 1]++;
             int freq = _freqs[_count - 1];
             int start = _posStarts[_count - 1];
             int allocated = _posLengths[_count - 1];
             if (freq > allocated)
             {
-                // Need more space: grow the slot in the flat buffer
                 int newAllocated = allocated * 2;
                 EnsurePosBufCapacity(_posBufUsed + newAllocated);
-                // Copy existing positions to end of buffer
                 int newStart = _posBufUsed;
                 Array.Copy(_posBuf, start, _posBuf, newStart, freq - 1);
                 _posStarts[_count - 1] = newStart;
@@ -66,8 +66,7 @@ internal sealed class PostingAccumulator
             return;
         }
 
-        // New doc
-        if (_count == _docIds.Length)
+        if (_count == _docIdsLen)
             Grow();
 
         EnsurePosBufCapacity(_posBufUsed + 1);
@@ -80,12 +79,11 @@ internal sealed class PostingAccumulator
         _count++;
     }
 
-    /// <summary>Adds a posting with an optional payload byte array.</summary>
     public void AddWithPayload(int docId, int position, byte[]? payload)
     {
         if (_payloads == null)
         {
-            _payloads = new byte[]?[_docIds.Length][];
+            _payloads = new byte[]?[_docIdsLen][];
             for (int i = 0; i < _count; i++)
             {
                 int freq = _freqs[i] > 0 ? _freqs[i] : 0;
@@ -119,7 +117,7 @@ internal sealed class PostingAccumulator
             return;
         }
 
-        if (_count == _docIds.Length)
+        if (_count == _docIdsLen)
             Grow();
 
         EnsurePosBufCapacity(_posBufUsed + 1);
@@ -134,15 +132,12 @@ internal sealed class PostingAccumulator
         _count++;
     }
 
-    /// <summary>
-    /// Adds a doc ID without position (for string/keyword fields).
-    /// </summary>
     public void AddDocOnly(int docId)
     {
         if (_count > 0 && _docIds[_count - 1] == docId)
             return;
 
-        if (_count == _docIds.Length)
+        if (_count == _docIdsLen)
             Grow();
 
         _docIds[_count] = docId;
@@ -163,7 +158,6 @@ internal sealed class PostingAccumulator
         return _posBuf.AsSpan(start, _freqs[index]);
     }
 
-    /// <summary>Gets the payload for a specific position index of a given posting entry.</summary>
     public byte[]? GetPayload(int docIndex, int positionIndex)
     {
         if (_payloads == null || (uint)docIndex >= (uint)_count || _payloads[docIndex] == null)
@@ -197,21 +191,119 @@ internal sealed class PostingAccumulator
         }
     }
 
+    /// <summary>
+    /// Translates doc IDs using the inverse permutation and re-sorts entries so
+    /// doc IDs remain in ascending order (required by the postings codec).
+    /// </summary>
+    public void RemapDocIds(int[] inversePerm)
+    {
+        if (_count == 0) return;
+
+        // Build (newDocId, originalIndex) pairs, sort by newDocId
+        var entries = Pool.Rent(_count);
+        var origIdxs = Pool.Rent(_count);
+        for (int i = 0; i < _count; i++)
+        {
+            entries[i] = inversePerm[_docIds[i]];
+            origIdxs[i] = i;
+        }
+        Array.Sort(entries, origIdxs, 0, _count);
+
+        // Rebuild parallel arrays in sorted order using temp buffers
+        var newFreqs = Pool.Rent(_docIdsLen);
+        var newPosStarts = Pool.Rent(_docIdsLen);
+        var newPosLengths = Pool.Rent(_docIdsLen);
+        byte[]?[][]? newPayloads = _payloads is not null ? new byte[]?[_docIdsLen][] : null;
+
+        // Compact positions into a new flat buffer
+        var newPosBuf = Pool.Rent(_posBufLen);
+        int newPosBufUsed = 0;
+
+        for (int i = 0; i < _count; i++)
+        {
+            int orig = origIdxs[i];
+            _docIds[i] = entries[i];
+            newFreqs[i] = _freqs[orig];
+            int posStart = _posStarts[orig];
+            int freq = _freqs[orig];
+            if (posStart == NoPositionSentinel || freq == 0)
+            {
+                newPosStarts[i] = NoPositionSentinel;
+                newPosLengths[i] = 0;
+            }
+            else
+            {
+                newPosStarts[i] = newPosBufUsed;
+                newPosLengths[i] = freq;
+                Array.Copy(_posBuf, posStart, newPosBuf, newPosBufUsed, freq);
+                newPosBufUsed += freq;
+            }
+            if (newPayloads is not null)
+                newPayloads[i] = _payloads![orig];
+        }
+
+        Pool.Return(entries);
+        Pool.Return(origIdxs);
+        Pool.Return(_freqs);
+        Pool.Return(_posStarts);
+        Pool.Return(_posLengths);
+        Pool.Return(_posBuf);
+
+        _freqs = newFreqs;
+        _posStarts = newPosStarts;
+        _posLengths = newPosLengths;
+        _posBuf = newPosBuf;
+        _posBufUsed = newPosBufUsed;
+        _posBufLen = _posBuf.Length;
+        _payloads = newPayloads;
+    }
+
+    /// <summary>Returns all pooled arrays. Call once after flush; do not use the accumulator afterwards.</summary>
+    public void ReturnBuffers()
+    {
+        if (_docIds.Length > 0) Pool.Return(_docIds, clearArray: false);
+        if (_freqs.Length > 0) Pool.Return(_freqs, clearArray: false);
+        if (_posStarts.Length > 0) Pool.Return(_posStarts, clearArray: false);
+        if (_posLengths.Length > 0) Pool.Return(_posLengths, clearArray: false);
+        if (_posBuf.Length > 0) Pool.Return(_posBuf, clearArray: false);
+        _docIds = [];
+        _freqs = [];
+        _posStarts = [];
+        _posLengths = [];
+        _posBuf = [];
+        _payloads = null;
+        _count = 0;
+        _docIdsLen = 0;
+        _posBufLen = 0;
+        _posBufUsed = 0;
+    }
+
     private void Grow()
     {
-        int newLen = _docIds.Length * 2;
-        Array.Resize(ref _docIds, newLen);
-        Array.Resize(ref _freqs, newLen);
-        Array.Resize(ref _posStarts, newLen);
-        Array.Resize(ref _posLengths, newLen);
+        int newLen = _docIdsLen * 2;
+        GrowArray(ref _docIds, _docIdsLen, newLen);
+        GrowArray(ref _freqs, _docIdsLen, newLen);
+        GrowArray(ref _posStarts, _docIdsLen, newLen);
+        GrowArray(ref _posLengths, _docIdsLen, newLen);
         if (_payloads != null)
             Array.Resize(ref _payloads, newLen);
+        _docIdsLen = newLen;
     }
 
     private void EnsurePosBufCapacity(int required)
     {
-        if (required <= _posBuf.Length) return;
-        int newLen = Math.Max(_posBuf.Length * 2, required);
-        Array.Resize(ref _posBuf, newLen);
+        if (required <= _posBufLen) return;
+        int newLen = Math.Max(_posBufLen * 2, required);
+        GrowArray(ref _posBuf, _posBufUsed, newLen);
+        _posBufLen = newLen;
+    }
+
+    private static void GrowArray(ref int[] arr, int usedLength, int newMinLength)
+    {
+        var newArr = Pool.Rent(newMinLength);
+        if (usedLength > 0)
+            Array.Copy(arr, newArr, usedLength);
+        Pool.Return(arr, clearArray: false);
+        arr = newArr;
     }
 }

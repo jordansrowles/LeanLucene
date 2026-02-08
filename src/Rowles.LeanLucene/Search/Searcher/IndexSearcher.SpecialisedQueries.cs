@@ -110,18 +110,14 @@ public sealed partial class IndexSearcher
         float boost = query.Boost;
         float avgDocLength = _stats.GetAvgFieldLength(query.Field);
         int docBase = reader.DocBase;
-        var queryTermSpan = query.Term.AsSpan();
 
-        foreach (var (qualifiedTerm, postingsOffset) in matchingTerms)
+        foreach (var (qualifiedTerm, postingsOffset, distance) in matchingTerms)
         {
-            var termPart = qualifiedTerm.AsSpan(query.Field.Length + 1);
-            int distance = LevenshteinDistance.Compute(queryTermSpan, termPart);
-
             using var postings = reader.GetPostingsEnumAtOffset(postingsOffset);
             if (postings.IsExhausted) continue;
 
             float distanceFactor = 1.0f - ((float)distance / (query.MaxEdits + 1));
-            var termStr = termPart.ToString();
+            var termStr = qualifiedTerm.AsSpan(query.Field.Length + 1).ToString();
             int docFreq = globalDFs.GetValueOrDefault((query.Field, termStr), postings.DocFreq);
 
             while (postings.MoveNext())

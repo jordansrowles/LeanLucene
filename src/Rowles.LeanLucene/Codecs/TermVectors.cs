@@ -9,7 +9,7 @@ public readonly record struct TermVectorEntry(string Term, int Freq, int[] Posit
 ///         .tvd per doc: [fieldCount:int32] per field: [fieldName:string] [termCount:int32]
 ///              per term: [term:string] [freq:int32] [posCount:int32] [positions:int32[]]
 /// </summary>
-public static class TermVectorsWriter
+internal static class TermVectorsWriter
 {
     public static void Write(string tvdPath, string tvxPath,
         IReadOnlyList<Dictionary<string, List<TermVectorEntry>>> docs)
@@ -54,7 +54,7 @@ public static class TermVectorsWriter
 }
 
 /// <summary>Reads per-document term vectors from .tvd/.tvx files using memory-mapped I/O.</summary>
-public sealed class TermVectorsReader : IDisposable
+internal sealed class TermVectorsReader : IDisposable
 {
     private readonly Store.IndexInput _tvdInput;
     private readonly long[] _offsets;

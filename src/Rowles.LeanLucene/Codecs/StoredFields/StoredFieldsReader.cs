@@ -7,7 +7,7 @@ namespace Rowles.LeanLucene.Codecs.StoredFields;
 /// Reads stored fields (.fdt) with Brotli block compression and multi-valued field support.
 /// Paired with <see cref="StoredFieldsWriter"/>.
 /// </summary>
-public sealed class StoredFieldsReader : IDisposable
+internal sealed class StoredFieldsReader : IDisposable
 {
     private readonly FileStream _fs;
     private readonly BinaryReader _reader;

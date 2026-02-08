@@ -315,45 +315,69 @@ public sealed partial class IndexSearcher : IDisposable
 
     private TopDocs ExecuteBlockJoinQuery(BlockJoinQuery bjq, int topN)
     {
-        // 1. Execute the child query to find matching child docs
-        // Use totalDocCount as limit rather than int.MaxValue to avoid OOM
-        var childResults = SearchCore(bjq.ChildQuery, _totalDocCount);
-        if (childResults.TotalHits == 0) return TopDocs.Empty;
+        // Collect matching child doc IDs without ScoreDoc wrappers
+        var childDocIds = CollectMatchingDocIds(bjq.ChildQuery);
+        if (childDocIds.Count == 0) return TopDocs.Empty;
 
-        // 2. Map each child doc to its parent doc using the parent bitset
-        var parentDocs = new HashSet<int>();
-        foreach (var scoreDoc in childResults.ScoreDocs)
+        // Map child docs to parent docs using a bitset (O(1) set/test, no rehashing)
+        var parentBits = ArrayPool<bool>.Shared.Rent(_totalDocCount);
+        Array.Clear(parentBits, 0, _totalDocCount);
+        int parentCount = 0;
+
+        foreach (var globalDocId in childDocIds)
         {
-            int globalDocId = scoreDoc.DocId;
+            int r = Array.BinarySearch(_docBases, globalDocId);
+            if (r < 0) r = ~r - 1;
+            if (r < 0) continue;
 
-            // Find which segment this doc belongs to
-            for (int r = 0; r < _readers.Count; r++)
+            int localDocId = globalDocId - _docBases[r];
+            var pbs = _readers[r].GetParentBitSet();
+            if (pbs is not null)
             {
-                int nextBase = r + 1 < _docBases.Length ? _docBases[r + 1] : _totalDocCount;
-                if (globalDocId >= _docBases[r] && globalDocId < nextBase)
+                int parentLocal = pbs.NextParent(localDocId);
+                if (parentLocal >= 0)
                 {
-                    int localDocId = globalDocId - _docBases[r];
-                    var pbs = _readers[r].GetParentBitSet();
-                    if (pbs is not null)
+                    int globalParent = _docBases[r] + parentLocal;
+                    if (!parentBits[globalParent])
                     {
-                        int parentLocal = pbs.NextParent(localDocId);
-                        if (parentLocal >= 0)
-                            parentDocs.Add(_docBases[r] + parentLocal);
+                        parentBits[globalParent] = true;
+                        parentCount++;
                     }
-                    break;
                 }
             }
         }
 
-        if (parentDocs.Count == 0) return TopDocs.Empty;
+        if (parentCount == 0)
+        {
+            ArrayPool<bool>.Shared.Return(parentBits, clearArray: false);
+            return TopDocs.Empty;
+        }
 
-        // 3. Score parent docs: simple count of matching children
-        var scoreDocs = new ScoreDoc[Math.Min(parentDocs.Count, topN)];
-        var sorted = parentDocs.OrderBy(d => d).Take(topN).ToList();
-        for (int i = 0; i < sorted.Count; i++)
-            scoreDocs[i] = new ScoreDoc(sorted[i], 1.0f * bjq.Boost);
+        // Collect parent doc IDs from the bitset directly
+        int take = Math.Min(parentCount, topN);
+        var scoreDocs = new ScoreDoc[take];
+        int found = 0;
+        for (int i = 0; i < _totalDocCount && found < take; i++)
+        {
+            if (parentBits[i])
+                scoreDocs[found++] = new ScoreDoc(i, 1.0f * bjq.Boost);
+        }
 
-        return new TopDocs(parentDocs.Count, scoreDocs);
+        ArrayPool<bool>.Shared.Return(parentBits, clearArray: false);
+        return new TopDocs(parentCount, scoreDocs);
+    }
+
+    /// <summary>
+    /// Collects all matching doc IDs for a query without materialising ScoreDoc wrappers.
+    /// Used by block-join to avoid allocating per-hit objects.
+    /// </summary>
+    private List<int> CollectMatchingDocIds(Query query)
+    {
+        var result = new List<int>();
+        var subResults = SearchCore(query, _totalDocCount);
+        for (int i = 0; i < subResults.ScoreDocs.Length; i++)
+            result.Add(subResults.ScoreDocs[i].DocId);
+        return result;
     }
 
     // Reusable buffer for PrecomputeGlobalDocFreqs to avoid per-call HashSet allocation

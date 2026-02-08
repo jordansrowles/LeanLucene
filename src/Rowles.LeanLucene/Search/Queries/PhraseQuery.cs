@@ -11,6 +11,22 @@ public sealed class PhraseQuery : Query
     /// <summary>Maximum number of positional gaps allowed between terms. 0 = exact phrase.</summary>
     public int Slop { get; set; }
 
+    /// <summary>Cached qualified term strings ("field\0term") to avoid per-search allocation.</summary>
+    private string[]? _cachedQualifiedTerms;
+    public string[] QualifiedTerms
+    {
+        get
+        {
+            if (_cachedQualifiedTerms is null)
+            {
+                _cachedQualifiedTerms = new string[Terms.Length];
+                for (int i = 0; i < Terms.Length; i++)
+                    _cachedQualifiedTerms[i] = string.Concat(Field, "\x00", Terms[i]);
+            }
+            return _cachedQualifiedTerms;
+        }
+    }
+
     public PhraseQuery(string field, params string[] terms)
     {
         Field = field;

@@ -19,7 +19,7 @@ public enum FieldCompressionPolicy
 }
 
 /// <summary>Extension methods for <see cref="FieldCompressionPolicy"/>.</summary>
-public static class FieldCompressionPolicyExtensions
+internal static class FieldCompressionPolicyExtensions
 {
     /// <summary>Maps the policy to the corresponding <see cref="CompressionLevel"/>.</summary>
     public static CompressionLevel ToCompressionLevel(this FieldCompressionPolicy policy) => policy switch

@@ -75,7 +75,7 @@ public sealed class SynonymMap
 /// and inserts replacement tokens at the same position offsets.
 /// </summary>
 /// <remarks>
-/// Replaces the simpler <see cref="SynonymFilter"/> which only supports single-token sources.
+/// Replaces the simpler single-token synonym approach with trie-based longest-match.
 /// </remarks>
 public sealed class SynonymGraphFilter : ITokenFilter
 {

@@ -52,7 +52,12 @@ public static class IndexValidator
                 .Select(e => e.GetString()!)
                 .ToList();
         }
-        catch (Exception ex)
+        catch (IOException ex)
+        {
+            result.AddIssue($"Cannot read commit file '{commitPath}': {ex.Message}");
+            return result;
+        }
+        catch (JsonException ex)
         {
             result.AddIssue($"Cannot read commit file '{commitPath}': {ex.Message}");
             return result;
@@ -80,7 +85,12 @@ public static class IndexValidator
             {
                 info = SegmentInfo.ReadFrom(segPath);
             }
-            catch (Exception ex)
+            catch (IOException ex)
+            {
+                result.AddIssue($"Segment '{segId}': cannot read .seg metadata — {ex.Message}");
+                continue;
+            }
+            catch (JsonException ex)
             {
                 result.AddIssue($"Segment '{segId}': cannot read .seg metadata — {ex.Message}");
                 continue;
@@ -109,7 +119,7 @@ public static class IndexValidator
                     if (fdxStream.Length == 0)
                         result.AddIssue($"Segment '{segId}': .fdx is empty.");
                 }
-                catch (Exception ex)
+                catch (IOException ex)
                 {
                     result.AddIssue($"Segment '{segId}': cannot read .fdx — {ex.Message}");
                 }
@@ -127,7 +137,7 @@ public static class IndexValidator
                         result.AddIssue($"Segment '{segId}': .nrm has {nrmLen} bytes, expected at least 4.");
                     }
                 }
-                catch (Exception ex)
+                catch (IOException ex)
                 {
                     result.AddIssue($"Segment '{segId}': cannot read .nrm — {ex.Message}");
                 }

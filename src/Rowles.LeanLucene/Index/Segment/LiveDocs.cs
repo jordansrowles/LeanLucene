@@ -6,7 +6,7 @@ namespace Rowles.LeanLucene.Index.Segment;
 /// <summary>
 /// Per-segment bitset tracking deleted document IDs.
 /// </summary>
-public sealed class LiveDocs
+internal sealed class LiveDocs
 {
     private readonly BitArray _bits;
     private int _liveCount;

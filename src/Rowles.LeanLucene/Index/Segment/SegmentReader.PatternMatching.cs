@@ -25,8 +25,8 @@ public sealed partial class SegmentReader
         return _dicReader.GetAllTermsForField(fieldPrefix);
     }
 
-    /// <summary>Returns terms within Levenshtein distance of queryTerm.</summary>
-    public List<(string Term, long Offset)> GetFuzzyMatches(string fieldPrefix, ReadOnlySpan<char> queryTerm, int maxEdits)
+    /// <summary>Returns terms within Levenshtein distance of queryTerm, with edit distances.</summary>
+    public List<(string Term, long Offset, int Distance)> GetFuzzyMatches(string fieldPrefix, ReadOnlySpan<char> queryTerm, int maxEdits)
     {
         return _dicReader.GetFuzzyMatches(fieldPrefix, queryTerm, maxEdits);
     }

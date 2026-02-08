@@ -4,7 +4,7 @@ namespace Rowles.LeanLucene.Codecs;
 /// Shared magic number and format version constants for all codec file types.
 /// Every codec file starts with [int32: Magic][byte: Version].
 /// </summary>
-public static class CodecConstants
+internal static class CodecConstants
 {
     /// <summary>Magic number written as the first 4 bytes of every LeanLucene codec file.</summary>
     public const int Magic = 0x4C4C_4E31; // "LLN1" in ASCII

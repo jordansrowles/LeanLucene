@@ -4,7 +4,7 @@ namespace Rowles.LeanLucene.Codecs;
 /// Writes dense float vectors with a fixed-dimension layout for implicit offset indexing.
 /// Format: [int: vectorCount][int: dimension][float[][]: vector data].
 /// </summary>
-public static class VectorWriter
+internal static class VectorWriter
 {
     internal static void Write(string filePath, ReadOnlyMemory<float>[] vectors)
     {

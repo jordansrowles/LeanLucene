@@ -20,7 +20,7 @@ public sealed partial class IndexWriter : IDisposable
     private readonly IAnalyser _defaultAnalyser;
 
     // Unified posting accumulator keyed by qualified term ("field\0term")
-    private Dictionary<string, PostingAccumulator> _postings = new(StringComparer.Ordinal);
+    private Dictionary<string, PostingAccumulator> _postings = new(8192, StringComparer.Ordinal);
     // Flat stored field buffer: parallel arrays indexed by entry position
     private List<int> _sfFieldIds = new(4096);
     private List<string> _sfValues = new(4096);
@@ -32,13 +32,13 @@ public sealed partial class IndexWriter : IDisposable
     // Per-field numeric values for range indexing: field → docId → value
     private Dictionary<string, Dictionary<int, double>> _numericIndex = new();
     private Dictionary<int, (string FieldName, ReadOnlyMemory<float> Vector)> _bufferedVectors = new();
-    private readonly HashSet<string> _termPool = new(StringComparer.Ordinal);
+    private readonly HashSet<string> _termPool = new(4096, StringComparer.Ordinal);
     // Per-field per-doc token counts for O(1) per-field norm computation
     private Dictionary<string, int[]> _docTokenCounts = new(StringComparer.Ordinal);
     // Track field names seen in this flush
     private readonly HashSet<string> _fieldNames = new(StringComparer.Ordinal);
     // Cache qualified term strings to avoid repeated string.Concat — keyed by the qualified term itself
-    private Dictionary<string, string> _qualifiedTermPool = new(StringComparer.Ordinal);
+    private Dictionary<string, string> _qualifiedTermPool = new(8192, StringComparer.Ordinal);
     // Cache field name prefixes ("fieldName\0") to avoid repeated prefix construction
     private readonly Dictionary<string, string> _fieldPrefixCache = new(StringComparer.Ordinal);
     // DocValues accumulators: field → per-doc values
@@ -204,14 +204,19 @@ public sealed partial class IndexWriter : IDisposable
                 if (_backpressureSemaphore is not null)
                     _semaphoreSlotsHeld += block.Count;
 
-                // Index all docs in the block contiguously
+                // Index all docs in the block contiguously.
+                // Record the parent ID BEFORE its AddDocumentCore call so that
+                // a mid-block flush (triggered inside AddDocumentCore) includes
+                // the correct parent in the ParentBitSet.
                 for (int i = 0; i < block.Count; i++)
+                {
+                    if (i == block.Count - 1)
+                    {
+                        _parentDocIds ??= new HashSet<int>();
+                        _parentDocIds.Add(_bufferedDocCount);
+                    }
                     AddDocumentCore(block[i]);
-
-                // Mark the last doc (the parent) in the parent bitset
-                int parentDocId = _bufferedDocCount - 1;
-                _parentDocIds ??= new HashSet<int>();
-                _parentDocIds.Add(parentDocId);
+                }
             }
         }
         catch
@@ -338,7 +343,9 @@ public sealed partial class IndexWriter : IDisposable
 
         // Cancel and await background merge
         _mergeCts.Cancel();
-        try { _mergeTask?.Wait(TimeSpan.FromSeconds(10)); } catch { /* best-effort */ }
+        try { _mergeTask?.Wait(TimeSpan.FromSeconds(10)); }
+        catch (AggregateException) { /* Expected: merge task cancelled during shutdown */ }
+        catch (ObjectDisposedException) { /* CTS already disposed */ }
         _mergeCts.Dispose();
 
         _backpressureSemaphore?.Dispose();
@@ -360,6 +367,9 @@ public sealed partial class IndexWriter : IDisposable
 
     private void ResetBuffer()
     {
+        // Return pooled arrays from all accumulators before clearing
+        foreach (var acc in _postings.Values)
+            acc.ReturnBuffers();
         _postings.Clear();
         _sfFieldIds.Clear();
         _sfValues.Clear();

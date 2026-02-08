@@ -7,7 +7,7 @@ namespace Rowles.LeanLucene.Codecs.StoredFields;
 /// Documents are grouped into blocks of 16 and compressed together.
 /// Each field supports multiple values.
 /// </summary>
-public static class StoredFieldsWriter
+internal static class StoredFieldsWriter
 {
     private const int DefaultBlockSize = 16;
 

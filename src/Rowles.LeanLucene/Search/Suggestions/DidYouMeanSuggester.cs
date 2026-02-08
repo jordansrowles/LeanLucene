@@ -30,11 +30,10 @@ public static class DidYouMeanSuggester
         foreach (var reader in searcher.GetSegmentReaders())
         {
             var matches = reader.GetFuzzyMatches(fieldPrefix, queryTerm.AsSpan(), maxEdits);
-            foreach (var (qualifiedTerm, _) in matches)
+            foreach (var (qualifiedTerm, _, distance) in matches)
             {
                 var bareTerm = qualifiedTerm[(field.Length + 1)..];
                 int df = reader.GetDocFreqByQualified(qualifiedTerm);
-                int distance = LevenshteinDistance.Compute(queryTerm.AsSpan(), bareTerm.AsSpan());
 
                 if (merged.TryGetValue(bareTerm, out var existing))
                     merged[bareTerm] = (Math.Min(existing.EditDistance, distance), existing.DocFreq + df);

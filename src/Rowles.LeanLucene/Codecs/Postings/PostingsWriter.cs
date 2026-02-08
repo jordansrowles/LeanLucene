@@ -4,7 +4,7 @@ namespace Rowles.LeanLucene.Codecs.Postings;
 /// Writes delta-encoded postings lists for a given term.
 /// Deltas are encoded as variable-length integers (VarInt/LEB128) for compactness.
 /// </summary>
-public static class PostingsWriter
+internal static class PostingsWriter
 {
     internal static void Write(string filePath, string term, int[] docIds)
     {

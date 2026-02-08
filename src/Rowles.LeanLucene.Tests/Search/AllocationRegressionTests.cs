@@ -194,6 +194,166 @@ public sealed class AllocationRegressionTests : IClassFixture<TestDirectoryFixtu
     }
 
     [Fact]
+    public void WildcardQuery_LowAllocationPerQuery()
+    {
+        // Arrange: build a 500-doc index with diverse terms
+        const int docCount = 500;
+        const int warmup = 200;
+        const int measured = 100;
+        var dir = new MMapDirectory(SubDir("alloc_wildcard"));
+        var rng = new Random(42);
+        string[] pool = ["benchmark", "benchpress", "benchtop", "searchable", "searching",
+                         "searcher", "alpha", "beta", "gamma", "delta", "epsilon"];
+
+        using (var writer = new IndexWriter(dir, new IndexWriterConfig { MaxBufferedDocs = 256 }))
+        {
+            for (int i = 0; i < docCount; i++)
+            {
+                var doc = new LeanDocument();
+                var words = Enumerable.Range(0, 8).Select(_ => pool[rng.Next(pool.Length)]);
+                doc.Add(new TextField("body", string.Join(" ", words)));
+                writer.AddDocument(doc);
+            }
+            writer.Commit();
+        }
+
+        using var searcher = new IndexSearcher(dir);
+        var query = new WildcardQuery("body", "bench*");
+
+        // Warmup
+        for (int i = 0; i < warmup; i++)
+            searcher.Search(query, 25);
+
+        // Measure
+        long allocBefore = GC.GetAllocatedBytesForCurrentThread();
+        var sw = Stopwatch.StartNew();
+        for (int i = 0; i < measured; i++)
+            searcher.Search(query, 25);
+        sw.Stop();
+        long allocAfter = GC.GetAllocatedBytesForCurrentThread();
+
+        double avgBytes = (double)(allocAfter - allocBefore) / measured;
+        double avgUs = sw.Elapsed.TotalMicroseconds / measured;
+
+        _output.WriteLine($"WildcardQuery(\"bench*\") over {docCount} docs:");
+        _output.WriteLine($"  Avg allocation: {avgBytes:F0} bytes/query");
+        _output.WriteLine($"  Avg latency:    {avgUs:F1} µs/query");
+        _output.WriteLine($"  Total hits:     {searcher.Search(query, 25).TotalHits}");
+
+        // Budget: ≤ 50 KB per query — regression guard (was 402 KB, target <15 KB)
+        Assert.True(avgBytes <= 51200,
+            $"WildcardQuery allocated {avgBytes:F0} bytes/query, budget is 51200 bytes");
+    }
+
+    [Fact]
+    public void FuzzyQuery_LowAllocationPerQuery()
+    {
+        // Arrange: build a 500-doc index with diverse terms
+        const int docCount = 500;
+        const int warmup = 200;
+        const int measured = 100;
+        var dir = new MMapDirectory(SubDir("alloc_fuzzy"));
+        var rng = new Random(42);
+        string[] pool = ["benchmark", "benchpress", "benchtop", "searchable", "searching",
+                         "searcher", "alpha", "beta", "gamma", "delta", "epsilon"];
+
+        using (var writer = new IndexWriter(dir, new IndexWriterConfig { MaxBufferedDocs = 256 }))
+        {
+            for (int i = 0; i < docCount; i++)
+            {
+                var doc = new LeanDocument();
+                var words = Enumerable.Range(0, 8).Select(_ => pool[rng.Next(pool.Length)]);
+                doc.Add(new TextField("body", string.Join(" ", words)));
+                writer.AddDocument(doc);
+            }
+            writer.Commit();
+        }
+
+        using var searcher = new IndexSearcher(dir);
+        var query = new FuzzyQuery("body", "benchmork", maxEdits: 2);
+
+        // Warmup
+        for (int i = 0; i < warmup; i++)
+            searcher.Search(query, 25);
+
+        // Measure
+        long allocBefore = GC.GetAllocatedBytesForCurrentThread();
+        var sw = Stopwatch.StartNew();
+        for (int i = 0; i < measured; i++)
+            searcher.Search(query, 25);
+        sw.Stop();
+        long allocAfter = GC.GetAllocatedBytesForCurrentThread();
+
+        double avgBytes = (double)(allocAfter - allocBefore) / measured;
+        double avgUs = sw.Elapsed.TotalMicroseconds / measured;
+
+        _output.WriteLine($"FuzzyQuery(\"benchmork\", maxEdits=2) over {docCount} docs:");
+        _output.WriteLine($"  Avg allocation: {avgBytes:F0} bytes/query");
+        _output.WriteLine($"  Avg latency:    {avgUs:F1} µs/query");
+        _output.WriteLine($"  Total hits:     {searcher.Search(query, 25).TotalHits}");
+
+        // Budget: ≤ 50 KB per query — regression guard (was 402 KB, target <15 KB)
+        Assert.True(avgBytes <= 51200,
+            $"FuzzyQuery allocated {avgBytes:F0} bytes/query, budget is 51200 bytes");
+    }
+
+    [Fact]
+    public void FuzzyQuery_HighEditDistance_ShortTerm_LowAllocationPerQuery()
+    {
+        // Regression guard for the 398 KB regression with short query terms and maxEdits=2.
+        // Short terms like "serch" (5 chars) with maxEdits=2 pass the byte-length pre-filter
+        // for nearly every term, causing excessive DecodeKey allocations.
+        const int docCount = 500;
+        const int warmup = 200;
+        const int measured = 100;
+        var dir = new MMapDirectory(SubDir("alloc_fuzzy_high_edit"));
+        var rng = new Random(42);
+        string[] pool = ["search", "serve", "seven", "select", "simple",
+                         "alpha", "beta", "gamma", "delta", "epsilon",
+                         "vector", "vertex", "verify", "valid", "value"];
+
+        using (var writer = new IndexWriter(dir, new IndexWriterConfig { MaxBufferedDocs = 256 }))
+        {
+            for (int i = 0; i < docCount; i++)
+            {
+                var doc = new LeanDocument();
+                var words = Enumerable.Range(0, 8).Select(_ => pool[rng.Next(pool.Length)]);
+                doc.Add(new TextField("body", string.Join(" ", words)));
+                writer.AddDocument(doc);
+            }
+            writer.Commit();
+        }
+
+        using var searcher = new IndexSearcher(dir);
+        var query1 = new FuzzyQuery("body", "serch", maxEdits: 2);
+        var query2 = new FuzzyQuery("body", "vectr", maxEdits: 2);
+
+        // Warmup
+        for (int i = 0; i < warmup; i++)
+        {
+            searcher.Search(query1, 25);
+            searcher.Search(query2, 25);
+        }
+
+        // Measure
+        long allocBefore = GC.GetAllocatedBytesForCurrentThread();
+        for (int i = 0; i < measured; i++)
+        {
+            searcher.Search(query1, 25);
+            searcher.Search(query2, 25);
+        }
+        long allocAfter = GC.GetAllocatedBytesForCurrentThread();
+
+        double avgBytes = (double)(allocAfter - allocBefore) / (measured * 2);
+
+        _output.WriteLine($"FuzzyQuery high-edit short terms over {docCount} docs:");
+        _output.WriteLine($"  Avg allocation: {avgBytes:F0} bytes/query");
+
+        Assert.True(avgBytes <= 51200,
+            $"FuzzyQuery (high-edit short term) allocated {avgBytes:F0} bytes/query, budget is 51200 bytes");
+    }
+
+    [Fact]
     public void StandardAnalyser_InternCache_StableCorpusNoNewStringAllocations()
     {
         // After warmup on a stable corpus, repeated analysis should hit intern cache 100%

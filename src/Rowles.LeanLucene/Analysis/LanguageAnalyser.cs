@@ -14,6 +14,7 @@ public sealed class LanguageAnalyser : IAnalyser
     private readonly StopWordFilter _stopWordFilter;
     private readonly IStemmer? _stemmer;
     private char[] _lowerBuf = new char[64];
+    private readonly List<Token> _resultBuffer = new(32);
 
     public LanguageAnalyser(ITokeniser tokeniser, IEnumerable<string>? stopWords, IStemmer? stemmer)
     {
@@ -25,7 +26,7 @@ public sealed class LanguageAnalyser : IAnalyser
     public List<Token> Analyse(ReadOnlySpan<char> input)
     {
         var rawTokens = _tokeniser.Tokenise(input);
-        var result = new List<Token>(rawTokens.Count);
+        _resultBuffer.Clear();
 
         for (int i = 0; i < rawTokens.Count; i++)
         {
@@ -47,9 +48,9 @@ public sealed class LanguageAnalyser : IAnalyser
             if (_stemmer is not null)
                 text = _stemmer.Stem(text);
 
-            result.Add(new Token(text, t.StartOffset, t.EndOffset));
+            _resultBuffer.Add(new Token(text, t.StartOffset, t.EndOffset));
         }
 
-        return result;
+        return new List<Token>(_resultBuffer);
     }
 }

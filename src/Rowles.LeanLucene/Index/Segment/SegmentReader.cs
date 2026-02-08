@@ -120,7 +120,7 @@ public sealed partial class SegmentReader : IDisposable
     /// Returns the parent bitset for block-join indexing, or null if this segment
     /// has no block documents.
     /// </summary>
-    public ParentBitSet? GetParentBitSet()
+    internal ParentBitSet? GetParentBitSet()
     {
         if (_parentBitSetLoaded) return _parentBitSet;
         var pbsPath = _basePath + ".pbs";

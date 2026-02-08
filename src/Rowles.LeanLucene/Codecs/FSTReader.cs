@@ -17,12 +17,21 @@ internal sealed class FSTReader
     private readonly byte[] _keyData;
     private readonly int _termCount;
 
-    private FSTReader(long[] offsets, int[] keyStarts, byte[] keyData, int termCount)
+    // Hash table for O(1) average-case exact term lookups
+    private readonly int[] _hashBuckets;
+    private readonly int[] _hashNext;
+    private readonly int _hashMask;
+
+    private FSTReader(long[] offsets, int[] keyStarts, byte[] keyData, int termCount,
+        int[] hashBuckets, int[] hashNext, int hashMask)
     {
         _offsets = offsets;
         _keyStarts = keyStarts;
         _keyData = keyData;
         _termCount = termCount;
+        _hashBuckets = hashBuckets;
+        _hashNext = hashNext;
+        _hashMask = hashMask;
     }
 
     /// <summary>
@@ -32,7 +41,7 @@ internal sealed class FSTReader
     {
         int termCount = input.ReadInt32();
         if (termCount == 0)
-            return new FSTReader([], [], [], 0);
+            return new FSTReader([], [], [], 0, [-1], [], 0);
 
         // Read postings offsets (N × int64)
         var offsets = new long[termCount];
@@ -53,22 +62,38 @@ internal sealed class FSTReader
             span.CopyTo(keyData);
         }
 
-        return new FSTReader(offsets, keyStarts, keyData, termCount);
+        // Build hash table for O(1) exact lookups
+        int capacity = 1;
+        while (capacity < termCount * 2) capacity <<= 1;
+        int hashMask = capacity - 1;
+        var hashBuckets = new int[capacity];
+        var hashNext = new int[termCount];
+        Array.Fill(hashBuckets, -1);
+        Array.Fill(hashNext, -1);
+        for (int i = 0; i < termCount; i++)
+        {
+            int h = HashBytes(keyData.AsSpan(keyStarts[i], keyStarts[i + 1] - keyStarts[i])) & hashMask;
+            hashNext[i] = hashBuckets[h];
+            hashBuckets[h] = i;
+        }
+
+        return new FSTReader(offsets, keyStarts, keyData, termCount, hashBuckets, hashNext, hashMask);
     }
 
-    /// <summary>O(log N) binary search on UTF-8 byte keys.</summary>
+    /// <summary>O(1) average-case hash lookup on UTF-8 byte keys (falls back to chain walk on collision).</summary>
     public bool TryGetPostingsOffset(ReadOnlySpan<byte> termUtf8, out long offset)
     {
         offset = 0;
-        int lo = 0, hi = _termCount - 1;
-        while (lo <= hi)
+        int h = HashBytes(termUtf8) & _hashMask;
+        int idx = _hashBuckets[h];
+        while (idx >= 0)
         {
-            int mid = lo + (hi - lo) / 2;
-            var key = GetKeySpan(mid);
-            int cmp = key.SequenceCompareTo(termUtf8);
-            if (cmp == 0) { offset = _offsets[mid]; return true; }
-            if (cmp < 0) lo = mid + 1;
-            else hi = mid - 1;
+            if (GetKeySpan(idx).SequenceEqual(termUtf8))
+            {
+                offset = _offsets[idx];
+                return true;
+            }
+            idx = _hashNext[idx];
         }
         return false;
     }
@@ -110,8 +135,32 @@ internal sealed class FSTReader
         Span<byte> prefixUtf8 = prefixByteCount <= 256 ? stackalloc byte[prefixByteCount] : new byte[prefixByteCount];
         Encoding.UTF8.GetBytes(fieldPrefix, prefixUtf8);
 
+        // Extract the non-wildcard literal prefix for a tighter lower bound scan.
+        int literalEnd = 0;
+        while (literalEnd < pattern.Length && pattern[literalEnd] != '*' && pattern[literalEnd] != '?')
+            literalEnd++;
+
+        int scanPrefixLen;
+        int literalByteCount = 0;
+        byte[]? scanBuf = null;
+        if (literalEnd > 0)
+        {
+            var literalSpan = pattern[..literalEnd];
+            literalByteCount = Encoding.UTF8.GetByteCount(literalSpan);
+            scanPrefixLen = prefixByteCount + literalByteCount;
+            scanBuf = new byte[scanPrefixLen];
+            prefixUtf8.CopyTo(scanBuf);
+            Encoding.UTF8.GetBytes(literalSpan, scanBuf.AsSpan(prefixByteCount));
+        }
+        else
+        {
+            scanPrefixLen = prefixByteCount;
+        }
+
+        ReadOnlySpan<byte> scanPrefix = scanBuf is not null ? scanBuf.AsSpan(0, scanPrefixLen) : prefixUtf8;
+
         var results = new List<(string, long)>();
-        int start = LowerBound(prefixUtf8);
+        int start = LowerBound(scanPrefix);
 
         for (int i = start; i < _termCount; i++)
         {
@@ -119,7 +168,10 @@ internal sealed class FSTReader
             if (!key.StartsWith(prefixUtf8))
                 break;
 
-            // Decode bare term for wildcard matching
+            // Only decode terms whose bytes match the literal prefix
+            if (scanBuf is not null && !key.StartsWith(scanPrefix))
+                break;
+
             var fullTerm = DecodeKey(i);
             var bareTerm = fullTerm.AsSpan(fieldPrefix.Length);
             if (WildcardQuery.Matches(bareTerm, pattern))
@@ -128,14 +180,20 @@ internal sealed class FSTReader
         return results;
     }
 
-    /// <summary>Returns all terms within Levenshtein distance for a field.</summary>
-    public List<(string Term, long Offset)> GetFuzzyMatches(string fieldPrefix, ReadOnlySpan<char> queryTerm, int maxEdits)
+    /// <summary>Returns all terms within Levenshtein distance for a field, with edit distances.</summary>
+    public List<(string Term, long Offset, int Distance)> GetFuzzyMatches(string fieldPrefix, ReadOnlySpan<char> queryTerm, int maxEdits)
     {
         int prefixByteCount = Encoding.UTF8.GetByteCount(fieldPrefix);
         Span<byte> prefixUtf8 = prefixByteCount <= 256 ? stackalloc byte[prefixByteCount] : new byte[prefixByteCount];
         Encoding.UTF8.GetBytes(fieldPrefix, prefixUtf8);
 
-        var results = new List<(string, long)>();
+        // Encode query term to UTF-8 for byte-level Levenshtein (avoids DecodeKey allocation)
+        int queryByteCount = Encoding.UTF8.GetByteCount(queryTerm);
+        Span<byte> queryUtf8 = queryByteCount <= 256 ? stackalloc byte[queryByteCount] : new byte[queryByteCount];
+        Encoding.UTF8.GetBytes(queryTerm, queryUtf8);
+        bool queryIsAscii = queryByteCount == queryTerm.Length;
+
+        var results = new List<(string, long, int)>();
         int start = LowerBound(prefixUtf8);
         int queryTermLen = queryTerm.Length;
 
@@ -145,6 +203,25 @@ internal sealed class FSTReader
             if (!key.StartsWith(prefixUtf8))
                 break;
 
+            int bareByteLen = key.Length - prefixByteCount;
+            if (bareByteLen - maxEdits > queryTermLen || queryTermLen - maxEdits > bareByteLen)
+                continue;
+
+            // Try ASCII byte-level Levenshtein to avoid string allocation
+            if (queryIsAscii)
+            {
+                var bareBytes = key[prefixByteCount..];
+                int dist = LevenshteinDistance.ComputeAscii(queryUtf8, bareBytes);
+                if (dist >= 0)
+                {
+                    // ASCII path succeeded
+                    if (dist <= maxEdits)
+                        results.Add((DecodeKey(i), _offsets[i], dist));
+                    continue;
+                }
+                // Non-ASCII term — fall through to char-based path
+            }
+
             var fullTerm = DecodeKey(i);
             var bareTerm = fullTerm.AsSpan(fieldPrefix.Length);
 
@@ -153,7 +230,7 @@ internal sealed class FSTReader
 
             int distance = LevenshteinDistance.Compute(queryTerm, bareTerm);
             if (distance <= maxEdits)
-                results.Add((fullTerm, _offsets[i]));
+                results.Add((fullTerm, _offsets[i], distance));
         }
         return results;
     }
@@ -229,13 +306,42 @@ internal sealed class FSTReader
         Span<byte> prefixUtf8 = prefixByteCount <= 256 ? stackalloc byte[prefixByteCount] : new byte[prefixByteCount];
         Encoding.UTF8.GetBytes(fieldPrefix, prefixUtf8);
 
+        // Extract literal prefix from the regex pattern for byte-level gating.
+        var pattern = regex.ToString().AsSpan();
+        if (pattern.Length > 0 && pattern[0] == '^')
+            pattern = pattern[1..];
+        int litEnd = 0;
+        while (litEnd < pattern.Length && !IsRegexMeta(pattern[litEnd]))
+            litEnd++;
+
+        int scanPrefixLen;
+        byte[]? scanBuf = null;
+        if (litEnd > 0)
+        {
+            var literalSpan = pattern[..litEnd];
+            int literalByteCount = Encoding.UTF8.GetByteCount(literalSpan);
+            scanPrefixLen = prefixByteCount + literalByteCount;
+            scanBuf = new byte[scanPrefixLen];
+            prefixUtf8.CopyTo(scanBuf);
+            Encoding.UTF8.GetBytes(literalSpan, scanBuf.AsSpan(prefixByteCount));
+        }
+        else
+        {
+            scanPrefixLen = prefixByteCount;
+        }
+
+        ReadOnlySpan<byte> scanPrefix = scanBuf is not null ? scanBuf.AsSpan(0, scanPrefixLen) : prefixUtf8;
+
         var results = new List<(string, long)>();
-        int start = LowerBound(prefixUtf8);
+        int start = LowerBound(scanPrefix);
 
         for (int i = start; i < _termCount; i++)
         {
             var key = GetKeySpan(i);
             if (!key.StartsWith(prefixUtf8))
+                break;
+
+            if (scanBuf is not null && !key.StartsWith(scanPrefix))
                 break;
 
             var fullTerm = DecodeKey(i);
@@ -244,6 +350,21 @@ internal sealed class FSTReader
                 results.Add((fullTerm, _offsets[i]));
         }
         return results;
+    }
+
+    private static bool IsRegexMeta(char c) =>
+        c is '.' or '*' or '+' or '?' or '[' or '(' or '{' or '|' or '\\' or '^' or '$';
+
+    /// <summary>FNV-1a hash of a byte span.</summary>
+    private static int HashBytes(ReadOnlySpan<byte> data)
+    {
+        uint hash = 2166136261;
+        foreach (byte b in data)
+        {
+            hash ^= b;
+            hash *= 16777619;
+        }
+        return (int)(hash & 0x7FFFFFFF);
     }
 
     /// <summary>Returns the raw UTF-8 byte span for term at ordinal index.</summary>

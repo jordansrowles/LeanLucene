@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Runtime.CompilerServices;
 using Rowles.LeanLucene.Codecs.Postings;
 using Rowles.LeanLucene.Index;
@@ -384,81 +385,128 @@ public sealed partial class IndexSearcher
 
     /// <summary>
     /// Fallback BooleanQuery execution for mixed clause types (nested BooleanQuery, RangeQuery, etc.).
-    /// Uses the original materialisation approach via ExecuteSubQuery.
+    /// Uses pooled float[] for scores and bool[] for candidate tracking instead of Dictionary/HashSet.
     /// </summary>
     private void ExecuteBooleanFallback(BooleanQuery query, SegmentReader reader,
         Dictionary<(string Field, string Term), int> globalDFs, ref TopNCollector collector)
     {
-        var scoreMap = new Dictionary<int, float>();
-        HashSet<int> candidates;
+        int maxDoc = reader.MaxDoc;
+        var scores = ArrayPool<float>.Shared.Rent(maxDoc);
+        var inCandidate = ArrayPool<bool>.Shared.Rent(maxDoc);
+        Array.Clear(scores, 0, maxDoc);
+        Array.Clear(inCandidate, 0, maxDoc);
+        int candidateCount = 0;
 
-        // Inline categorisation: iterate clauses by Occur without building separate lists
-        bool hasMust = false;
-        foreach (var clause in query.Clauses)
+        try
         {
-            if (clause.Occur == Occur.Must) { hasMust = true; break; }
-        }
-
-        if (hasMust)
-        {
-            var mustSets = new List<HashSet<int>>();
+            bool hasMust = false;
             foreach (var clause in query.Clauses)
             {
-                if (clause.Occur != Occur.Must) continue;
-                var results = ExecuteSubQuery(clause.Query, reader, globalDFs);
-                var idSet = new HashSet<int>(results.Count);
-                foreach (var sr in results)
-                {
-                    idSet.Add(sr.DocId);
-                    scoreMap[sr.DocId] = scoreMap.GetValueOrDefault(sr.DocId) + sr.Score;
-                }
-                mustSets.Add(idSet);
+                if (clause.Occur == Occur.Must) { hasMust = true; break; }
             }
-            candidates = mustSets[0];
-            for (int i = 1; i < mustSets.Count; i++)
-                candidates.IntersectWith(mustSets[i]);
 
+            if (hasMust)
+            {
+                // First MUST clause initialises the candidate set
+                bool first = true;
+                foreach (var clause in query.Clauses)
+                {
+                    if (clause.Occur != Occur.Must) continue;
+                    var results = ExecuteSubQuery(clause.Query, reader, globalDFs);
+
+                    if (first)
+                    {
+                        foreach (var sr in results)
+                        {
+                            inCandidate[sr.DocId] = true;
+                            scores[sr.DocId] += sr.Score;
+                            candidateCount++;
+                        }
+                        first = false;
+                    }
+                    else
+                    {
+                        // Intersect: mark which current candidates appear in this clause
+                        var inClause = ArrayPool<bool>.Shared.Rent(maxDoc);
+                        Array.Clear(inClause, 0, maxDoc);
+                        foreach (var sr in results)
+                        {
+                            inClause[sr.DocId] = true;
+                            if (inCandidate[sr.DocId])
+                                scores[sr.DocId] += sr.Score;
+                        }
+                        for (int d = 0; d < maxDoc; d++)
+                        {
+                            if (inCandidate[d] && !inClause[d])
+                            {
+                                inCandidate[d] = false;
+                                scores[d] = 0;
+                                candidateCount--;
+                            }
+                        }
+                        ArrayPool<bool>.Shared.Return(inClause, clearArray: false);
+                    }
+                }
+
+                // SHOULD clauses boost matching candidates
+                foreach (var clause in query.Clauses)
+                {
+                    if (clause.Occur != Occur.Should) continue;
+                    var results = ExecuteSubQuery(clause.Query, reader, globalDFs);
+                    foreach (var sr in results)
+                    {
+                        if (inCandidate[sr.DocId])
+                            scores[sr.DocId] += sr.Score;
+                    }
+                }
+            }
+            else
+            {
+                // SHOULD-only: all matching docs are candidates
+                foreach (var clause in query.Clauses)
+                {
+                    if (clause.Occur != Occur.Should) continue;
+                    var results = ExecuteSubQuery(clause.Query, reader, globalDFs);
+                    foreach (var sr in results)
+                    {
+                        if (!inCandidate[sr.DocId])
+                        {
+                            inCandidate[sr.DocId] = true;
+                            candidateCount++;
+                        }
+                        scores[sr.DocId] += sr.Score;
+                    }
+                }
+
+                if (candidateCount == 0) return;
+            }
+
+            // MUST_NOT: remove candidates
             foreach (var clause in query.Clauses)
             {
-                if (clause.Occur != Occur.Should) continue;
+                if (clause.Occur != Occur.MustNot) continue;
                 var results = ExecuteSubQuery(clause.Query, reader, globalDFs);
                 foreach (var sr in results)
                 {
-                    if (candidates.Contains(sr.DocId))
-                        scoreMap[sr.DocId] = scoreMap.GetValueOrDefault(sr.DocId) + sr.Score;
+                    if (inCandidate[sr.DocId])
+                    {
+                        inCandidate[sr.DocId] = false;
+                        candidateCount--;
+                    }
                 }
             }
-        }
-        else
-        {
-            candidates = new HashSet<int>();
-            foreach (var clause in query.Clauses)
+
+            int docBase = reader.DocBase;
+            for (int d = 0; d < maxDoc; d++)
             {
-                if (clause.Occur != Occur.Should) continue;
-                var results = ExecuteSubQuery(clause.Query, reader, globalDFs);
-                foreach (var sr in results)
-                {
-                    candidates.Add(sr.DocId);
-                    scoreMap[sr.DocId] = scoreMap.GetValueOrDefault(sr.DocId) + sr.Score;
-                }
+                if (!inCandidate[d] || !reader.IsLive(d)) continue;
+                collector.Collect(docBase + d, scores[d] != 0 ? scores[d] : 1.0f);
             }
-
-            if (candidates.Count == 0) return;
         }
-
-        foreach (var clause in query.Clauses)
+        finally
         {
-            if (clause.Occur != Occur.MustNot) continue;
-            var results = ExecuteSubQuery(clause.Query, reader, globalDFs);
-            foreach (var sr in results)
-                candidates.Remove(sr.DocId);
-        }
-
-        int docBase = reader.DocBase;
-        foreach (var id in candidates)
-        {
-            if (!reader.IsLive(id)) continue;
-            collector.Collect(docBase + id, scoreMap.GetValueOrDefault(id, 1.0f));
+            ArrayPool<float>.Shared.Return(scores, clearArray: false);
+            ArrayPool<bool>.Shared.Return(inCandidate, clearArray: false);
         }
     }
 

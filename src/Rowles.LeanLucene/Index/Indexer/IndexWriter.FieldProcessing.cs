@@ -225,9 +225,8 @@ public sealed partial class IndexWriter
     }
 
     /// <summary>
-    /// Returns a pooled qualified term string ("field\0term"). Avoids allocation when the
-    /// qualified term already exists in the pool by checking the pool before constructing
-    /// the string. Uses a cached field prefix to reduce per-token concat cost.
+    /// Returns a pooled qualified term string ("field\0term"). Uses span-based alternate
+    /// lookup to avoid allocating a string on cache hit.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private string GetOrCreateQualifiedTerm(string fieldName, string term)
@@ -238,16 +237,17 @@ public sealed partial class IndexWriter
             _fieldPrefixCache[fieldName] = prefix;
         }
 
-        var qualifiedTerm = string.Create(prefix.Length + term.Length, (prefix, term),
-            static (span, state) =>
-            {
-                state.prefix.AsSpan().CopyTo(span);
-                state.term.AsSpan().CopyTo(span[state.prefix.Length..]);
-            });
+        // Build the qualified term into a stack buffer to probe the pool without allocating
+        int totalLen = prefix.Length + term.Length;
+        Span<char> buf = totalLen <= 256 ? stackalloc char[totalLen] : new char[totalLen];
+        prefix.AsSpan().CopyTo(buf);
+        term.AsSpan().CopyTo(buf[prefix.Length..]);
 
-        if (_qualifiedTermPool.TryGetValue(qualifiedTerm, out var pooled))
+        var lookup = _qualifiedTermPool.GetAlternateLookup<ReadOnlySpan<char>>();
+        if (lookup.TryGetValue(buf, out var pooled))
             return pooled;
 
+        var qualifiedTerm = new string(buf);
         _qualifiedTermPool[qualifiedTerm] = qualifiedTerm;
         return qualifiedTerm;
     }

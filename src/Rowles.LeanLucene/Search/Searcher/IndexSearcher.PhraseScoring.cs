@@ -14,9 +14,7 @@ public sealed partial class IndexSearcher
         if (query.Terms.Length == 0) return;
 
         int termCount = query.Terms.Length;
-        var qualifiedTerms = new string[termCount];
-        for (int i = 0; i < termCount; i++)
-            qualifiedTerms[i] = string.Concat(query.Field, "\x00", query.Terms[i]);
+        var qualifiedTerms = query.QualifiedTerms;
 
         // Open position-aware PostingsEnums for all terms
         Span<PostingsEnum> postingsArr = new PostingsEnum[termCount];

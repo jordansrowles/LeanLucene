@@ -10,7 +10,7 @@ namespace Rowles.LeanLucene.Codecs;
 /// v2 (current): delegates to <see cref="FSTReader"/> for byte-keyed O(log N) lookups.
 /// v1 (legacy): materialises all terms into string[] + long[] for backward compatibility.
 /// </summary>
-public sealed class TermDictionaryReader : IDisposable
+internal sealed class TermDictionaryReader : IDisposable
 {
     // v2 path: delegate to FSTReader
     private readonly FSTReader? _fstReader;
@@ -161,16 +161,16 @@ public sealed class TermDictionaryReader : IDisposable
 
     // ── Fuzzy Scan ──────────────────────────────────────────────────────────
 
-    public List<(string Term, long Offset)> GetFuzzyMatches(string fieldPrefix, ReadOnlySpan<char> queryTerm, int maxEdits)
+    public List<(string Term, long Offset, int Distance)> GetFuzzyMatches(string fieldPrefix, ReadOnlySpan<char> queryTerm, int maxEdits)
     {
         if (_fstReader is not null)
             return _fstReader.GetFuzzyMatches(fieldPrefix, queryTerm, maxEdits);
         return GetFuzzyMatchesV1(fieldPrefix, queryTerm, maxEdits);
     }
 
-    private List<(string Term, long Offset)> GetFuzzyMatchesV1(string fieldPrefix, ReadOnlySpan<char> queryTerm, int maxEdits)
+    private List<(string Term, long Offset, int Distance)> GetFuzzyMatchesV1(string fieldPrefix, ReadOnlySpan<char> queryTerm, int maxEdits)
     {
-        var results = new List<(string, long)>();
+        var results = new List<(string, long, int)>();
         int start = LowerBoundV1(fieldPrefix.AsSpan());
         int queryTermLen = queryTerm.Length;
         for (int i = start; i < _allTerms!.Length; i++)
@@ -183,7 +183,7 @@ public sealed class TermDictionaryReader : IDisposable
                 continue;
             int distance = LevenshteinDistance.Compute(queryTerm, bareTerm);
             if (distance <= maxEdits)
-                results.Add((term, _allOffsets![i]));
+                results.Add((term, _allOffsets![i], distance));
         }
         return results;
     }

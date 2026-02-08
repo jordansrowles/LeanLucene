@@ -191,6 +191,12 @@ public sealed class FSTDictionaryTests : IClassFixture<TestDirectoryFixture>
         Assert.Contains(matches, m => m.Term == "body\0bat");
         Assert.Contains(matches, m => m.Term == "body\0car");
         Assert.DoesNotContain(matches, m => m.Term == "body\0dog");
+
+        // Verify edit distances are returned correctly
+        var catMatch = matches.First(m => m.Term == "body\0cat");
+        Assert.Equal(0, catMatch.Distance);
+        var batMatch = matches.First(m => m.Term == "body\0bat");
+        Assert.Equal(1, batMatch.Distance);
     }
 
     // ── Range scan ──────────────────────────────────────────────────────────

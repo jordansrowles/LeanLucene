@@ -1,3 +1,4 @@
+using System.Buffers;
 using Rowles.LeanLucene.Codecs;
 using Rowles.LeanLucene.Codecs.DocValues;
 using Rowles.LeanLucene.Codecs.StoredFields;
@@ -163,28 +164,34 @@ public sealed partial class IndexWriter
 
         // Write per-field norms (.nrm) — use pre-tracked per-field token counts (O(1) per doc)
         var fieldNorms = new Dictionary<string, float[]>(_docTokenCounts.Count, StringComparer.Ordinal);
+        var normsReturnList = new List<float[]>(_docTokenCounts.Count);
         foreach (var (fieldName, counts) in _docTokenCounts)
         {
-            var norms = new float[_bufferedDocCount];
+            var norms = ArrayPool<float>.Shared.Rent(_bufferedDocCount);
             for (int i = 0; i < _bufferedDocCount; i++)
             {
                 int tokenCount = i < counts.Length ? counts[i] : 0;
                 norms[i] = 1.0f / (1.0f + Math.Max(1, tokenCount));
             }
             fieldNorms[fieldName] = norms;
+            normsReturnList.Add(norms);
         }
-        NormsWriter.Write(basePath + ".nrm", fieldNorms);
+        NormsWriter.Write(basePath + ".nrm", fieldNorms, _bufferedDocCount);
+        foreach (var arr in normsReturnList) ArrayPool<float>.Shared.Return(arr, clearArray: false);
 
         // Write exact field lengths (.fln) for precise BM25 scoring
         var fieldLengths = new Dictionary<string, int[]>(_docTokenCounts.Count, StringComparer.Ordinal);
+        var lengthsReturnList = new List<int[]>(_docTokenCounts.Count);
         foreach (var (fieldName, counts) in _docTokenCounts)
         {
-            var lengths = new int[_bufferedDocCount];
+            var lengths = ArrayPool<int>.Shared.Rent(_bufferedDocCount);
             for (int i = 0; i < _bufferedDocCount; i++)
                 lengths[i] = i < counts.Length ? counts[i] : 0;
             fieldLengths[fieldName] = lengths;
+            lengthsReturnList.Add(lengths);
         }
-        FieldLengthWriter.Write(basePath + ".fln", fieldLengths);
+        FieldLengthWriter.Write(basePath + ".fln", fieldLengths, _bufferedDocCount);
+        foreach (var arr in lengthsReturnList) ArrayPool<int>.Shared.Return(arr, clearArray: false);
 
         // Write stored fields (.fdt + .fdx) from flat buffer
         StoredFieldsWriter.Write(basePath + ".fdt", basePath + ".fdx",
@@ -207,14 +214,18 @@ public sealed partial class IndexWriter
         if (_numericDocValues.Count > 0)
         {
             var dvn = new Dictionary<string, double[]>(_numericDocValues.Count, StringComparer.Ordinal);
+            var dvnReturnList = new List<double[]>(_numericDocValues.Count);
             foreach (var (field, list) in _numericDocValues)
             {
-                var arr = new double[_bufferedDocCount];
+                var arr = ArrayPool<double>.Shared.Rent(_bufferedDocCount);
+                Array.Clear(arr, 0, _bufferedDocCount);
                 for (int i = 0; i < Math.Min(list.Count, _bufferedDocCount); i++)
                     arr[i] = list[i];
                 dvn[field] = arr;
+                dvnReturnList.Add(arr);
             }
             NumericDocValuesWriter.Write(basePath + ".dvn", dvn, _bufferedDocCount);
+            foreach (var arr in dvnReturnList) ArrayPool<double>.Shared.Return(arr, clearArray: false);
         }
 
         if (_sortedDocValues.Count > 0)
@@ -336,6 +347,7 @@ public sealed partial class IndexWriter
     /// <summary>
     /// Computes a permutation array where perm[newDocId] = oldDocId,
     /// sorting buffered documents according to the given <see cref="IndexSort"/>.
+    /// Pre-extracts sort key arrays to avoid per-comparison dictionary lookups.
     /// </summary>
     private int[] ComputeSortPermutation(IndexSort sort)
     {
@@ -343,47 +355,66 @@ public sealed partial class IndexWriter
         var perm = new int[n];
         for (int i = 0; i < n; i++) perm[i] = i;
 
+        // Pre-extract sort key arrays to avoid dictionary lookups in the comparator
+        var fieldCount = sort.Fields.Count;
+        var numericKeys = new double[fieldCount][];
+        var stringKeys = new string?[fieldCount][];
+        var sortTypes = new SortFieldType[fieldCount];
+        var descFlags = new bool[fieldCount];
+
+        for (int f = 0; f < fieldCount; f++)
+        {
+            var field = sort.Fields[f];
+            sortTypes[f] = field.Type;
+            descFlags[f] = field.Descending;
+
+            switch (field.Type)
+            {
+                case SortFieldType.Numeric:
+                    var numArr = new double[n];
+                    if (_numericDocValues.TryGetValue(field.FieldName, out var dvList))
+                    {
+                        for (int i = 0; i < Math.Min(n, dvList.Count); i++)
+                            numArr[i] = dvList[i];
+                    }
+                    numericKeys[f] = numArr;
+                    break;
+
+                case SortFieldType.String:
+                    var strArr = new string?[n];
+                    if (_sortedDocValues.TryGetValue(field.FieldName, out var sdvList))
+                    {
+                        for (int i = 0; i < Math.Min(n, sdvList.Count); i++)
+                            strArr[i] = sdvList[i];
+                    }
+                    stringKeys[f] = strArr;
+                    break;
+            }
+        }
+
         Array.Sort(perm, (a, b) =>
         {
-            foreach (var field in sort.Fields)
+            for (int f = 0; f < fieldCount; f++)
             {
-                int cmp = field.Type switch
+                int cmp = sortTypes[f] switch
                 {
-                    SortFieldType.Numeric => CompareNumeric(a, b, field.FieldName),
-                    SortFieldType.String => CompareString(a, b, field.FieldName),
+                    SortFieldType.Numeric => numericKeys[f][a].CompareTo(numericKeys[f][b]),
+                    SortFieldType.String => string.Compare(stringKeys[f][a], stringKeys[f][b], StringComparison.Ordinal),
                     SortFieldType.DocId => a.CompareTo(b),
                     _ => 0
                 };
-                if (field.Descending) cmp = -cmp;
+                if (descFlags[f]) cmp = -cmp;
                 if (cmp != 0) return cmp;
             }
-            return a.CompareTo(b); // stable tie-break on original insertion order
+            return a.CompareTo(b);
         });
 
         return perm;
     }
 
-    private int CompareNumeric(int docA, int docB, string fieldName)
-    {
-        double va = 0, vb = 0;
-        if (_numericDocValues.TryGetValue(fieldName, out var dvList))
-        {
-            if (docA < dvList.Count) va = dvList[docA];
-            if (docB < dvList.Count) vb = dvList[docB];
-        }
-        return va.CompareTo(vb);
-    }
-
-    private int CompareString(int docA, int docB, string fieldName)
-    {
-        string? va = null, vb = null;
-        if (_sortedDocValues.TryGetValue(fieldName, out var dvList))
-        {
-            if (docA < dvList.Count) va = dvList[docA];
-            if (docB < dvList.Count) vb = dvList[docB];
-        }
-        return string.Compare(va, vb, StringComparison.Ordinal);
-    }
+    // No longer needed — sort keys are pre-extracted inline
+    // private int CompareNumeric(int docA, int docB, string fieldName) { ... }
+    // private int CompareString(int docA, int docB, string fieldName) { ... }
 
     /// <summary>
     /// Remaps all in-memory buffers so that doc IDs reflect the sorted order.
@@ -458,52 +489,7 @@ public sealed partial class IndexWriter
     private void RemapPostings(int[] inversePerm)
     {
         foreach (var (_, acc) in _postings)
-        {
-            var oldIds = acc.DocIds;
-            int count = oldIds.Length;
-            if (count == 0) continue;
-
-            // Build a list of (newDocId, originalIndex) so we can re-sort positions/freqs
-            var entries = new (int NewId, int OrigIdx)[count];
-            for (int i = 0; i < count; i++)
-                entries[i] = (inversePerm[oldIds[i]], i);
-
-            Array.Sort(entries, static (a, b) => a.NewId.CompareTo(b.NewId));
-
-            // Rebuild the accumulator with sorted entries
-            var newAcc = new PostingAccumulator();
-            for (int i = 0; i < count; i++)
-            {
-                int origIdx = entries[i].OrigIdx;
-                int newDocId = entries[i].NewId;
-                int freq = acc.GetFreq(origIdx);
-                var positions = acc.GetPositions(origIdx);
-
-                if (positions.IsEmpty && freq == 0)
-                {
-                    newAcc.AddDocOnly(newDocId);
-                }
-                else if (!acc.HasPayloads)
-                {
-                    for (int p = 0; p < positions.Length; p++)
-                        newAcc.Add(newDocId, positions[p]);
-                }
-                else
-                {
-                    for (int p = 0; p < positions.Length; p++)
-                        newAcc.AddWithPayload(newDocId, positions[p], acc.GetPayload(origIdx, p));
-                }
-            }
-
-            // Replace the old accumulator — mutate the dictionary entry
-            _postings[_postings.First(kv => ReferenceEquals(kv.Value, acc)).Key] = newAcc;
-        }
-
-        // Since we mutated during iteration via reference lookup, rebuild dictionary
-        // to ensure clean state
-        var rebuilt = new Dictionary<string, PostingAccumulator>(_postings.Count, StringComparer.Ordinal);
-        foreach (var kv in _postings) rebuilt[kv.Key] = kv.Value;
-        _postings = rebuilt;
+            acc.RemapDocIds(inversePerm);
     }
 
     /// <summary>

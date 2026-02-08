@@ -106,7 +106,9 @@ public sealed class SearcherManager : IDisposable
     {
         if (Interlocked.CompareExchange(ref _disposed, 1, 0) != 0) return;
         _cts.Cancel();
-        try { _refreshTask.Wait(TimeSpan.FromSeconds(5)); } catch { }
+        try { _refreshTask.Wait(TimeSpan.FromSeconds(5)); }
+        catch (AggregateException) { /* Expected: task cancelled during shutdown */ }
+        catch (ObjectDisposedException) { /* CTS already disposed */ }
         _cts.Dispose();
         _current.Searcher.Dispose();
     }
@@ -121,7 +123,8 @@ public sealed class SearcherManager : IDisposable
                 TryRefresh();
             }
             catch (OperationCanceledException) { break; }
-            catch { /* swallow refresh errors — will retry next interval */ }
+            catch (IOException) { /* Transient I/O — will retry next interval */ }
+            catch (InvalidDataException) { /* Corrupt segment — will retry next interval */ }
         }
     }
 

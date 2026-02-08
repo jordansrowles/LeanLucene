@@ -79,6 +79,27 @@ internal static class Program
         if (suite is BenchmarkSuite.All or BenchmarkSuite.Deletion)
             RunSuite<DeletionBenchmarks>("deletion", typeDataDir, runId, benchmarkArgs, suiteSummaries);
 
+        if (suite is BenchmarkSuite.All or BenchmarkSuite.TokenBudget)
+            RunSuite<TokenBudgetBenchmarks>("tokenbudget", typeDataDir, runId, benchmarkArgs, suiteSummaries);
+
+        if (suite is BenchmarkSuite.All or BenchmarkSuite.Diagnostics)
+            RunSuite<DiagnosticsBenchmarks>("diagnostics", typeDataDir, runId, benchmarkArgs, suiteSummaries);
+
+        if (suite is BenchmarkSuite.All or BenchmarkSuite.Suggester)
+            RunSuite<SuggesterBenchmarks>("suggester", typeDataDir, runId, benchmarkArgs, suiteSummaries);
+
+        if (suite is BenchmarkSuite.All or BenchmarkSuite.SchemaJson)
+            RunSuite<SchemaAndJsonBenchmarks>("schemajson", typeDataDir, runId, benchmarkArgs, suiteSummaries);
+
+        if (suite is BenchmarkSuite.All or BenchmarkSuite.Compound)
+            RunSuite<CompoundFileBenchmarks>("compound", typeDataDir, runId, benchmarkArgs, suiteSummaries);
+
+        if (suite is BenchmarkSuite.All or BenchmarkSuite.IndexSort)
+            RunSuite<IndexSortBenchmarks>("indexsort", typeDataDir, runId, benchmarkArgs, suiteSummaries);
+
+        if (suite is BenchmarkSuite.All or BenchmarkSuite.BlockJoin)
+            RunSuite<BlockJoinBenchmarks>("blockjoin", typeDataDir, runId, benchmarkArgs, suiteSummaries);
+
         if (suiteSummaries.Count == 0)
         {
             Console.Error.WriteLine("No benchmark suite selected.");
@@ -178,6 +199,13 @@ internal static class Program
               wildcard         WildcardQueryBenchmarks — wildcard pattern matching
               deletion         DeletionBenchmarks — delete throughput (vs Lucene.NET)
               smallindex       SmallIndexBenchmarks — 100-doc roundtrip overhead
+              tokenbudget      TokenBudgetBenchmarks — token budget enforcement overhead
+              diagnostics      DiagnosticsBenchmarks — SlowQueryLog + Analytics hook overhead
+              suggester        SuggesterBenchmarks — DidYouMean spelling correction (vs Lucene.NET)
+              schemajson       SchemaAndJsonBenchmarks — schema validation + JSON mapping
+              compound         CompoundFileBenchmarks — compound file read/write (vs Lucene.NET)
+              indexsort        IndexSortBenchmarks — index-time sort + early termination
+              blockjoin        BlockJoinBenchmarks — block-join queries (vs Lucene.NET)
 
             Output:
               Results are written to bench/data/<type>/<runId>/
@@ -261,6 +289,20 @@ internal static class Program
             return BenchmarkSuite.Wildcard;
         if (value.Equals("deletion", StringComparison.OrdinalIgnoreCase))
             return BenchmarkSuite.Deletion;
+        if (value.Equals("tokenbudget", StringComparison.OrdinalIgnoreCase))
+            return BenchmarkSuite.TokenBudget;
+        if (value.Equals("diagnostics", StringComparison.OrdinalIgnoreCase))
+            return BenchmarkSuite.Diagnostics;
+        if (value.Equals("suggester", StringComparison.OrdinalIgnoreCase))
+            return BenchmarkSuite.Suggester;
+        if (value.Equals("schemajson", StringComparison.OrdinalIgnoreCase))
+            return BenchmarkSuite.SchemaJson;
+        if (value.Equals("compound", StringComparison.OrdinalIgnoreCase))
+            return BenchmarkSuite.Compound;
+        if (value.Equals("indexsort", StringComparison.OrdinalIgnoreCase))
+            return BenchmarkSuite.IndexSort;
+        if (value.Equals("blockjoin", StringComparison.OrdinalIgnoreCase))
+            return BenchmarkSuite.BlockJoin;
 
         return BenchmarkSuite.All;
     }
@@ -295,6 +337,13 @@ internal static class Program
         Prefix,
         Fuzzy,
         Wildcard,
-        Deletion
+        Deletion,
+        TokenBudget,
+        Diagnostics,
+        Suggester,
+        SchemaJson,
+        Compound,
+        IndexSort,
+        BlockJoin
     }
 }

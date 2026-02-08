@@ -3,7 +3,7 @@ namespace Rowles.LeanLucene.Codecs.Postings;
 /// <summary>
 /// Reads delta-encoded postings lists written by <see cref="PostingsWriter"/>.
 /// </summary>
-public static class PostingsReader
+internal static class PostingsReader
 {
     public static int[] ReadDocIds(string filePath, string term)
     {

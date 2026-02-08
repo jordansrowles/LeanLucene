@@ -7,7 +7,7 @@ namespace Rowles.LeanLucene.Codecs;
 /// Reads dense float vectors written by <see cref="VectorWriter"/>.
 /// Uses memory-mapped I/O for zero-copy vector access.
 /// </summary>
-public sealed class VectorReader : IDisposable
+internal sealed class VectorReader : IDisposable
 {
     private readonly MemoryMappedFile _mmf;
     private readonly MemoryMappedViewAccessor _accessor;

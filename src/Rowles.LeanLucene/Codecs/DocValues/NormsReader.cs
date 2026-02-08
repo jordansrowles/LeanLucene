@@ -7,7 +7,7 @@ namespace Rowles.LeanLucene.Codecs.DocValues;
 /// Reads quantised per-field norm values as compact byte arrays.
 /// Uses memory-mapped I/O to avoid loading the entire file into a managed byte[].
 /// </summary>
-public static class NormsReader
+internal static class NormsReader
 {
     public static Dictionary<string, byte[]> Read(string filePath)
     {

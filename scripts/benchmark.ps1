@@ -74,7 +74,9 @@
 #>
 param(
     [ValidateSet('all', 'index', 'query', 'analysis', 'boolean', 'phrase',
-                 'prefix', 'fuzzy', 'wildcard', 'deletion', 'smallindex')]
+                 'prefix', 'fuzzy', 'wildcard', 'deletion', 'smallindex',
+                 'tokenbudget', 'diagnostics', 'suggester', 'schemajson',
+                 'compound', 'indexsort', 'blockjoin')]
     [string]$Suite = 'all',
 
     [ValidateSet('full', 'smoke', 'stress', 'partial')]
@@ -107,6 +109,13 @@ $suiteDescriptions = [ordered]@{
     wildcard   = 'WildcardQueryBenchmarks  - wildcard patterns (vs Lucene.NET)'
     deletion   = 'DeletionBenchmarks       - delete throughput (vs Lucene.NET)'
     smallindex = 'SmallIndexBenchmarks     - 100-doc roundtrip overhead (index + search)'
+    tokenbudget = 'TokenBudgetBenchmarks   - token budget enforcement overhead'
+    diagnostics = 'DiagnosticsBenchmarks   - SlowQueryLog + Analytics hook overhead'
+    suggester  = 'SuggesterBenchmarks      - DidYouMean spelling (vs Lucene.NET SpellChecker)'
+    schemajson = 'SchemaAndJsonBenchmarks  - schema validation + JSON mapping'
+    compound   = 'CompoundFileBenchmarks   - compound file read/write (vs Lucene.NET)'
+    indexsort  = 'IndexSortBenchmarks      - index-time sort + early termination'
+    blockjoin  = 'BlockJoinBenchmarks      - block-join queries (vs Lucene.NET Join)'
 }
 
 $stratDescriptions = [ordered]@{
