@@ -1,21 +1,5 @@
 namespace Rowles.LeanLucene.Search.Scoring;
 
-/// <summary>A single facet bucket: a field value and how many matching documents have it.</summary>
-public readonly record struct FacetBucket(string Value, int Count);
-
-/// <summary>The facet result for one field: the field name and its value-count buckets.</summary>
-public sealed class FacetResult
-{
-    public string FieldName { get; }
-    public IReadOnlyList<FacetBucket> Buckets { get; }
-
-    public FacetResult(string fieldName, IReadOnlyList<FacetBucket> buckets)
-    {
-        FieldName = fieldName;
-        Buckets = buckets;
-    }
-}
-
 /// <summary>
 /// Collects per-field value counts across a result set for faceted navigation.
 /// </summary>

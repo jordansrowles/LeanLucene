@@ -24,13 +24,3 @@ public sealed class AggregationRequest
     /// <summary>Histogram bucket width (only used when <see cref="Type"/> is <see cref="AggregationType.Histogram"/>).</summary>
     public double HistogramInterval { get; init; } = 10.0;
 }
-
-/// <summary>Supported aggregation types.</summary>
-public enum AggregationType
-{
-    /// <summary>Count, Min, Max, Sum, Avg.</summary>
-    Stats,
-
-    /// <summary>Fixed-width histogram buckets.</summary>
-    Histogram
-}

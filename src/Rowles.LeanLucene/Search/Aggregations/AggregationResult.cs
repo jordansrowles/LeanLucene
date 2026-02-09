@@ -20,6 +20,3 @@ public sealed class AggregationResult
     public static AggregationResult Empty(string name, string field)
         => new() { Name = name, Field = field, Count = 0, Min = 0, Max = 0, Sum = 0 };
 }
-
-/// <summary>A single histogram bucket.</summary>
-public sealed record HistogramBucket(double LowerBound, double UpperBound, long Count);

@@ -18,13 +18,3 @@ public abstract class Query : IEquatable<Query>
     /// <summary>Helper to combine boost into a hash code.</summary>
     protected int CombineBoost(int hash) => HashCode.Combine(hash, Boost);
 }
-
-/// <summary>
-/// Boolean clause occurrence type.
-/// </summary>
-public enum Occur
-{
-    Must,
-    Should,
-    MustNot
-}

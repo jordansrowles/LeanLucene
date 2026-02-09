@@ -3,18 +3,6 @@ using Rowles.LeanLucene.Store;
 namespace Rowles.LeanLucene.Search.Searcher;
 
 /// <summary>
-/// Configuration for <see cref="SearcherManager"/>.
-/// </summary>
-public sealed class SearcherManagerConfig
-{
-    /// <summary>How often to poll for new commits. Default: 1 second.</summary>
-    public TimeSpan RefreshInterval { get; set; } = TimeSpan.FromSeconds(1);
-
-    /// <summary>Searcher configuration applied to each newly opened IndexSearcher.</summary>
-    public IndexSearcherConfig SearcherConfig { get; set; } = new();
-}
-
-/// <summary>
 /// Manages the lifecycle of <see cref="IndexSearcher"/> instances, automatically
 /// refreshing when new commits are detected. Thread-safe acquire/release pattern
 /// with reference counting ensures old searchers are disposed only after all
