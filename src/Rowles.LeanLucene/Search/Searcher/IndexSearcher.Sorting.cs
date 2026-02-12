@@ -1,6 +1,6 @@
+using System.Buffers;
 using Rowles.LeanLucene.Index;
 using Rowles.LeanLucene.Index.Indexer;
-using Rowles.LeanLucene.Search.Scoring;
 
 namespace Rowles.LeanLucene.Search.Searcher;
 
@@ -82,35 +82,42 @@ public sealed partial class IndexSearcher
 
     private ScoreDoc[] SortByNumericField(ScoreDoc[] docs, string fieldName, bool descending)
     {
-        var values = new double[docs.Length];
-        for (int i = 0; i < docs.Length; i++)
+        var values = ArrayPool<double>.Shared.Rent(docs.Length);
+        try
         {
-            double val = 0;
-            int globalId = docs[i].DocId;
-            bool found = false;
-            for (int r = 0; r < _readers.Count; r++)
+            for (int i = 0; i < docs.Length; i++)
             {
-                int nextBase = r + 1 < _docBases.Length ? _docBases[r + 1] : _totalDocCount;
-                if (globalId >= _docBases[r] && globalId < nextBase)
+                double val = 0;
+                int globalId = docs[i].DocId;
+                bool found = false;
+                for (int r = 0; r < _readers.Count; r++)
                 {
-                    found = _readers[r].TryGetNumericValue(fieldName, globalId - _docBases[r], out val);
-                    break;
+                    int nextBase = r + 1 < _docBases.Length ? _docBases[r + 1] : _totalDocCount;
+                    if (globalId >= _docBases[r] && globalId < nextBase)
+                    {
+                        found = _readers[r].TryGetNumericValue(fieldName, globalId - _docBases[r], out val);
+                        break;
+                    }
                 }
+                if (!found)
+                {
+                    var stored = GetStoredFields(globalId);
+                    if (stored.TryGetValue(fieldName, out var sv) && sv.Count > 0)
+                        double.TryParse(sv[0], System.Globalization.CultureInfo.InvariantCulture, out val);
+                }
+                values[i] = val;
             }
-            if (!found)
-            {
-                var stored = GetStoredFields(globalId);
-                if (stored.TryGetValue(fieldName, out var sv) && sv.Count > 0)
-                    double.TryParse(sv[0], System.Globalization.CultureInfo.InvariantCulture, out val);
-            }
-            values[i] = val;
-        }
 
-        // Sort docs in-place using values as the sort key
-        Array.Sort(values, docs);
-        if (descending)
-            Array.Reverse(docs);
-        return docs;
+            // Sort docs in-place using values as the sort key
+            Array.Sort(values, docs, 0, docs.Length);
+            if (descending)
+                Array.Reverse(docs);
+            return docs;
+        }
+        finally
+        {
+            ArrayPool<double>.Shared.Return(values, clearArray: false);
+        }
     }
 
     private ScoreDoc[] SortByStringField(ScoreDoc[] docs, string fieldName, bool descending)

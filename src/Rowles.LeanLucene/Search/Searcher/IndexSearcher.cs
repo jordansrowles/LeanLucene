@@ -315,69 +315,76 @@ public sealed partial class IndexSearcher : IDisposable
 
     private TopDocs ExecuteBlockJoinQuery(BlockJoinQuery bjq, int topN)
     {
-        // Collect matching child doc IDs without ScoreDoc wrappers
-        var childDocIds = CollectMatchingDocIds(bjq.ChildQuery);
-        if (childDocIds.Count == 0) return TopDocs.Empty;
-
-        // Map child docs to parent docs using a bitset (O(1) set/test, no rehashing)
+        // Map child docs directly to parent docs using a bitset — no intermediate List<int>
         var parentBits = ArrayPool<bool>.Shared.Rent(_totalDocCount);
         Array.Clear(parentBits, 0, _totalDocCount);
         int parentCount = 0;
 
-        foreach (var globalDocId in childDocIds)
+        try
         {
-            int r = Array.BinarySearch(_docBases, globalDocId);
-            if (r < 0) r = ~r - 1;
-            if (r < 0) continue;
+            // Stream child doc IDs directly into parent mapping without materialising TopDocs
+            CollectParentsFromChildQuery(bjq.ChildQuery, parentBits, ref parentCount);
 
-            int localDocId = globalDocId - _docBases[r];
-            var pbs = _readers[r].GetParentBitSet();
-            if (pbs is not null)
+            if (parentCount == 0)
+                return TopDocs.Empty;
+
+            // Collect parent doc IDs from the bitset directly into TopNCollector
+            int take = Math.Min(parentCount, topN);
+            float score = bjq.Boost;
+            var collector = new TopNCollector(take);
+            for (int i = 0; i < _totalDocCount && collector.TotalHits < parentCount; i++)
             {
-                int parentLocal = pbs.NextParent(localDocId);
-                if (parentLocal >= 0)
+                if (parentBits[i])
+                    collector.Collect(i, score);
+            }
+
+            return collector.ToTopDocs();
+        }
+        finally
+        {
+            ArrayPool<bool>.Shared.Return(parentBits, clearArray: false);
+        }
+    }
+
+    /// <summary>
+    /// Executes a child query per-segment, mapping each matching child doc ID to its parent
+    /// and setting the parent bit directly — avoids materialising TopDocs or List&lt;int&gt;.
+    /// </summary>
+    private void CollectParentsFromChildQuery(Query childQuery, bool[] parentBits, ref int parentCount)
+    {
+        bool skipGlobalDFs = childQuery is PrefixQuery or WildcardQuery or FuzzyQuery;
+        var globalDFs = skipGlobalDFs
+            ? new Dictionary<(string Field, string Term), int>()
+            : PrecomputeGlobalDocFreqs(childQuery);
+
+        for (int r = 0; r < _readers.Count; r++)
+        {
+            var reader = _readers[r];
+            int docBase = _docBases[r];
+            var pbs = reader.GetParentBitSet();
+
+            var segCollector = new TopNCollector(reader.MaxDoc);
+            ExecuteQuery(childQuery, reader, globalDFs, ref segCollector);
+            var segDocs = segCollector.ToTopDocs();
+
+            foreach (var sd in segDocs.ScoreDocs)
+            {
+                int localDocId = sd.DocId - docBase;
+                if (pbs is not null)
                 {
-                    int globalParent = _docBases[r] + parentLocal;
-                    if (!parentBits[globalParent])
+                    int parentLocal = pbs.NextParent(localDocId);
+                    if (parentLocal >= 0)
                     {
-                        parentBits[globalParent] = true;
-                        parentCount++;
+                        int globalParent = docBase + parentLocal;
+                        if (!parentBits[globalParent])
+                        {
+                            parentBits[globalParent] = true;
+                            parentCount++;
+                        }
                     }
                 }
             }
         }
-
-        if (parentCount == 0)
-        {
-            ArrayPool<bool>.Shared.Return(parentBits, clearArray: false);
-            return TopDocs.Empty;
-        }
-
-        // Collect parent doc IDs from the bitset directly
-        int take = Math.Min(parentCount, topN);
-        var scoreDocs = new ScoreDoc[take];
-        int found = 0;
-        for (int i = 0; i < _totalDocCount && found < take; i++)
-        {
-            if (parentBits[i])
-                scoreDocs[found++] = new ScoreDoc(i, 1.0f * bjq.Boost);
-        }
-
-        ArrayPool<bool>.Shared.Return(parentBits, clearArray: false);
-        return new TopDocs(parentCount, scoreDocs);
-    }
-
-    /// <summary>
-    /// Collects all matching doc IDs for a query without materialising ScoreDoc wrappers.
-    /// Used by block-join to avoid allocating per-hit objects.
-    /// </summary>
-    private List<int> CollectMatchingDocIds(Query query)
-    {
-        var result = new List<int>();
-        var subResults = SearchCore(query, _totalDocCount);
-        for (int i = 0; i < subResults.ScoreDocs.Length; i++)
-            result.Add(subResults.ScoreDocs[i].DocId);
-        return result;
     }
 
     // Reusable buffer for PrecomputeGlobalDocFreqs to avoid per-call HashSet allocation

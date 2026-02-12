@@ -18,6 +18,8 @@ internal sealed class TermDictionaryReader : IDisposable
     // v1 fallback: materialised string arrays
     private readonly string[]? _allTerms;
     private readonly long[]? _allOffsets;
+    // v1 hash layer for O(1) exact term lookup
+    private readonly Dictionary<string, int>? _termHashV1;
 
     private bool _disposed;
 
@@ -30,6 +32,10 @@ internal sealed class TermDictionaryReader : IDisposable
     {
         _allTerms = allTerms;
         _allOffsets = allOffsets;
+        // Build hash layer for O(1) exact lookups on v1 format
+        _termHashV1 = new Dictionary<string, int>(allTerms.Length, StringComparer.Ordinal);
+        for (int i = 0; i < allTerms.Length; i++)
+            _termHashV1[allTerms[i]] = i;
     }
 
     public static TermDictionaryReader Open(string filePath)
@@ -99,6 +105,17 @@ internal sealed class TermDictionaryReader : IDisposable
     private bool TryGetPostingsOffsetV1(ReadOnlySpan<char> term, out long offset)
     {
         offset = 0;
+        // Use hash layer for O(1) lookup when available
+        if (_termHashV1 is not null)
+        {
+            var termStr = term.ToString();
+            if (_termHashV1.TryGetValue(termStr, out int idx))
+            {
+                offset = _allOffsets![idx];
+                return true;
+            }
+            return false;
+        }
         int lo = 0, hi = _allTerms!.Length - 1;
         while (lo <= hi)
         {

@@ -111,50 +111,58 @@ public sealed partial class IndexSearcher
             return false;
         }
 
-        // 3-term specialisation: two-pointer chain O(p0 + p1 + p2)
-        if (termCount == 3)
-        {
-            var p0 = postings[0].GetCurrentPositions();
-            var p1 = postings[1].GetCurrentPositions();
-            var p2 = postings[2].GetCurrentPositions();
-            int j = 0, k = 0;
-            for (int i = 0; i < p0.Length; i++)
-            {
-                int target1 = p0[i] + 1;
-                int lo1 = target1 - slop;
-                int hi1 = target1 + slop;
-                while (j < p1.Length && p1[j] < lo1) j++;
-                if (j >= p1.Length) break;
-                if (p1[j] > hi1) continue;
-
-                int target2 = p1[j] + 1;
-                int lo2 = target2 - slop;
-                int hi2 = target2 + slop;
-                while (k < p2.Length && p2[k] < lo2) k++;
-                if (k >= p2.Length) break;
-                if (p2[k] <= hi2) return true;
-            }
-            return false;
-        }
-
-        // General case: check all position combinations
-        // Use ArrayPool to avoid heap allocations
+        // General N-term case: chained two-pointer advancement O(p0 + p1 + ... + pN)
+        // Extends the 3-term specialisation pattern to arbitrary term counts.
         var rentedArrays = new int[termCount][];
-        Span<int> actualLengths = stackalloc int[termCount];
-        var termPositions = new List<int[]>(termCount);
-        
+        Span<int> lengths = stackalloc int[termCount];
+        Span<int> cursors = stackalloc int[termCount];
+
         try
         {
             for (int i = 0; i < termCount; i++)
             {
                 var span = postings[i].GetCurrentPositions();
+                if (span.IsEmpty) return false;
                 var rented = ArrayPool<int>.Shared.Rent(span.Length);
                 span.CopyTo(rented);
                 rentedArrays[i] = rented;
-                actualLengths[i] = span.Length;
-                termPositions.Add(rented);
+                lengths[i] = span.Length;
+                cursors[i] = 0;
             }
-            return HasPositionsWithinSlop(termPositions, actualLengths, slop);
+
+            // Drive on the first term's positions; chain-advance subsequent terms
+            int[] p0 = rentedArrays[0];
+            int p0Len = lengths[0];
+
+            for (int i = 0; i < p0Len; i++)
+            {
+                int chainPos = p0[i];
+                bool matched = true;
+
+                for (int t = 1; t < termCount; t++)
+                {
+                    int target = chainPos + 1;
+                    int lo = target - slop;
+                    int hi = target + slop;
+                    int[] pt = rentedArrays[t];
+                    int ptLen = lengths[t];
+                    ref int cursor = ref cursors[t];
+
+                    // Advance cursor past positions below the lower bound
+                    while (cursor < ptLen && pt[cursor] < lo)
+                        cursor++;
+
+                    if (cursor >= ptLen) { matched = false; break; }
+                    if (pt[cursor] > hi) { matched = false; break; }
+
+                    // Chain: next term's target is relative to where we matched
+                    chainPos = pt[cursor];
+                }
+
+                if (matched) return true;
+            }
+
+            return false;
         }
         finally
         {
@@ -164,50 +172,5 @@ public sealed partial class IndexSearcher
                     ArrayPool<int>.Shared.Return(rentedArrays[i]);
             }
         }
-    }
-
-    private static bool HasPositionsWithinSlop(List<int[]> termPositions, ReadOnlySpan<int> actualLengths, int slop)
-    {
-        int firstTermLength = actualLengths[0];
-        int[] firstTermArray = termPositions[0];
-        
-        for (int startIdx = 0; startIdx < firstTermLength; startIdx++)
-        {
-            int startPos = firstTermArray[startIdx];
-            bool match = true;
-            
-            for (int i = 1; i < termPositions.Count; i++)
-            {
-                int expectedPos = startPos + i;
-                bool found = false;
-                int currentLength = actualLengths[i];
-                int[] currentArray = termPositions[i];
-
-                if (slop == 0)
-                {
-                    found = Array.BinarySearch(currentArray, 0, currentLength, expectedPos) >= 0;
-                }
-                else
-                {
-                    // Search for any position within [expectedPos - slop, expectedPos + slop]
-                    int idx = Array.BinarySearch(currentArray, 0, currentLength, expectedPos - slop);
-                    if (idx < 0) idx = ~idx;
-                    for (int j = idx; j < currentLength; j++)
-                    {
-                        int pos = currentArray[j];
-                        if (pos > expectedPos + slop) break;
-                        if (pos >= expectedPos - slop)
-                        {
-                            found = true;
-                            break;
-                        }
-                    }
-                }
-
-                if (!found) { match = false; break; }
-            }
-            if (match) return true;
-        }
-        return false;
     }
 }

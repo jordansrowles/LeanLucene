@@ -383,4 +383,144 @@ public sealed class AllocationRegressionTests : IClassFixture<TestDirectoryFixtu
         Assert.True(avgBytes <= 256,
             $"StandardAnalyser allocated {avgBytes:F0} bytes/call after warmup, expected ≤ 256 (intern cache should be stable)");
     }
+
+    [Fact]
+    public void TermQuery_LowAllocationPerQuery()
+    {
+        const int docCount = 500;
+        const int warmup = 200;
+        const int measured = 100;
+        var dir = new MMapDirectory(SubDir("alloc_term"));
+        var rng = new Random(42);
+        string[] pool = ["alpha", "beta", "gamma", "delta", "epsilon"];
+
+        using (var writer = new IndexWriter(dir, new IndexWriterConfig { MaxBufferedDocs = 256 }))
+        {
+            for (int i = 0; i < docCount; i++)
+            {
+                var doc = new LeanDocument();
+                var words = Enumerable.Range(0, 8).Select(_ => pool[rng.Next(pool.Length)]);
+                doc.Add(new TextField("body", string.Join(" ", words)));
+                writer.AddDocument(doc);
+            }
+            writer.Commit();
+        }
+
+        using var searcher = new IndexSearcher(dir);
+        var query = new TermQuery("body", "alpha");
+
+        for (int i = 0; i < warmup; i++)
+            searcher.Search(query, 25);
+
+        long allocBefore = GC.GetAllocatedBytesForCurrentThread();
+        var sw = Stopwatch.StartNew();
+        for (int i = 0; i < measured; i++)
+            searcher.Search(query, 25);
+        sw.Stop();
+        long allocAfter = GC.GetAllocatedBytesForCurrentThread();
+
+        double avgBytes = (double)(allocAfter - allocBefore) / measured;
+        _output.WriteLine($"TermQuery(\"alpha\") over {docCount} docs:");
+        _output.WriteLine($"  Avg allocation: {avgBytes:F0} bytes/query");
+        _output.WriteLine($"  Avg latency:    {sw.Elapsed.TotalMicroseconds / measured:F1} µs/query");
+
+        Assert.True(avgBytes <= 500,
+            $"TermQuery allocated {avgBytes:F0} bytes/query, budget is 500 bytes");
+    }
+
+    [Fact]
+    public void BlockJoinQuery_LowAllocationPerQuery()
+    {
+        const int blockCount = 50;
+        const int childrenPerBlock = 3;
+        const int warmup = 100;
+        const int measured = 50;
+        var dir = new MMapDirectory(SubDir("alloc_blockjoin"));
+
+        using (var writer = new IndexWriter(dir, new IndexWriterConfig { MaxBufferedDocs = 256 }))
+        {
+            for (int i = 0; i < blockCount; i++)
+            {
+                var block = new List<LeanDocument>();
+                for (int c = 0; c < childrenPerBlock; c++)
+                {
+                    var child = new LeanDocument();
+                    child.Add(new TextField("body", $"child {c} comment on topic {i}"));
+                    child.Add(new StringField("type", "child"));
+                    block.Add(child);
+                }
+                var parent = new LeanDocument();
+                parent.Add(new TextField("title", $"parent {i} post"));
+                parent.Add(new StringField("type", "parent"));
+                block.Add(parent);
+                writer.AddDocumentBlock(block);
+            }
+            writer.Commit();
+        }
+
+        using var searcher = new IndexSearcher(dir);
+        var query = new BlockJoinQuery(new TermQuery("body", "comment"));
+
+        for (int i = 0; i < warmup; i++)
+            searcher.Search(query, 10);
+
+        long allocBefore = GC.GetAllocatedBytesForCurrentThread();
+        var sw = Stopwatch.StartNew();
+        for (int i = 0; i < measured; i++)
+            searcher.Search(query, 10);
+        sw.Stop();
+        long allocAfter = GC.GetAllocatedBytesForCurrentThread();
+
+        double avgBytes = (double)(allocAfter - allocBefore) / measured;
+        _output.WriteLine($"BlockJoinQuery over {blockCount} blocks:");
+        _output.WriteLine($"  Avg allocation: {avgBytes:F0} bytes/query");
+        _output.WriteLine($"  Avg latency:    {sw.Elapsed.TotalMicroseconds / measured:F1} µs/query");
+
+        Assert.True(avgBytes <= 520_000,
+            $"BlockJoinQuery allocated {avgBytes:F0} bytes/query, budget is 520,000 bytes");
+    }
+
+    [Fact]
+    public void DidYouMean_LowAllocationPerQuery()
+    {
+        const int docCount = 500;
+        const int warmup = 50;
+        const int measured = 50;
+        var dir = new MMapDirectory(SubDir("alloc_dym"));
+        var rng = new Random(42);
+        string[] pool = ["search", "serve", "seven", "select", "simple",
+                         "alpha", "beta", "gamma", "delta", "epsilon"];
+
+        using (var writer = new IndexWriter(dir, new IndexWriterConfig { MaxBufferedDocs = 256 }))
+        {
+            for (int i = 0; i < docCount; i++)
+            {
+                var doc = new LeanDocument();
+                var words = Enumerable.Range(0, 8).Select(_ => pool[rng.Next(pool.Length)]);
+                doc.Add(new TextField("body", string.Join(" ", words)));
+                writer.AddDocument(doc);
+            }
+            writer.Commit();
+        }
+
+        using var searcher = new IndexSearcher(dir);
+
+        for (int i = 0; i < warmup; i++)
+            Search.Suggestions.DidYouMeanSuggester.Suggest(searcher, "body", "serch", maxEdits: 2, topN: 5);
+
+        long allocBefore = GC.GetAllocatedBytesForCurrentThread();
+        var sw = Stopwatch.StartNew();
+        for (int i = 0; i < measured; i++)
+            Search.Suggestions.DidYouMeanSuggester.Suggest(searcher, "body", "serch", maxEdits: 2, topN: 5);
+        sw.Stop();
+        long allocAfter = GC.GetAllocatedBytesForCurrentThread();
+
+        double avgBytes = (double)(allocAfter - allocBefore) / measured;
+        _output.WriteLine($"DidYouMean(\"serch\") over {docCount} docs:");
+        _output.WriteLine($"  Avg allocation: {avgBytes:F0} bytes/query");
+        _output.WriteLine($"  Avg latency:    {sw.Elapsed.TotalMicroseconds / measured:F1} µs/query");
+
+        Assert.True(avgBytes <= 15_000,
+            $"DidYouMean allocated {avgBytes:F0} bytes/query, budget is 15,000 bytes");
+    }
 }

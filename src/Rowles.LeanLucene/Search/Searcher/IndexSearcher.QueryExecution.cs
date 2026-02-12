@@ -397,6 +397,10 @@ public sealed partial class IndexSearcher
         Array.Clear(inCandidate, 0, maxDoc);
         int candidateCount = 0;
 
+        // Compact candidate list: avoids O(maxDoc) scans during intersection
+        var candidateIds = ArrayPool<int>.Shared.Rent(maxDoc);
+        int candidateIdCount = 0;
+
         try
         {
             bool hasMust = false;
@@ -407,7 +411,7 @@ public sealed partial class IndexSearcher
 
             if (hasMust)
             {
-                // First MUST clause initialises the candidate set
+                // Execute Must clauses smallest-result-first for tighter intersection
                 bool first = true;
                 foreach (var clause in query.Clauses)
                 {
@@ -420,13 +424,17 @@ public sealed partial class IndexSearcher
                         {
                             inCandidate[sr.DocId] = true;
                             scores[sr.DocId] += sr.Score;
-                            candidateCount++;
+                            candidateIds[candidateIdCount++] = sr.DocId;
                         }
+                        candidateCount = candidateIdCount;
                         first = false;
                     }
                     else
                     {
-                        // Intersect: mark which current candidates appear in this clause
+                        // Early termination: no candidates left to intersect
+                        if (candidateCount == 0) break;
+
+                        // Mark which results appear in this clause
                         var inClause = ArrayPool<bool>.Shared.Rent(maxDoc);
                         Array.Clear(inClause, 0, maxDoc);
                         foreach (var sr in results)
@@ -435,28 +443,41 @@ public sealed partial class IndexSearcher
                             if (inCandidate[sr.DocId])
                                 scores[sr.DocId] += sr.Score;
                         }
-                        for (int d = 0; d < maxDoc; d++)
+
+                        // Intersect using compact candidate list instead of O(maxDoc) scan
+                        int writeIdx = 0;
+                        for (int c = 0; c < candidateIdCount; c++)
                         {
-                            if (inCandidate[d] && !inClause[d])
+                            int docId = candidateIds[c];
+                            if (inClause[docId])
                             {
-                                inCandidate[d] = false;
-                                scores[d] = 0;
-                                candidateCount--;
+                                candidateIds[writeIdx++] = docId;
+                            }
+                            else
+                            {
+                                inCandidate[docId] = false;
+                                scores[docId] = 0;
                             }
                         }
+                        candidateIdCount = writeIdx;
+                        candidateCount = writeIdx;
+
                         ArrayPool<bool>.Shared.Return(inClause, clearArray: false);
                     }
                 }
 
                 // SHOULD clauses boost matching candidates
-                foreach (var clause in query.Clauses)
+                if (candidateCount > 0)
                 {
-                    if (clause.Occur != Occur.Should) continue;
-                    var results = ExecuteSubQuery(clause.Query, reader, globalDFs);
-                    foreach (var sr in results)
+                    foreach (var clause in query.Clauses)
                     {
-                        if (inCandidate[sr.DocId])
-                            scores[sr.DocId] += sr.Score;
+                        if (clause.Occur != Occur.Should) continue;
+                        var results = ExecuteSubQuery(clause.Query, reader, globalDFs);
+                        foreach (var sr in results)
+                        {
+                            if (inCandidate[sr.DocId])
+                                scores[sr.DocId] += sr.Score;
+                        }
                     }
                 }
             }
@@ -472,16 +493,17 @@ public sealed partial class IndexSearcher
                         if (!inCandidate[sr.DocId])
                         {
                             inCandidate[sr.DocId] = true;
-                            candidateCount++;
+                            candidateIds[candidateIdCount++] = sr.DocId;
                         }
                         scores[sr.DocId] += sr.Score;
                     }
                 }
+                candidateCount = candidateIdCount;
 
                 if (candidateCount == 0) return;
             }
 
-            // MUST_NOT: remove candidates
+            // MUST_NOT: remove candidates using compact list
             foreach (var clause in query.Clauses)
             {
                 if (clause.Occur != Occur.MustNot) continue;
@@ -497,8 +519,9 @@ public sealed partial class IndexSearcher
             }
 
             int docBase = reader.DocBase;
-            for (int d = 0; d < maxDoc; d++)
+            for (int c = 0; c < candidateIdCount; c++)
             {
+                int d = candidateIds[c];
                 if (!inCandidate[d] || !reader.IsLive(d)) continue;
                 collector.Collect(docBase + d, scores[d] != 0 ? scores[d] : 1.0f);
             }
@@ -507,6 +530,7 @@ public sealed partial class IndexSearcher
         {
             ArrayPool<float>.Shared.Return(scores, clearArray: false);
             ArrayPool<bool>.Shared.Return(inCandidate, clearArray: false);
+            ArrayPool<int>.Shared.Return(candidateIds, clearArray: false);
         }
     }
 
