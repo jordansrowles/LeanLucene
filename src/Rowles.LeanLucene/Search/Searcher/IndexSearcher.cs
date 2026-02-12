@@ -347,40 +347,38 @@ public sealed partial class IndexSearcher : IDisposable
     }
 
     /// <summary>
-    /// Executes a child query per-segment, mapping each matching child doc ID to its parent
-    /// and setting the parent bit directly — avoids materialising TopDocs or List&lt;int&gt;.
+    /// Executes a child query once across all segments, mapping each matching child doc ID to its parent
+    /// and setting the parent bit directly — uses a single SearchCore call instead of per-segment collectors.
     /// </summary>
     private void CollectParentsFromChildQuery(Query childQuery, bool[] parentBits, ref int parentCount)
     {
-        bool skipGlobalDFs = childQuery is PrefixQuery or WildcardQuery or FuzzyQuery;
-        var globalDFs = skipGlobalDFs
-            ? new Dictionary<(string Field, string Term), int>()
-            : PrecomputeGlobalDocFreqs(childQuery);
+        // Single-pass child query execution: one collector across all segments
+        var childDocs = SearchCore(childQuery, _totalDocCount);
 
-        for (int r = 0; r < _readers.Count; r++)
+        foreach (var sd in childDocs.ScoreDocs)
         {
+            int globalDocId = sd.DocId;
+
+            // Binary search to find which segment owns this doc ID
+            int r = Array.BinarySearch(_docBases, globalDocId);
+            if (r < 0) r = ~r - 1;
+            if (r < 0) continue;
+
             var reader = _readers[r];
             int docBase = _docBases[r];
+            int localDocId = globalDocId - docBase;
             var pbs = reader.GetParentBitSet();
 
-            var segCollector = new TopNCollector(reader.MaxDoc);
-            ExecuteQuery(childQuery, reader, globalDFs, ref segCollector);
-            var segDocs = segCollector.ToTopDocs();
-
-            foreach (var sd in segDocs.ScoreDocs)
+            if (pbs is not null)
             {
-                int localDocId = sd.DocId - docBase;
-                if (pbs is not null)
+                int parentLocal = pbs.NextParent(localDocId);
+                if (parentLocal >= 0)
                 {
-                    int parentLocal = pbs.NextParent(localDocId);
-                    if (parentLocal >= 0)
+                    int globalParent = docBase + parentLocal;
+                    if (!parentBits[globalParent])
                     {
-                        int globalParent = docBase + parentLocal;
-                        if (!parentBits[globalParent])
-                        {
-                            parentBits[globalParent] = true;
-                            parentCount++;
-                        }
+                        parentBits[globalParent] = true;
+                        parentCount++;
                     }
                 }
             }

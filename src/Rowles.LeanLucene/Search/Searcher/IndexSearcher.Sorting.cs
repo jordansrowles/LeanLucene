@@ -73,11 +73,10 @@ public sealed partial class IndexSearcher
 
     private static ScoreDoc[] SortByDocId(ScoreDoc[] docs, bool descending)
     {
-        var copy = docs.ToArray();
-        Array.Sort(copy, descending
+        Array.Sort(docs, descending
             ? static (a, b) => b.DocId.CompareTo(a.DocId)
             : static (a, b) => a.DocId.CompareTo(b.DocId));
-        return copy;
+        return docs;
     }
 
     private ScoreDoc[] SortByNumericField(ScoreDoc[] docs, string fieldName, bool descending)
@@ -122,34 +121,43 @@ public sealed partial class IndexSearcher
 
     private ScoreDoc[] SortByStringField(ScoreDoc[] docs, string fieldName, bool descending)
     {
-        var values = new string[docs.Length];
-        for (int i = 0; i < docs.Length; i++)
+        var values = ArrayPool<string>.Shared.Rent(docs.Length);
+        try
         {
-            string val = string.Empty;
-            int globalId = docs[i].DocId;
-            bool found = false;
-            for (int r = 0; r < _readers.Count; r++)
+            for (int i = 0; i < docs.Length; i++)
             {
-                int nextBase = r + 1 < _docBases.Length ? _docBases[r + 1] : _totalDocCount;
-                if (globalId >= _docBases[r] && globalId < nextBase)
+                string val = string.Empty;
+                int globalId = docs[i].DocId;
+                bool found = false;
+                for (int r = 0; r < _readers.Count; r++)
                 {
-                    found = _readers[r].TryGetSortedDocValue(fieldName, globalId - _docBases[r], out val);
-                    break;
+                    int nextBase = r + 1 < _docBases.Length ? _docBases[r + 1] : _totalDocCount;
+                    if (globalId >= _docBases[r] && globalId < nextBase)
+                    {
+                        found = _readers[r].TryGetSortedDocValue(fieldName, globalId - _docBases[r], out val);
+                        break;
+                    }
                 }
+                if (!found)
+                {
+                    var stored = GetStoredFields(globalId);
+                    if (stored.TryGetValue(fieldName, out var sv) && sv.Count > 0)
+                        val = sv[0];
+                }
+                values[i] = val;
             }
-            if (!found)
-            {
-                var stored = GetStoredFields(globalId);
-                if (stored.TryGetValue(fieldName, out var sv) && sv.Count > 0)
-                    val = sv[0];
-            }
-            values[i] = val;
-        }
 
-        // Sort docs in-place using values as the sort key
-        Array.Sort(values, docs, StringComparer.Ordinal);
-        if (descending)
-            Array.Reverse(docs);
-        return docs;
+            // Sort docs in-place using values as the sort key
+            Array.Sort(values, docs, 0, docs.Length, StringComparer.Ordinal);
+            if (descending)
+                Array.Reverse(docs, 0, docs.Length);
+            return docs;
+        }
+        finally
+        {
+            // Clear refs to allow GC of the string instances
+            Array.Clear(values, 0, docs.Length);
+            ArrayPool<string>.Shared.Return(values, clearArray: false);
+        }
     }
 }

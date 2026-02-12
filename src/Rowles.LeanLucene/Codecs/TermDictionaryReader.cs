@@ -198,7 +198,7 @@ internal sealed class TermDictionaryReader : IDisposable
             var bareTerm = term.AsSpan(fieldPrefix.Length);
             if (Math.Abs(bareTerm.Length - queryTermLen) > maxEdits)
                 continue;
-            int distance = LevenshteinDistance.Compute(queryTerm, bareTerm);
+            int distance = LevenshteinDistance.ComputeBounded(queryTerm, bareTerm, maxEdits);
             if (distance <= maxEdits)
                 results.Add((term, _allOffsets![i], distance));
         }

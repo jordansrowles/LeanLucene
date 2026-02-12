@@ -506,12 +506,12 @@ public sealed class AllocationRegressionTests : IClassFixture<TestDirectoryFixtu
         using var searcher = new IndexSearcher(dir);
 
         for (int i = 0; i < warmup; i++)
-            Search.Suggestions.DidYouMeanSuggester.Suggest(searcher, "body", "serch", maxEdits: 2, topN: 5);
+            Rowles.LeanLucene.Search.Suggestions.DidYouMeanSuggester.Suggest(searcher, "body", "serch", maxEdits: 2, topN: 5);
 
         long allocBefore = GC.GetAllocatedBytesForCurrentThread();
         var sw = Stopwatch.StartNew();
         for (int i = 0; i < measured; i++)
-            Search.Suggestions.DidYouMeanSuggester.Suggest(searcher, "body", "serch", maxEdits: 2, topN: 5);
+            Rowles.LeanLucene.Search.Suggestions.DidYouMeanSuggester.Suggest(searcher, "body", "serch", maxEdits: 2, topN: 5);
         sw.Stop();
         long allocAfter = GC.GetAllocatedBytesForCurrentThread();
 

@@ -211,7 +211,7 @@ internal sealed class FSTReader
             if (queryIsAscii)
             {
                 var bareBytes = key[prefixByteCount..];
-                int dist = LevenshteinDistance.ComputeAscii(queryUtf8, bareBytes);
+                int dist = LevenshteinDistance.ComputeAsciiBounded(queryUtf8, bareBytes, maxEdits);
                 if (dist >= 0)
                 {
                     // ASCII path succeeded
@@ -228,7 +228,7 @@ internal sealed class FSTReader
             if (Math.Abs(bareTerm.Length - queryTermLen) > maxEdits)
                 continue;
 
-            int distance = LevenshteinDistance.Compute(queryTerm, bareTerm);
+            int distance = LevenshteinDistance.ComputeBounded(queryTerm, bareTerm, maxEdits);
             if (distance <= maxEdits)
                 results.Add((fullTerm, _offsets[i], distance));
         }

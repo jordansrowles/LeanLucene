@@ -111,8 +111,36 @@ public sealed partial class IndexSearcher
             return false;
         }
 
-        // General N-term case: chained two-pointer advancement O(p0 + p1 + ... + pN)
-        // Extends the 3-term specialisation pattern to arbitrary term counts.
+        // 3-term specialisation: direct span access, zero allocation (matches 2-term path)
+        if (termCount == 3)
+        {
+            var pos0 = postings[0].GetCurrentPositions();
+            var pos1 = postings[1].GetCurrentPositions();
+            var pos2 = postings[2].GetCurrentPositions();
+            int j = 0, k = 0;
+            for (int i = 0; i < pos0.Length; i++)
+            {
+                int target1 = pos0[i] + 1;
+                int lo1 = target1 - slop;
+                int hi1 = target1 + slop;
+                while (j < pos1.Length && pos1[j] < lo1)
+                    j++;
+                if (j >= pos1.Length) break;
+                if (pos1[j] > hi1) continue;
+
+                int target2 = pos1[j] + 1;
+                int lo2 = target2 - slop;
+                int hi2 = target2 + slop;
+                while (k < pos2.Length && pos2[k] < lo2)
+                    k++;
+                if (k >= pos2.Length) break;
+                if (pos2[k] <= hi2)
+                    return true;
+            }
+            return false;
+        }
+
+        // General N-term case (4+ terms): chained two-pointer with ArrayPool
         var rentedArrays = new int[termCount][];
         Span<int> lengths = stackalloc int[termCount];
         Span<int> cursors = stackalloc int[termCount];
