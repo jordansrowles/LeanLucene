@@ -28,8 +28,10 @@ namespace Rowles.LeanLucene.Example.Benchmarks;
 [HtmlExporter]
 [JsonExporterAttribute.Full]
 [MarkdownExporterAttribute.GitHub]
+[RPlotExporter]
 [KeepBenchmarkFiles]
-[SimpleJob]
+[SimpleJob(RuntimeMoniker.Net10_0, baseline: true)]
+[SimpleJob(RuntimeMoniker.Net11_0)]
 public class BlockJoinBenchmarks
 {
     private const int TopN = 25;

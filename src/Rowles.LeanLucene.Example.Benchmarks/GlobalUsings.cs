@@ -1,3 +1,5 @@
+global using BenchmarkDotNet.Exporters;
+global using BenchmarkDotNet.Jobs;
 global using Rowles.LeanLucene.Analysis.Filters;
 global using Rowles.LeanLucene.Index.Indexer;
 global using Rowles.LeanLucene.Index.Segment;

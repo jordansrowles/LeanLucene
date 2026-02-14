@@ -15,7 +15,9 @@ namespace Rowles.LeanLucene.Example.Benchmarks;
 [HtmlExporter]
 [JsonExporterAttribute.Full]
 [MarkdownExporterAttribute.GitHub]
-[SimpleJob]
+[RPlotExporter]
+[SimpleJob(RuntimeMoniker.Net10_0, baseline: true)]
+[SimpleJob(RuntimeMoniker.Net11_0)]
 public class SmallIndexBenchmarks
 {
     private const int TopN = 10;
