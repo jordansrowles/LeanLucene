@@ -41,7 +41,7 @@ internal static class BenchmarkData
         var env = Environment.GetEnvironmentVariable("BENCH_DOC_COUNT");
         if (int.TryParse(env, NumberStyles.Integer, CultureInfo.InvariantCulture, out var n) && n > 0)
             return [n];
-        return [defaultCount];
+        return [100, 1_000, 10_000, 100_000];
     }
 
     public static string[] BuildDocuments(int count)
