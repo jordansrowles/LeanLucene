@@ -1,0 +1,542 @@
+using System.Buffers;
+using Rowles.LeanLucene.Codecs;
+using Rowles.LeanLucene.Codecs.DocValues;
+using Rowles.LeanLucene.Codecs.StoredFields;
+using Rowles.LeanLucene.Search.Scoring;
+using Rowles.LeanLucene.Store;
+
+namespace Rowles.LeanLucene.Index.Indexer;
+
+public sealed partial class IndexWriter
+{
+    private void FlushSegment()
+    {
+        if (_bufferedDocCount == 0) return;
+
+        // Compute sort permutation if index-time sort is configured
+        int[]? sortPerm = null;       // sortPerm[newDocId] = oldDocId
+        int[]? inversePerm = null;    // inversePerm[oldDocId] = newDocId
+        if (_config.IndexSort is not null)
+        {
+            sortPerm = ComputeSortPermutation(_config.IndexSort);
+            inversePerm = new int[_bufferedDocCount];
+            for (int i = 0; i < _bufferedDocCount; i++)
+                inversePerm[sortPerm[i]] = i;
+
+            // Apply permutation to all in-memory buffers
+            ApplySortPermutation(sortPerm, inversePerm);
+        }
+
+        // Track how many documents we're flushing so we can release the corresponding semaphore slots.
+        int docCountToFlush = _bufferedDocCount;
+
+        var segId = $"seg_{_nextSegmentOrdinal++}";
+        var basePath = Path.Combine(_directory.DirectoryPath, segId);
+
+        // Collect all field names
+        var fieldNames = _fieldNames.ToList();
+
+        // Write segment metadata (.seg)
+        var segInfo = new SegmentInfo
+        {
+            SegmentId = segId,
+            DocCount = _bufferedDocCount,
+            LiveDocCount = _bufferedDocCount,
+            CommitGeneration = _commitGeneration,
+            FieldNames = fieldNames,
+            IndexSortFields = _config.IndexSort is not null
+                ? _config.IndexSort.Fields.Select(f => $"{f.Type}:{f.FieldName}:{f.Descending}").ToList()
+                : null
+        };
+        segInfo.WriteTo(basePath + ".seg");
+
+        // Write term dictionary and postings per field
+        // Sort qualified terms for the dictionary
+        _sortedTermsBuffer.Clear();
+        _sortedTermsBuffer.AddRange(_postings.Keys);
+        _sortedTermsBuffer.Sort(StringComparer.Ordinal);
+        var postingsOffsets = new Dictionary<string, long>();
+
+        // Write all postings to a single .pos file using pooled IndexOutput
+        int skipInterval = _config.PostingsSkipInterval;
+        using (var posOutput = new IndexOutput(basePath + ".pos"))
+        {
+            // Write header at the start of the file
+            CodecConstants.WriteHeader(posOutput, CodecConstants.PostingsVersion);
+            
+            foreach (var qt in _sortedTermsBuffer)
+            {
+                var acc = _postings[qt];
+                var ids = acc.DocIds;
+
+                postingsOffsets[qt] = posOutput.Position;
+                posOutput.WriteInt32(ids.Length);
+
+                // Write skip pointer entries (every skipInterval docs)
+                int skipCount = ids.Length >= skipInterval ? (ids.Length - 1) / skipInterval : 0;
+                posOutput.WriteInt32(skipCount);
+
+                if (skipCount > 0)
+                {
+                    // Reserve space for skip entries, fill in after writing deltas
+                    long skipTablePos = posOutput.Position;
+                    for (int s = 0; s < skipCount; s++)
+                    {
+                        posOutput.WriteInt32(0); // placeholder docId
+                        posOutput.WriteInt32(0); // placeholder byte offset
+                    }
+                    long deltaStartPos = posOutput.Position;
+
+                    int prev = 0;
+                    for (int i = 0; i < ids.Length; i++)
+                    {
+                        if (i > 0 && i % skipInterval == 0)
+                        {
+                            int skipIdx = (i / skipInterval) - 1;
+                            long currentPos = posOutput.Position;
+                            posOutput.Seek(skipTablePos + skipIdx * 8);
+                            posOutput.WriteInt32(ids[i - 1]); // docId at boundary
+                            posOutput.WriteInt32((int)(currentPos - deltaStartPos)); // byte offset
+                            posOutput.Seek(currentPos);
+                        }
+                        posOutput.WriteVarInt(ids[i] - prev);
+                        prev = ids[i];
+                    }
+                }
+                else
+                {
+                    // Small posting list — write deltas directly
+                    int prev = 0;
+                    foreach (var id in ids)
+                    {
+                        posOutput.WriteVarInt(id - prev);
+                        prev = id;
+                    }
+                }
+
+                bool hasFreqs = acc.HasFreqs;
+                posOutput.WriteBoolean(hasFreqs);
+                if (hasFreqs)
+                {
+                    for (int i = 0; i < ids.Length; i++)
+                        posOutput.WriteVarInt(acc.GetFreq(i));
+                }
+
+                bool hasPositions = acc.HasPositions;
+                posOutput.WriteBoolean(hasPositions);
+
+                bool hasPayloads = acc.HasPayloads;
+                posOutput.WriteBoolean(hasPayloads);
+
+                if (hasPositions)
+                {
+                    for (int i = 0; i < ids.Length; i++)
+                    {
+                        var positions = acc.GetPositions(i);
+                        posOutput.WriteVarInt(positions.Length);
+                        int prevPos = 0;
+                        for (int pi = 0; pi < positions.Length; pi++)
+                        {
+                            posOutput.WriteVarInt(positions[pi] - prevPos);
+                            prevPos = positions[pi];
+
+                            if (hasPayloads)
+                            {
+                                var payload = acc.GetPayload(i, pi);
+                                if (payload is { Length: > 0 })
+                                {
+                                    posOutput.WriteVarInt(payload.Length);
+                                    posOutput.WriteBytes(payload);
+                                }
+                                else
+                                {
+                                    posOutput.WriteVarInt(0);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Write term dictionary (.dic)
+        TermDictionaryWriter.Write(basePath + ".dic", _sortedTermsBuffer, postingsOffsets);
+
+        // Write per-field norms (.nrm) — use pre-tracked per-field token counts (O(1) per doc)
+        var fieldNorms = new Dictionary<string, float[]>(_docTokenCounts.Count, StringComparer.Ordinal);
+        var normsReturnList = new List<float[]>(_docTokenCounts.Count);
+        foreach (var (fieldName, counts) in _docTokenCounts)
+        {
+            var norms = ArrayPool<float>.Shared.Rent(_bufferedDocCount);
+            for (int i = 0; i < _bufferedDocCount; i++)
+            {
+                int tokenCount = i < counts.Length ? counts[i] : 0;
+                norms[i] = 1.0f / (1.0f + Math.Max(1, tokenCount));
+            }
+            fieldNorms[fieldName] = norms;
+            normsReturnList.Add(norms);
+        }
+        NormsWriter.Write(basePath + ".nrm", fieldNorms, _bufferedDocCount);
+        foreach (var arr in normsReturnList) ArrayPool<float>.Shared.Return(arr, clearArray: false);
+
+        // Write exact field lengths (.fln) for precise BM25 scoring
+        var fieldLengths = new Dictionary<string, int[]>(_docTokenCounts.Count, StringComparer.Ordinal);
+        var lengthsReturnList = new List<int[]>(_docTokenCounts.Count);
+        foreach (var (fieldName, counts) in _docTokenCounts)
+        {
+            var lengths = ArrayPool<int>.Shared.Rent(_bufferedDocCount);
+            for (int i = 0; i < _bufferedDocCount; i++)
+                lengths[i] = i < counts.Length ? counts[i] : 0;
+            fieldLengths[fieldName] = lengths;
+            lengthsReturnList.Add(lengths);
+        }
+        FieldLengthWriter.Write(basePath + ".fln", fieldLengths, _bufferedDocCount);
+        foreach (var arr in lengthsReturnList) ArrayPool<int>.Shared.Return(arr, clearArray: false);
+
+        // Write stored fields (.fdt + .fdx) from flat buffer
+        StoredFieldsWriter.Write(basePath + ".fdt", basePath + ".fdx",
+            _sfDocStarts, _sfFieldIds, _sfValues, _sfFieldIdToName,
+            _config.StoredFieldBlockSize, _config.StoredFieldCompressionLevel);
+
+        // Write numeric field index (.num)
+        WriteNumericIndex(basePath + ".num");
+
+        if (_bufferedVectors.Count > 0)
+        {
+            var vectors = new ReadOnlyMemory<float>[_bufferedDocCount];
+            for (int i = 0; i < _bufferedDocCount; i++)
+                vectors[i] = _bufferedVectors.TryGetValue(i, out var entry) ? entry.Vector : ReadOnlyMemory<float>.Empty;
+
+            VectorWriter.Write(basePath + ".vec", vectors);
+        }
+
+        // Write DocValues column-stride files
+        if (_numericDocValues.Count > 0)
+        {
+            var dvn = new Dictionary<string, double[]>(_numericDocValues.Count, StringComparer.Ordinal);
+            var dvnReturnList = new List<double[]>(_numericDocValues.Count);
+            foreach (var (field, list) in _numericDocValues)
+            {
+                var arr = ArrayPool<double>.Shared.Rent(_bufferedDocCount);
+                Array.Clear(arr, 0, _bufferedDocCount);
+                for (int i = 0; i < Math.Min(list.Count, _bufferedDocCount); i++)
+                    arr[i] = list[i];
+                dvn[field] = arr;
+                dvnReturnList.Add(arr);
+            }
+            NumericDocValuesWriter.Write(basePath + ".dvn", dvn, _bufferedDocCount);
+            foreach (var arr in dvnReturnList) ArrayPool<double>.Shared.Return(arr, clearArray: false);
+        }
+
+        if (_sortedDocValues.Count > 0)
+        {
+            var dvs = new Dictionary<string, string?[]>(_sortedDocValues.Count, StringComparer.Ordinal);
+            foreach (var (field, list) in _sortedDocValues)
+            {
+                var arr = new string?[_bufferedDocCount];
+                for (int i = 0; i < Math.Min(list.Count, _bufferedDocCount); i++)
+                    arr[i] = list[i];
+                dvs[field] = arr;
+            }
+            SortedDocValuesWriter.Write(basePath + ".dvs", dvs, _bufferedDocCount);
+        }
+
+        // Write BKD tree for numeric fields (.bkd)
+        if (_numericDocValues.Count > 0)
+        {
+            var bkdData = new Dictionary<string, List<(double Value, int DocId)>>(_numericDocValues.Count, StringComparer.Ordinal);
+            foreach (var (field, list) in _numericDocValues)
+            {
+                var points = new List<(double Value, int DocId)>();
+                for (int i = 0; i < Math.Min(list.Count, _bufferedDocCount); i++)
+                    points.Add((list[i], i));
+                if (points.Count > 0)
+                    bkdData[field] = points;
+            }
+            if (bkdData.Count > 0)
+                BKDWriter.Write(basePath + ".bkd", bkdData, _config.BKDMaxLeafSize);
+        }
+
+        // Write term vectors (.tvd + .tvx) when enabled
+        if (_config.StoreTermVectors)
+        {
+            var tvDocs = new Dictionary<string, List<TermVectorEntry>>[_bufferedDocCount];
+            for (int d = 0; d < _bufferedDocCount; d++)
+                tvDocs[d] = new Dictionary<string, List<TermVectorEntry>>(StringComparer.Ordinal);
+
+            foreach (var (qt, acc) in _postings)
+            {
+                if (!acc.HasPositions) continue;
+                int sep = qt.IndexOf('\x00');
+                if (sep < 0) continue;
+                string fld = qt[..sep];
+                string trm = qt[(sep + 1)..];
+
+                var ids = acc.DocIds;
+                for (int i = 0; i < ids.Length; i++)
+                {
+                    int docId = ids[i];
+                    if (docId >= _bufferedDocCount) continue;
+                    if (!tvDocs[docId].TryGetValue(fld, out var terms))
+                    {
+                        terms = [];
+                        tvDocs[docId][fld] = terms;
+                    }
+                    int freq = acc.GetFreq(i);
+                    var posSpan = acc.GetPositions(i);
+                    var positions = posSpan.IsEmpty ? [] : posSpan.ToArray();
+                    terms.Add(new TermVectorEntry(trm, freq, positions));
+                }
+            }
+            TermVectorsWriter.Write(basePath + ".tvd", basePath + ".tvx", tvDocs);
+        }
+
+        // Write parent bitset (.pbs) when block-join documents were indexed
+        if (_parentDocIds is { Count: > 0 })
+        {
+            var pbs = new ParentBitSet(_bufferedDocCount);
+            foreach (var pid in _parentDocIds)
+                pbs.Set(pid);
+            pbs.WriteTo(basePath + ".pbs");
+        }
+
+        // Write compound file (.cfs) when enabled
+        if (_config.UseCompoundFile)
+        {
+            string[] extensions = [".dic", ".pos", ".fdt", ".fdx", ".nrm", ".num", ".dvn", ".dvs", ".fln", ".vec", ".tvd", ".tvx", ".bkd", ".del", ".pbs"];
+            var existingExtensions = extensions.Where(ext => File.Exists(basePath + ext)).ToArray();
+            if (existingExtensions.Length > 0)
+            {
+                CompoundFileWriter.Write(basePath + ".cfs", basePath, existingExtensions);
+                // Delete the original individual files now that the compound file exists
+                foreach (var ext in existingExtensions)
+                {
+                    try { File.Delete(basePath + ext); } catch { /* best-effort */ }
+                }
+            }
+            // Re-write .seg with the updated IsCompoundFile flag
+            var compoundSegInfo = new SegmentInfo
+            {
+                SegmentId = segInfo.SegmentId,
+                DocCount = segInfo.DocCount,
+                LiveDocCount = segInfo.LiveDocCount,
+                CommitGeneration = segInfo.CommitGeneration,
+                FieldNames = segInfo.FieldNames,
+                IsCompoundFile = true,
+                IndexSortFields = segInfo.IndexSortFields
+            };
+            compoundSegInfo.WriteTo(basePath + ".seg");
+            segInfo = compoundSegInfo;
+        }
+
+        _committedSegments.Add(segInfo);
+        ResetBuffer();
+
+        // Release semaphore slots AFTER the flush is complete and buffers are cleared.
+        if (_backpressureSemaphore is not null && docCountToFlush > 0)
+        {
+            int toRelease = Math.Min(docCountToFlush, _semaphoreSlotsHeld);
+            if (toRelease > 0)
+            {
+                _backpressureSemaphore.Release(toRelease);
+                _semaphoreSlotsHeld -= toRelease;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Computes a permutation array where perm[newDocId] = oldDocId,
+    /// sorting buffered documents according to the given <see cref="IndexSort"/>.
+    /// Pre-extracts sort key arrays to avoid per-comparison dictionary lookups.
+    /// </summary>
+    private int[] ComputeSortPermutation(IndexSort sort)
+    {
+        int n = _bufferedDocCount;
+        var perm = new int[n];
+        for (int i = 0; i < n; i++) perm[i] = i;
+
+        // Pre-extract sort key arrays to avoid dictionary lookups in the comparator
+        var fieldCount = sort.Fields.Count;
+        var numericKeys = new double[fieldCount][];
+        var stringKeys = new string?[fieldCount][];
+        var sortTypes = new SortFieldType[fieldCount];
+        var descFlags = new bool[fieldCount];
+
+        for (int f = 0; f < fieldCount; f++)
+        {
+            var field = sort.Fields[f];
+            sortTypes[f] = field.Type;
+            descFlags[f] = field.Descending;
+
+            switch (field.Type)
+            {
+                case SortFieldType.Numeric:
+                    var numArr = new double[n];
+                    if (_numericDocValues.TryGetValue(field.FieldName, out var dvList))
+                    {
+                        for (int i = 0; i < Math.Min(n, dvList.Count); i++)
+                            numArr[i] = dvList[i];
+                    }
+                    numericKeys[f] = numArr;
+                    break;
+
+                case SortFieldType.String:
+                    var strArr = new string?[n];
+                    if (_sortedDocValues.TryGetValue(field.FieldName, out var sdvList))
+                    {
+                        for (int i = 0; i < Math.Min(n, sdvList.Count); i++)
+                            strArr[i] = sdvList[i];
+                    }
+                    stringKeys[f] = strArr;
+                    break;
+            }
+        }
+
+        Array.Sort(perm, (a, b) =>
+        {
+            for (int f = 0; f < fieldCount; f++)
+            {
+                int cmp = sortTypes[f] switch
+                {
+                    SortFieldType.Numeric => numericKeys[f][a].CompareTo(numericKeys[f][b]),
+                    SortFieldType.String => string.Compare(stringKeys[f][a], stringKeys[f][b], StringComparison.Ordinal),
+                    SortFieldType.DocId => a.CompareTo(b),
+                    _ => 0
+                };
+                if (descFlags[f]) cmp = -cmp;
+                if (cmp != 0) return cmp;
+            }
+            return a.CompareTo(b);
+        });
+
+        return perm;
+    }
+
+    // No longer needed — sort keys are pre-extracted inline
+    // private int CompareNumeric(int docA, int docB, string fieldName) { ... }
+    // private int CompareString(int docA, int docB, string fieldName) { ... }
+
+    /// <summary>
+    /// Remaps all in-memory buffers so that doc IDs reflect the sorted order.
+    /// After this call, doc 0 is the first doc in sorted order, etc.
+    /// </summary>
+    private void ApplySortPermutation(int[] sortPerm, int[] inversePerm)
+    {
+        int n = _bufferedDocCount;
+
+        // 1. Remap postings: each PostingAccumulator references old doc IDs → translate to new
+        RemapPostings(inversePerm);
+
+        // 2. Remap stored fields (flat buffer)
+        RemapStoredFields(sortPerm, n);
+
+        // 3. Remap per-field token counts (norm source)
+        RemapDocTokenCounts(sortPerm, n);
+
+        // 4. Remap numeric doc values
+        foreach (var (field, list) in _numericDocValues)
+        {
+            var reordered = new List<double>(n);
+            for (int i = 0; i < n; i++)
+            {
+                int old = sortPerm[i];
+                reordered.Add(old < list.Count ? list[old] : 0);
+            }
+            _numericDocValues[field] = reordered;
+        }
+
+        // 5. Remap sorted doc values
+        foreach (var (field, list) in _sortedDocValues)
+        {
+            var reordered = new List<string?>(n);
+            for (int i = 0; i < n; i++)
+            {
+                int old = sortPerm[i];
+                reordered.Add(old < list.Count ? list[old] : null);
+            }
+            _sortedDocValues[field] = reordered;
+        }
+
+        // 6. Remap numeric index (field → docId → value)
+        foreach (var (field, docMap) in _numericIndex)
+        {
+            var remapped = new Dictionary<int, double>(docMap.Count);
+            foreach (var (oldDoc, val) in docMap)
+            {
+                if (oldDoc < inversePerm.Length)
+                    remapped[inversePerm[oldDoc]] = val;
+            }
+            _numericIndex[field] = remapped;
+        }
+
+        // 7. Remap vectors
+        if (_bufferedVectors.Count > 0)
+        {
+            var remapped = new Dictionary<int, (string FieldName, ReadOnlyMemory<float> Vector)>(_bufferedVectors.Count);
+            foreach (var (oldDoc, entry) in _bufferedVectors)
+            {
+                if (oldDoc < inversePerm.Length)
+                    remapped[inversePerm[oldDoc]] = entry;
+            }
+            _bufferedVectors = remapped;
+        }
+    }
+
+    /// <summary>
+    /// Rewrites all PostingAccumulator doc ID arrays using the inverse permutation,
+    /// then re-sorts them so doc IDs remain in ascending order (required by the codec).
+    /// </summary>
+    private void RemapPostings(int[] inversePerm)
+    {
+        foreach (var (_, acc) in _postings)
+            acc.RemapDocIds(inversePerm);
+    }
+
+    /// <summary>
+    /// Reorders the flat stored fields buffer according to the sort permutation.
+    /// </summary>
+    private void RemapStoredFields(int[] sortPerm, int n)
+    {
+        int totalEntries = _sfFieldIds.Count;
+        var newFieldIds = new List<int>(totalEntries);
+        var newValues = new List<string>(totalEntries);
+        var newDocStarts = new List<int>(n);
+
+        for (int newDoc = 0; newDoc < n; newDoc++)
+        {
+            int oldDoc = sortPerm[newDoc];
+            newDocStarts.Add(newFieldIds.Count);
+
+            int start = oldDoc < _sfDocStarts.Count ? _sfDocStarts[oldDoc] : totalEntries;
+            int end = (oldDoc + 1) < _sfDocStarts.Count ? _sfDocStarts[oldDoc + 1] : totalEntries;
+
+            for (int j = start; j < end; j++)
+            {
+                newFieldIds.Add(_sfFieldIds[j]);
+                newValues.Add(_sfValues[j]);
+            }
+        }
+
+        _sfFieldIds = newFieldIds;
+        _sfValues = newValues;
+        _sfDocStarts = newDocStarts;
+    }
+
+    /// <summary>
+    /// Reorders per-field doc token count arrays according to the sort permutation.
+    /// </summary>
+    private void RemapDocTokenCounts(int[] sortPerm, int n)
+    {
+        foreach (var field in _docTokenCounts.Keys.ToList())
+        {
+            var old = _docTokenCounts[field];
+            var reordered = new int[old.Length];
+            for (int i = 0; i < n; i++)
+            {
+                int oldDoc = sortPerm[i];
+                reordered[i] = oldDoc < old.Length ? old[oldDoc] : 0;
+            }
+            _docTokenCounts[field] = reordered;
+        }
+    }
+}

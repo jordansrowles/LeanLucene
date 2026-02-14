@@ -1,5 +1,7 @@
 <Solution>
-  <Project Path="example/Rowles.LeanLucene.Example.Benchmarks/Rowles.LeanLucene.Example.Benchmarks.csproj" />
-  <Project Path="Rowles.LeanLucene.Tests/Rowles.LeanLucene.Tests.csproj" />
-  <Project Path="Rowles.LeanLucene/Rowles.LeanLucene.csproj" />
+  <Project Path="src/Rowles.LeanLucene.Example.Benchmarks/Rowles.LeanLucene.Example.Benchmarks.csproj" />
+  <Project Path="src/Rowles.LeanLucene.Example.Console/Rowles.LeanLucene.Example.Console.csproj" />
+  <Project Path="src/Rowles.LeanLucene.Tests/Rowles.LeanLucene.Tests.csproj" />
+  <Project Path="src/Rowles.LeanLucene/Rowles.LeanLucene.csproj" />
+  <Project Path="src/Rowles.LeanLucene.AOT.Probe/Rowles.LeanLucene.AOT.Probe.csproj" />
 </Solution>

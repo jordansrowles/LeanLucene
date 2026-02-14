@@ -1,0 +1,35 @@
+using Rowles.LeanLucene.Analysis;
+using Rowles.LeanLucene.Document.Fields;
+
+namespace Rowles.LeanLucene.Index.Indexer;
+
+/// <summary>
+/// Describes the expected type and behaviour of a single field in an <see cref="IndexSchema"/>.
+/// </summary>
+public sealed class FieldMapping
+{
+    /// <summary>The field name this mapping applies to.</summary>
+    public string Name { get; }
+
+    /// <summary>The expected field type.</summary>
+    public FieldType FieldType { get; }
+
+    /// <summary>Optional analyser override for this field. Null means use the schema/writer default.</summary>
+    public IAnalyser? Analyser { get; init; }
+
+    /// <summary>Whether the field value should be stored. Default: false.</summary>
+    public bool IsStored { get; init; }
+
+    /// <summary>Whether the field should be indexed. Default: true.</summary>
+    public bool IsIndexed { get; init; } = true;
+
+    /// <summary>Whether the field is required on every document. Default: false.</summary>
+    public bool IsRequired { get; init; }
+
+    public FieldMapping(string name, FieldType fieldType)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(name);
+        Name = name;
+        FieldType = fieldType;
+    }
+}
