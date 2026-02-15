@@ -5,6 +5,7 @@
   </ItemGroup>
 
   <ItemGroup>
+
     <PackageReference Include="BenchmarkDotNet" Version="0.15.8" />
 
     <PackageReference Include="Lucene.Net" Version="4.8.0-beta00016" />
