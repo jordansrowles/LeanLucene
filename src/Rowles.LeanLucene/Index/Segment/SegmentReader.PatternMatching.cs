@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using Rowles.LeanLucene.Codecs;
 
 namespace Rowles.LeanLucene.Index.Segment;
 
@@ -7,6 +8,12 @@ namespace Rowles.LeanLucene.Index.Segment;
 /// </summary>
 public sealed partial class SegmentReader
 {
+    /// <summary>Intersects the term dictionary with an automaton, returning matching terms.</summary>
+    public List<(string Term, long Offset)> IntersectAutomaton(string fieldPrefix, IAutomaton automaton)
+    {
+        return _dicReader.IntersectAutomaton(fieldPrefix, automaton);
+    }
+
     /// <summary>Returns all terms matching a qualified prefix.</summary>
     public List<(string Term, long Offset)> GetTermsWithPrefix(string qualifiedPrefix)
     {

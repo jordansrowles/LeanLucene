@@ -50,7 +50,12 @@ public sealed class VectorQuery : Query
 
         int i = 0;
 
+#if NET11_0_OR_GREATER
+        // .NET 11: Vector hardware acceleration is guaranteed on all supported targets
+        if (a.Length >= Vector<float>.Count)
+#else
         if (Vector.IsHardwareAccelerated && a.Length >= Vector<float>.Count)
+#endif
         {
             var vDot = Vector<float>.Zero;
             var vNormA = Vector<float>.Zero;

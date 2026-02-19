@@ -58,8 +58,7 @@ public sealed partial class IndexWriter
             _numericFields.Add(numericDoc);
         _bufferedDocCount++;
 
-        // Estimate RAM usage
-        _estimatedRamBytes += 200;
+        // Track stored-field RAM (postings tracked accurately via EstimatedBytes)
         for (int i = storedEntryStart; i < _sfFieldIds.Count; i++)
             _estimatedRamBytes += _sfValues[i].Length * 2 + 16;
 

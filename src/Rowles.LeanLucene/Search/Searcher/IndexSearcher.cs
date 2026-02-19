@@ -315,74 +315,53 @@ public sealed partial class IndexSearcher : IDisposable
 
     private TopDocs ExecuteBlockJoinQuery(BlockJoinQuery bjq, int topN)
     {
-        // Map child docs directly to parent docs using a bitset — no intermediate List<int>
-        var parentBits = ArrayPool<bool>.Shared.Rent(_totalDocCount);
-        Array.Clear(parentBits, 0, _totalDocCount);
-        int parentCount = 0;
+        // Streaming approach: iterate child matches per-segment, map child→parent
+        // directly using ParentBitSet — no intermediate TopDocs materialisation
+        var collector = new TopNCollector(topN);
+        float boost = bjq.Boost;
 
-        try
+        for (int r = 0; r < _readers.Count; r++)
         {
-            // Stream child doc IDs directly into parent mapping without materialising TopDocs
-            CollectParentsFromChildQuery(bjq.ChildQuery, parentBits, ref parentCount);
-
-            if (parentCount == 0)
-                return TopDocs.Empty;
-
-            // Collect parent doc IDs from the bitset directly into TopNCollector
-            int take = Math.Min(parentCount, topN);
-            float score = bjq.Boost;
-            var collector = new TopNCollector(take);
-            for (int i = 0; i < _totalDocCount && collector.TotalHits < parentCount; i++)
-            {
-                if (parentBits[i])
-                    collector.Collect(i, score);
-            }
-
-            return collector.ToTopDocs();
-        }
-        finally
-        {
-            ArrayPool<bool>.Shared.Return(parentBits, clearArray: false);
-        }
-    }
-
-    /// <summary>
-    /// Executes a child query once across all segments, mapping each matching child doc ID to its parent
-    /// and setting the parent bit directly — uses a single SearchCore call instead of per-segment collectors.
-    /// </summary>
-    private void CollectParentsFromChildQuery(Query childQuery, bool[] parentBits, ref int parentCount)
-    {
-        // Single-pass child query execution: one collector across all segments
-        var childDocs = SearchCore(childQuery, _totalDocCount);
-
-        foreach (var sd in childDocs.ScoreDocs)
-        {
-            int globalDocId = sd.DocId;
-
-            // Binary search to find which segment owns this doc ID
-            int r = Array.BinarySearch(_docBases, globalDocId);
-            if (r < 0) r = ~r - 1;
-            if (r < 0) continue;
-
             var reader = _readers[r];
             int docBase = _docBases[r];
-            int localDocId = globalDocId - docBase;
             var pbs = reader.GetParentBitSet();
+            if (pbs is null) continue;
 
-            if (pbs is not null)
+            // Track which parents we've already scored in this segment
+            var seenParents = new HashSet<int>();
+
+            if (bjq.ChildQuery is TermQuery tq)
             {
-                int parentLocal = pbs.NextParent(localDocId);
-                if (parentLocal >= 0)
+                // Fast path: stream PostingsEnum directly
+                var qt = string.Concat(tq.Field, "\x00", tq.Term);
+                using var pe = reader.GetPostingsEnum(qt);
+                while (pe.MoveNext())
                 {
-                    int globalParent = docBase + parentLocal;
-                    if (!parentBits[globalParent])
-                    {
-                        parentBits[globalParent] = true;
-                        parentCount++;
-                    }
+                    int parentLocal = pbs.NextParent(pe.DocId);
+                    if (parentLocal >= 0 && seenParents.Add(parentLocal))
+                        collector.Collect(docBase + parentLocal, boost);
+                }
+            }
+            else
+            {
+                // General path: score child query on this segment, then map to parents
+                // ExecuteQuery adds docBase, so ScoreDoc.DocId is already global
+                var globalDFs = PrecomputeGlobalDocFreqs(bjq.ChildQuery);
+                var segCollector = new TopNCollector(reader.MaxDoc);
+                ExecuteQuery(bjq.ChildQuery, reader, globalDFs, ref segCollector);
+                var childDocs = segCollector.ToTopDocs();
+
+                foreach (var sd in childDocs.ScoreDocs)
+                {
+                    int localDocId = sd.DocId - docBase;
+                    int parentLocal = pbs.NextParent(localDocId);
+                    if (parentLocal >= 0 && seenParents.Add(parentLocal))
+                        collector.Collect(docBase + parentLocal, boost);
                 }
             }
         }
+
+        return collector.ToTopDocs();
     }
 
     // Reusable buffer for PrecomputeGlobalDocFreqs to avoid per-call HashSet allocation

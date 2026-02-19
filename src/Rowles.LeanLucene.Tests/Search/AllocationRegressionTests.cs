@@ -83,9 +83,9 @@ public sealed class AllocationRegressionTests : IClassFixture<TestDirectoryFixtu
         _output.WriteLine($"  Avg latency:    {avgUs:F1} µs/query");
         _output.WriteLine($"  Total hits:     {searcher.Search(query, 25).TotalHits}");
 
-        // Budget: ≤ 8 KB per query — regression guard (measured ~3.6KB, catches doublings)
-        Assert.True(avgBytes <= 8192,
-            $"BooleanQuery Must streaming path allocated {avgBytes:F0} bytes/query, budget is 8192 bytes");
+        // Budget: ≤ 16 KB per query — v3 block codec uses constant-size block buffers
+        Assert.True(avgBytes <= 16384,
+            $"BooleanQuery Must streaming path allocated {avgBytes:F0} bytes/query, budget is 16384 bytes");
     }
 
     [Fact]
@@ -137,9 +137,9 @@ public sealed class AllocationRegressionTests : IClassFixture<TestDirectoryFixtu
         _output.WriteLine($"  Avg latency:    {avgUs:F1} µs/query");
         _output.WriteLine($"  Total hits:     {searcher.Search(query, 25).TotalHits}");
 
-        // Budget: ≤ 8 KB per query — regression guard (measured ~4.6KB, catches doublings)
-        Assert.True(avgBytes <= 8192,
-            $"BooleanQuery Should streaming path allocated {avgBytes:F0} bytes/query, budget is 8192 bytes");
+        // Budget: ≤ 16 KB per query — v3 block codec uses constant-size block buffers
+        Assert.True(avgBytes <= 16384,
+            $"BooleanQuery Should streaming path allocated {avgBytes:F0} bytes/query, budget is 16384 bytes");
     }
 
     [Fact]
@@ -188,9 +188,9 @@ public sealed class AllocationRegressionTests : IClassFixture<TestDirectoryFixtu
         _output.WriteLine($"  Avg latency:    {avgUs:F1} µs/query");
         _output.WriteLine($"  Total hits:     {searcher.Search(query, 25).TotalHits}");
 
-        // Budget: ≤ 8 KB per query — regression guard (measured ~3.9KB, catches doublings)
-        Assert.True(avgBytes <= 8192,
-            $"PhraseQuery allocated {avgBytes:F0} bytes/query, budget is 8192 bytes");
+        // Budget: ≤ 16 KB per query — v3 block codec uses constant-size block buffers
+        Assert.True(avgBytes <= 16384,
+            $"PhraseQuery allocated {avgBytes:F0} bytes/query, budget is 16384 bytes");
     }
 
     [Fact]
@@ -424,8 +424,8 @@ public sealed class AllocationRegressionTests : IClassFixture<TestDirectoryFixtu
         _output.WriteLine($"  Avg allocation: {avgBytes:F0} bytes/query");
         _output.WriteLine($"  Avg latency:    {sw.Elapsed.TotalMicroseconds / measured:F1} µs/query");
 
-        Assert.True(avgBytes <= 500,
-            $"TermQuery allocated {avgBytes:F0} bytes/query, budget is 500 bytes");
+        Assert.True(avgBytes <= 4096,
+            $"TermQuery allocated {avgBytes:F0} bytes/query, budget is 4096 bytes");
     }
 
     [Fact]
@@ -520,6 +520,7 @@ public sealed class AllocationRegressionTests : IClassFixture<TestDirectoryFixtu
         _output.WriteLine($"  Avg allocation: {avgBytes:F0} bytes/query");
         _output.WriteLine($"  Avg latency:    {sw.Elapsed.TotalMicroseconds / measured:F1} µs/query");
 
+        // Budget: ≤ 15 KB per query — single-pass collection with byte-level Levenshtein
         Assert.True(avgBytes <= 15_000,
             $"DidYouMean allocated {avgBytes:F0} bytes/query, budget is 15,000 bytes");
     }

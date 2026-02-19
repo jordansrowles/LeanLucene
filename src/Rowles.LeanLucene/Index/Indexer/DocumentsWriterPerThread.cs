@@ -23,6 +23,10 @@ internal sealed class DocumentsWriterPerThread
     internal int DocCount;
     private readonly Dictionary<(string, string), string> _qualifiedTermPool = new();
     private readonly HashSet<string> _termPool = new(StringComparer.Ordinal);
+    private long _estimatedRamBytes;
+
+    /// <summary>Estimated RAM usage in bytes for this DWPT's buffers.</summary>
+    public long EstimatedRamBytes => Volatile.Read(ref _estimatedRamBytes);
 
     public DocumentsWriterPerThread(IAnalyser defaultAnalyser, Dictionary<string, IAnalyser> fieldAnalysers)
     {
@@ -38,6 +42,7 @@ internal sealed class DocumentsWriterPerThread
     {
         int localDocId = DocCount;
         var storedDoc = new Dictionary<string, List<string>>(8);
+        long ramBefore = _estimatedRamBytes;
 
         foreach (var field in doc.Fields)
         {
@@ -53,6 +58,7 @@ internal sealed class DocumentsWriterPerThread
                             storedDoc[tf.Name] = list;
                         }
                         list.Add(tf.Value);
+                        _estimatedRamBytes += tf.Value.Length * 2 + 64; // string + List overhead
                     }
                     break;
                 case StringField sf:
@@ -65,6 +71,7 @@ internal sealed class DocumentsWriterPerThread
                             storedDoc[sf.Name] = list;
                         }
                         list.Add(sf.Value);
+                        _estimatedRamBytes += sf.Value.Length * 2 + 64;
                     }
                     break;
                 case NumericField nf:
@@ -77,6 +84,7 @@ internal sealed class DocumentsWriterPerThread
                             storedDoc[nf.Name] = list;
                         }
                         list.Add(nf.Value.ToString(System.Globalization.CultureInfo.InvariantCulture));
+                        _estimatedRamBytes += 48;
                     }
                     break;
             }
@@ -84,6 +92,7 @@ internal sealed class DocumentsWriterPerThread
 
         StoredFields.Add(storedDoc);
         DocCount++;
+        _estimatedRamBytes += 128; // Dictionary + List overhead per doc
     }
 
     private void IndexTextField(string fieldName, string value, int docId)
@@ -113,8 +122,10 @@ internal sealed class DocumentsWriterPerThread
             {
                 acc = new PostingAccumulator();
                 Postings[qualifiedTerm] = acc;
+                _estimatedRamBytes += qualifiedTerm.Length * 2 + 128; // new term + accumulator
             }
             acc.Add(docId, pos);
+            _estimatedRamBytes += 12; // posting entry (docId + position)
         }
     }
 

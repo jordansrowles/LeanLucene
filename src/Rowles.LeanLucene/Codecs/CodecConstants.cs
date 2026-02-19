@@ -11,16 +11,16 @@ internal static class CodecConstants
 
     // Per-format version numbers — increment when the binary layout changes.
     public const byte TermDictionaryVersion = 2;
-    public const byte PostingsVersion = 2;
+    public const byte PostingsVersion = 3;
     public const byte NormsVersion = 1;
     public const byte VectorVersion = 1;
-    public const byte StoredFieldsVersion = 4; // was 3 (pre-magic), now 4 with magic header
+    public const byte StoredFieldsVersion = 5; // v5: LZ4 block compression (was v4 Brotli)
     public const byte TermVectorsVersion = 1;
     public const byte CompoundFileVersion = 1;
     public const byte NumericDocValuesVersion = 1;
     public const byte SortedDocValuesVersion = 1;
     public const byte BKDVersion = 1;
-    public const byte FieldLengthVersion = 1;
+    public const byte FieldLengthVersion = 2; // v2: VarInt field lengths (was fixed ushort)
 
     /// <summary>Header size in bytes: 4 (magic) + 1 (version).</summary>
     public const int HeaderSize = 5;

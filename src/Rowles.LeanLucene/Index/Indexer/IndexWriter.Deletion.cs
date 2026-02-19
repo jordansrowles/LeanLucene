@@ -1,4 +1,5 @@
 using Rowles.LeanLucene.Codecs;
+using Rowles.LeanLucene.Codecs.Postings;
 using Rowles.LeanLucene.Codecs.StoredFields;
 using Rowles.LeanLucene.Store;
 
@@ -42,12 +43,14 @@ public sealed partial class IndexWriter
 
             bool changed = false;
             using var posInput = new IndexInput(posPath);
+            byte postingsVersion = PostingsEnum.ValidateFileHeader(posInput);
+
             foreach (var qualifiedTerm in qualifiedTerms)
             {
                 if (!dicReader.TryGetPostingsOffset(qualifiedTerm, out long offset))
                     continue;
 
-                ReadPostingsAtOffsetInto(posInput, offset, liveDocs, ref changed);
+                ReadPostingsAtOffsetInto(posInput, offset, postingsVersion, liveDocs, ref changed);
             }
 
             if (changed)
@@ -62,33 +65,17 @@ public sealed partial class IndexWriter
 
     /// <summary>
     /// Reads doc IDs from postings at the given offset using a memory-mapped IndexInput,
-    /// and marks matching live docs as deleted. Zero allocation for the common case.
+    /// and marks matching live docs as deleted.
     /// </summary>
-    private static void ReadPostingsAtOffsetInto(IndexInput input, long offset, LiveDocs liveDocs, ref bool changed)
+    private static void ReadPostingsAtOffsetInto(IndexInput input, long offset, byte postingsVersion, LiveDocs liveDocs, ref bool changed)
     {
-        input.Seek(offset);
-        int count = input.ReadInt32();
-        int skipCount = input.ReadInt32();
-        if (skipCount > 0)
-            input.Seek(input.Position + skipCount * 8L);
-
-        int prev = 0;
-        for (int i = 0; i < count; i++)
+        using var pe = PostingsEnum.Create(input, offset, postingsVersion);
+        while (pe.MoveNext())
         {
-            int delta = input.ReadVarInt();
-            if (delta < 0)
-                throw new InvalidDataException("Postings data is corrupt: negative delta encountered.");
-            try
+            int docId = pe.DocId;
+            if (liveDocs.IsLive(docId))
             {
-                prev = checked(prev + delta);
-            }
-            catch (OverflowException ex)
-            {
-                throw new InvalidDataException("Postings data is corrupt: doc ID delta overflow.", ex);
-            }
-            if (liveDocs.IsLive(prev))
-            {
-                liveDocs.Delete(prev);
+                liveDocs.Delete(docId);
                 changed = true;
             }
         }

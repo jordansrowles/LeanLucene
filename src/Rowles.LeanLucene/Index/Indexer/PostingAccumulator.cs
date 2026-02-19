@@ -40,6 +40,22 @@ internal sealed class PostingAccumulator
 
     public int Count => _count;
 
+    /// <summary>
+    /// Estimated heap bytes consumed by this accumulator's pooled buffers,
+    /// plus a fixed 64-byte overhead for the object itself.
+    /// Cheap to compute — just reads <c>.Length</c> on the rented arrays.
+    /// Returns ≤ 64 after <see cref="ReturnBuffers"/> has been called.
+    /// </summary>
+    public long EstimatedBytes
+    {
+        get
+        {
+            const long ObjectOverhead = 64;
+            long bufferBytes = (long)(_docIds.Length + _freqs.Length + _posStarts.Length + _posLengths.Length + _posBuf.Length) * sizeof(int);
+            return ObjectOverhead + bufferBytes;
+        }
+    }
+
     public void Add(int docId, int position)
     {
         if (_count > 0 && _docIds[_count - 1] == docId)

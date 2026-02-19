@@ -49,35 +49,35 @@ public class FieldCompressionTests : IDisposable
         var dirNone = SubDir("none");
         IndexDocs(dirNone, new IndexWriterConfig { CompressionPolicy = FieldCompressionPolicy.None });
 
-        var dirFast = SubDir("fast");
-        IndexDocs(dirFast, new IndexWriterConfig { CompressionPolicy = FieldCompressionPolicy.Fast });
+        var dirLz4 = SubDir("lz4");
+        IndexDocs(dirLz4, new IndexWriterConfig { CompressionPolicy = FieldCompressionPolicy.Lz4 });
 
         long sizeNone = GetFdtSize(dirNone);
-        long sizeFast = GetFdtSize(dirFast);
+        long sizeLz4 = GetFdtSize(dirLz4);
 
-        Assert.True(sizeNone >= sizeFast, $"None ({sizeNone}) should be >= Fast ({sizeFast})");
+        Assert.True(sizeNone >= sizeLz4, $"None ({sizeNone}) should be >= Lz4 ({sizeLz4})");
     }
 
     [Fact]
-    public void Policy_High_ProducesSmallerThanFast()
+    public void Policy_Zstandard_ProducesSmallerThanLz4()
     {
-        var dirFast = SubDir("fast2");
-        IndexDocs(dirFast, new IndexWriterConfig { CompressionPolicy = FieldCompressionPolicy.Fast }, count: 200);
+        var dirLz4 = SubDir("lz4_2");
+        IndexDocs(dirLz4, new IndexWriterConfig { CompressionPolicy = FieldCompressionPolicy.Lz4 }, count: 200);
 
-        var dirHigh = SubDir("high");
-        IndexDocs(dirHigh, new IndexWriterConfig { CompressionPolicy = FieldCompressionPolicy.High }, count: 200);
+        var dirZstd = SubDir("zstd");
+        IndexDocs(dirZstd, new IndexWriterConfig { CompressionPolicy = FieldCompressionPolicy.Zstandard }, count: 200);
 
-        long sizeFast = GetFdtSize(dirFast);
-        long sizeHigh = GetFdtSize(dirHigh);
+        long sizeLz4 = GetFdtSize(dirLz4);
+        long sizeZstd = GetFdtSize(dirZstd);
 
-        // High should be <= Fast (may be equal for very small data)
-        Assert.True(sizeHigh <= sizeFast, $"High ({sizeHigh}) should be <= Fast ({sizeFast})");
+        // Zstandard should be <= LZ4 (may be equal for very small data)
+        Assert.True(sizeZstd <= sizeLz4, $"Zstandard ({sizeZstd}) should be <= Lz4 ({sizeLz4})");
     }
 
     [Fact]
     public void AllPolicies_RoundTrip_Correctly()
     {
-        foreach (var policy in Enum.GetValues<FieldCompressionPolicy>())
+        foreach (var policy in new[] { FieldCompressionPolicy.None, FieldCompressionPolicy.Lz4, FieldCompressionPolicy.Zstandard })
         {
             var dir = SubDir($"roundtrip_{policy}");
             IndexDocs(dir, new IndexWriterConfig { CompressionPolicy = policy }, count: 10);
@@ -86,31 +86,26 @@ public class FieldCompressionTests : IDisposable
             var results = searcher.Search(new TermQuery("body", "fox"), 100);
             Assert.Equal(10, results.TotalHits);
 
-            // Verify stored fields round-trip
             var stored = searcher.GetStoredFields(results.ScoreDocs[0].DocId);
             Assert.True(stored.ContainsKey("body"));
         }
     }
 
     [Fact]
-    public void CompressionPolicy_SetsCompressionLevel()
+    public void CompressionPolicy_DefaultIsLz4()
     {
-        var config = new IndexWriterConfig { CompressionPolicy = FieldCompressionPolicy.None };
-        Assert.Equal(System.IO.Compression.CompressionLevel.NoCompression, config.StoredFieldCompressionLevel);
-
-        config.CompressionPolicy = FieldCompressionPolicy.Fast;
-        Assert.Equal(System.IO.Compression.CompressionLevel.Fastest, config.StoredFieldCompressionLevel);
-
-        config.CompressionPolicy = FieldCompressionPolicy.High;
-        Assert.Equal(System.IO.Compression.CompressionLevel.Optimal, config.StoredFieldCompressionLevel);
+        var config = new IndexWriterConfig();
+        Assert.Equal(FieldCompressionPolicy.Lz4, config.CompressionPolicy);
     }
 
     [Fact]
-    public void DefaultConfig_HasNoCompressionPolicy()
+    public void CompressionPolicy_CanBeChanged()
     {
-        var config = new IndexWriterConfig();
-        Assert.Null(config.CompressionPolicy);
-        Assert.Equal(System.IO.Compression.CompressionLevel.Fastest, config.StoredFieldCompressionLevel);
+        var config = new IndexWriterConfig { CompressionPolicy = FieldCompressionPolicy.Zstandard };
+        Assert.Equal(FieldCompressionPolicy.Zstandard, config.CompressionPolicy);
+
+        config.CompressionPolicy = FieldCompressionPolicy.None;
+        Assert.Equal(FieldCompressionPolicy.None, config.CompressionPolicy);
     }
 
     private static long GetFdtSize(string dir)

@@ -115,6 +115,10 @@ public sealed partial class IndexWriter : IDisposable
         {
             lock (_writeLock)
             {
+                // Merge backpressure: if too many unmerged segments, flush and merge now
+                if (ShouldThrottleForMerge() && _bufferedDocCount > 0)
+                    FlushSegment();
+
                 // Track that we've acquired a slot
                 if (_backpressureSemaphore is not null)
                     _semaphoreSlotsHeld++;
@@ -267,6 +271,9 @@ public sealed partial class IndexWriter : IDisposable
         if (preFlushSegmentCount > 0 && _pendingDeletes.Count > 0)
             ApplyPendingDeletions(_committedSegments.GetRange(0, preFlushSegmentCount));
 
+        // Flush any DWPT pool buffers before the main flush
+        FlushDwptPool();
+
         // Flush any remaining buffered documents
         if (_bufferedDocCount > 0)
             FlushSegment();
@@ -360,9 +367,39 @@ public sealed partial class IndexWriter : IDisposable
     {
         if (_bufferedDocCount >= _config.MaxBufferedDocs)
             return true;
-        if (_estimatedRamBytes >= (long)(_config.RamBufferSizeMB * 1024 * 1024))
+        long ram = ComputeEstimatedRamBytes();
+        if (ram >= (long)(_config.RamBufferSizeMB * 1024 * 1024))
             return true;
+        if (_config.FlushThrottleBytes > 0 && ram >= _config.FlushThrottleBytes)
+        {
+            GC.Collect(2, GCCollectionMode.Aggressive, blocking: true);
+            return true;
+        }
         return false;
+    }
+
+    /// <summary>
+    /// Checks whether merge backpressure should pause indexing.
+    /// When <see cref="IndexWriterConfig.MergeThrottleSegments"/> is set and the
+    /// number of committed segments exceeds it, this returns true.
+    /// </summary>
+    private bool ShouldThrottleForMerge()
+    {
+        return _config.MergeThrottleSegments > 0
+            && _committedSegments.Count >= _config.MergeThrottleSegments;
+    }
+
+    /// <summary>
+    /// Computes the actual RAM consumed by all buffered postings accumulators
+    /// plus stored-field data, replacing the old rough heuristic.
+    /// </summary>
+    private long ComputeEstimatedRamBytes()
+    {
+        long total = 0;
+        foreach (var acc in _postings.Values)
+            total += acc.EstimatedBytes;
+        total += _estimatedRamBytes; // stored-field + misc overhead still tracked incrementally
+        return total;
     }
 
     private void ResetBuffer()

@@ -5,6 +5,66 @@ namespace Rowles.LeanLucene.Index.Indexer;
 
 public sealed partial class IndexWriter
 {
+    private DocumentsWriterPerThread[]? _dwptPool;
+    private int _dwptCounter; // for round-robin assignment via Interlocked
+
+    /// <summary>
+    /// Initialises the DWPT pool for concurrent indexing.
+    /// Call once before using <see cref="AddDocumentLockFree"/> or <see cref="AddDocumentsConcurrent"/>.
+    /// </summary>
+    /// <param name="threadCount">Number of per-thread writers to allocate (default: processor count).</param>
+    public void InitialiseDwptPool(int threadCount = 0)
+    {
+        if (threadCount <= 0)
+            threadCount = Math.Max(1, Environment.ProcessorCount);
+
+        _dwptPool = new DocumentsWriterPerThread[threadCount];
+        for (int i = 0; i < threadCount; i++)
+            _dwptPool[i] = CreateThreadLocalDocumentWriter();
+    }
+
+    /// <summary>
+    /// Lock-free document addition using per-thread DWPT buffers.
+    /// Uses <see cref="Interlocked.Increment(ref int)"/> for round-robin DWPT selection.
+    /// Each DWPT flushes independently when its RAM threshold is reached.
+    /// Call <see cref="InitialiseDwptPool"/> before first use.
+    /// </summary>
+    public void AddDocumentLockFree(LeanDocument doc)
+    {
+        ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
+        _config.Schema?.Validate(doc);
+
+        var pool = _dwptPool ?? throw new InvalidOperationException(
+            "DWPT pool not initialised. Call InitialiseDwptPool() first.");
+
+        // Round-robin DWPT selection — lock-free via Interlocked
+        int slot = (int)((uint)Interlocked.Increment(ref _dwptCounter) % (uint)pool.Length);
+        var dwpt = pool[slot];
+
+        // Per-DWPT lock (not global — only contention on the same slot)
+        lock (dwpt)
+        {
+            dwpt.AddDocument(doc, dwpt.DocCount);
+        }
+
+        // Check per-DWPT RAM threshold and flush if needed
+        long ramThreshold = (long)(_config.RamBufferSizeMB * 1024 * 1024) / pool.Length;
+        if (dwpt.EstimatedRamBytes > ramThreshold)
+        {
+            lock (_writeLock)
+            {
+                lock (dwpt)
+                {
+                    if (dwpt.DocCount > 0)
+                    {
+                        MergeDwpt(dwpt);
+                        ResetDwpt(dwpt);
+                    }
+                }
+            }
+        }
+    }
+
     public void AddDocumentsConcurrent(IReadOnlyList<Document.LeanDocument> documents)
     {
         ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
@@ -28,6 +88,43 @@ public sealed partial class IndexWriter
             foreach (var dwpt in perThreadResults)
                 MergeDwpt(dwpt);
         }
+    }
+
+    /// <summary>
+    /// Flushes all DWPT pool buffers into the main buffer and then flushes to disk.
+    /// Called during <see cref="Commit"/> to ensure all buffered data is persisted.
+    /// </summary>
+    private void FlushDwptPool()
+    {
+        var pool = _dwptPool;
+        if (pool == null) return;
+
+        foreach (var dwpt in pool)
+        {
+            lock (dwpt)
+            {
+                if (dwpt.DocCount > 0)
+                {
+                    MergeDwpt(dwpt);
+                    ResetDwpt(dwpt);
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// Resets a DWPT to empty state after its contents have been merged.
+    /// </summary>
+    private static void ResetDwpt(DocumentsWriterPerThread dwpt)
+    {
+        dwpt.Postings.Clear();
+        dwpt.StoredFields.Clear();
+        dwpt.NumericIndex.Clear();
+        dwpt.NumericDocValues.Clear();
+        dwpt.SortedDocValues.Clear();
+        dwpt.FieldNames.Clear();
+        dwpt.DocTokenCounts.Clear();
+        dwpt.DocCount = 0;
     }
 
     /// <summary>
@@ -138,7 +235,7 @@ public sealed partial class IndexWriter
         }
 
         _bufferedDocCount += dwpt.DocCount;
-        _estimatedRamBytes += dwpt.DocCount * 200;
+        // Stored-field overhead already tracked; postings tracked via EstimatedBytes
 
         if (ShouldFlush())
             FlushSegment();

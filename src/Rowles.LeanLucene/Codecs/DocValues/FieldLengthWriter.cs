@@ -5,7 +5,8 @@ namespace Rowles.LeanLucene.Codecs.DocValues;
 
 /// <summary>
 /// Writes exact per-field per-doc token counts to a <c>.fln</c> file.
-/// Layout: [Header][FieldCount:int32]([FieldNameLen:int32][FieldNameUTF8][DocCount:int32][ushort * DocCount])*
+/// Layout v2: [Header][FieldCount:int32]([FieldNameLen:int32][FieldNameUTF8][DocCount:int32][VarInt * DocCount])*
+/// Uses VarInt encoding: 1 byte for lengths &lt; 128, 2 bytes for &lt; 16384.
 /// </summary>
 internal static class FieldLengthWriter
 {
@@ -26,9 +27,8 @@ internal static class FieldLengthWriter
 
             for (int i = 0; i < count; i++)
             {
-                ushort val = (ushort)Math.Clamp(counts[i], 0, ushort.MaxValue);
-                output.WriteByte((byte)(val & 0xFF));
-                output.WriteByte((byte)(val >> 8));
+                int val = Math.Clamp(counts[i], 0, ushort.MaxValue);
+                output.WriteVarInt(val);
             }
         }
     }

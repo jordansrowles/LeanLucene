@@ -355,6 +355,47 @@ internal sealed class FSTReader
     private static bool IsRegexMeta(char c) =>
         c is '.' or '*' or '+' or '?' or '[' or '(' or '{' or '|' or '\\' or '^' or '$';
 
+    /// <summary>
+    /// Intersects the term dictionary with an automaton, returning matching terms.
+    /// Operates on bare term bytes (after fieldPrefix). Uses CanMatch for pruning.
+    /// </summary>
+    public List<(string Term, long Offset)> IntersectAutomaton(string fieldPrefix, IAutomaton automaton)
+    {
+        int prefixByteCount = Encoding.UTF8.GetByteCount(fieldPrefix);
+        Span<byte> prefixUtf8 = prefixByteCount <= 256 ? stackalloc byte[prefixByteCount] : new byte[prefixByteCount];
+        Encoding.UTF8.GetBytes(fieldPrefix, prefixUtf8);
+
+        var results = new List<(string, long)>();
+        int start = LowerBound(prefixUtf8);
+
+        for (int i = start; i < _termCount; i++)
+        {
+            var key = GetKeySpan(i);
+            if (!key.StartsWith(prefixUtf8))
+                break;
+
+            // Run bare term bytes through the automaton
+            var bareBytes = key[prefixByteCount..];
+            int state = automaton.Start;
+            bool dead = false;
+
+            for (int j = 0; j < bareBytes.Length; j++)
+            {
+                state = automaton.Step(state, bareBytes[j]);
+                if (!automaton.CanMatch(state))
+                {
+                    dead = true;
+                    break;
+                }
+            }
+
+            if (!dead && automaton.IsAccept(state))
+                results.Add((DecodeKey(i), _offsets[i]));
+        }
+
+        return results;
+    }
+
     /// <summary>FNV-1a hash of a byte span.</summary>
     private static int HashBytes(ReadOnlySpan<byte> data)
     {

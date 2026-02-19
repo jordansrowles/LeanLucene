@@ -293,6 +293,49 @@ internal sealed class TermDictionaryReader : IDisposable
 
     // ── Helpers ─────────────────────────────────────────────────────────────
 
+    /// <summary>
+    /// Intersects the term dictionary with an automaton, returning matching terms.
+    /// Delegates to FSTReader on v2; falls back to brute-force scan on v1.
+    /// </summary>
+    public List<(string Term, long Offset)> IntersectAutomaton(string fieldPrefix, IAutomaton automaton)
+    {
+        if (_fstReader is not null)
+            return _fstReader.IntersectAutomaton(fieldPrefix, automaton);
+        return IntersectAutomatonV1(fieldPrefix, automaton);
+    }
+
+    private List<(string Term, long Offset)> IntersectAutomatonV1(string fieldPrefix, IAutomaton automaton)
+    {
+        var results = new List<(string, long)>();
+        int start = LowerBoundV1(fieldPrefix.AsSpan());
+        for (int i = start; i < _allTerms!.Length; i++)
+        {
+            var term = _allTerms[i];
+            if (!term.StartsWith(fieldPrefix, StringComparison.Ordinal))
+                break;
+
+            var bareTerm = term.AsSpan(fieldPrefix.Length);
+            int state = automaton.Start;
+            bool dead = false;
+            for (int j = 0; j < bareTerm.Length; j++)
+            {
+                // Convert char to UTF-8 bytes for automaton
+                Span<byte> buf = stackalloc byte[4];
+                int len = System.Text.Encoding.UTF8.GetBytes(bareTerm.Slice(j, 1), buf);
+                for (int k = 0; k < len; k++)
+                {
+                    state = automaton.Step(state, buf[k]);
+                    if (!automaton.CanMatch(state)) { dead = true; break; }
+                }
+                if (dead) break;
+            }
+
+            if (!dead && automaton.IsAccept(state))
+                results.Add((term, _allOffsets![i]));
+        }
+        return results;
+    }
+
     private int LowerBoundV1(ReadOnlySpan<char> key)
     {
         int lo = 0, hi = _allTerms!.Length;

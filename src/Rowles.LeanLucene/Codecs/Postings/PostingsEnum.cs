@@ -85,8 +85,11 @@ public unsafe struct PostingsEnum : IDisposable
     }
 
     /// <summary>Creates a PostingsEnum by reading from a memory-mapped IndexInput at the specified offset.</summary>
-    public static PostingsEnum Create(IndexInput input, long offset)
+    public static PostingsEnum Create(IndexInput input, long offset, byte postingsVersion = 2)
     {
+        if (postingsVersion >= 3)
+            return CreateV3(input, offset);
+
         input.Seek(offset);
         int count = input.ReadInt32();
         if (count <= 0)
@@ -117,6 +120,36 @@ public unsafe struct PostingsEnum : IDisposable
         return new PostingsEnum(docIds, freqs, count);
     }
 
+    /// <summary>Eagerly decodes v3 block-packed postings into standard arrays.</summary>
+    private static PostingsEnum CreateV3(IndexInput input, long offset)
+    {
+        input.Seek(offset);
+        int docFreq = input.ReadInt32();
+        long skipOffset = input.ReadInt64();
+        bool hasFreqs = input.ReadBoolean();
+        input.ReadBoolean(); // hasPositions (not needed for doc-only enum)
+        input.ReadBoolean(); // hasPayloads
+
+        if (docFreq <= 0) return Empty;
+
+        long docStartOffset = input.Position;
+
+        // Use BlockPostingsEnum to decode all blocks
+        var blockEnum = BlockPostingsEnum.Create(input, docStartOffset, skipOffset, docFreq);
+        var docIds = ArrayPool<int>.Shared.Rent(docFreq);
+        int[]? freqs = hasFreqs ? ArrayPool<int>.Shared.Rent(docFreq) : null;
+
+        int i = 0;
+        while (blockEnum.NextDoc() != BlockPostingsEnum.NoMoreDocs)
+        {
+            docIds[i] = blockEnum.DocId;
+            if (freqs != null) freqs[i] = blockEnum.Freq;
+            i++;
+        }
+
+        return new PostingsEnum(docIds, freqs, docFreq);
+    }
+
     /// <summary>
     /// Creates a PostingsEnum that lazily decodes position data for phrase queries.
     /// During creation, only per-doc byte offsets and position counts are recorded.
@@ -124,6 +157,9 @@ public unsafe struct PostingsEnum : IDisposable
     /// </summary>
     public static PostingsEnum CreateWithPositions(IndexInput input, long offset, byte postingsVersion = 2)
     {
+        if (postingsVersion >= 3)
+            return CreateV3WithPositions(input, offset);
+
         input.Seek(offset);
         int count = input.ReadInt32();
         if (count <= 0)
@@ -182,6 +218,66 @@ public unsafe struct PostingsEnum : IDisposable
         }
 
         return new PostingsEnum(docIds, freqs, count, positionByteOffsets, positionCounts, input.BasePointer, input, hasPayloads);
+    }
+
+    /// <summary>Eagerly decodes v3 block-packed postings with lazy position data.</summary>
+    private static PostingsEnum CreateV3WithPositions(IndexInput input, long offset)
+    {
+        input.Seek(offset);
+        int docFreq = input.ReadInt32();
+        long skipOffset = input.ReadInt64();
+        bool hasFreqs = input.ReadBoolean();
+        bool hasPositions = input.ReadBoolean();
+        bool hasPayloads = input.ReadBoolean();
+
+        if (docFreq <= 0) return Empty;
+
+        long docStartOffset = input.Position;
+
+        // Decode doc IDs + freqs via BlockPostingsEnum
+        var blockEnum = BlockPostingsEnum.Create(input, docStartOffset, skipOffset, docFreq);
+        var docIds = ArrayPool<int>.Shared.Rent(docFreq);
+        int[]? freqs = hasFreqs ? ArrayPool<int>.Shared.Rent(docFreq) : null;
+
+        int idx = 0;
+        while (blockEnum.NextDoc() != BlockPostingsEnum.NoMoreDocs)
+        {
+            docIds[idx] = blockEnum.DocId;
+            if (freqs != null) freqs[idx] = blockEnum.Freq;
+            idx++;
+        }
+
+        if (!hasPositions)
+            return new PostingsEnum(docIds, freqs, docFreq);
+
+        // Seek past skip data to the position section
+        input.Seek(skipOffset);
+        int skipCount = input.ReadInt32();
+        // Skip entries: int32 LastDocId + int64 DocByteOffset (no PosFileOffset since posOut was null)
+        input.Seek(input.Position + (long)skipCount * 12);
+
+        // Read positions with lazy byte offsets (same VarInt format as v2)
+        var positionByteOffsets = ArrayPool<long>.Shared.Rent(docFreq);
+        var positionCounts = ArrayPool<int>.Shared.Rent(docFreq);
+
+        for (int i = 0; i < docFreq; i++)
+        {
+            int posCount = input.ReadVarInt();
+            positionCounts[i] = posCount;
+            positionByteOffsets[i] = input.Position;
+            for (int j = 0; j < posCount; j++)
+            {
+                input.ReadVarInt(); // position delta
+                if (hasPayloads)
+                {
+                    int payloadLen = input.ReadVarInt();
+                    if (payloadLen > 0)
+                        input.Seek(input.Position + payloadLen);
+                }
+            }
+        }
+
+        return new PostingsEnum(docIds, freqs, docFreq, positionByteOffsets, positionCounts, input.BasePointer, input, hasPayloads);
     }
 
     /// <summary>
