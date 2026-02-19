@@ -77,6 +77,7 @@ public sealed class WildcardAutomaton : IAutomaton
         var patternBytes = new List<byte>();
         var isMeta = new List<bool>();
         Span<byte> buf = stackalloc byte[4];
+        Span<char> charBuf = stackalloc char[1];
         foreach (char c in pattern)
         {
             if (c == '*' || c == '?')
@@ -86,7 +87,8 @@ public sealed class WildcardAutomaton : IAutomaton
             }
             else
             {
-                int len = Encoding.UTF8.GetBytes(stackalloc char[] { c }, buf);
+                charBuf[0] = c;
+                int len = Encoding.UTF8.GetBytes(charBuf, buf);
                 for (int i = 0; i < len; i++)
                 {
                     patternBytes.Add(buf[i]);

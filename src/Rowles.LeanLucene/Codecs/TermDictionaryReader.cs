@@ -308,6 +308,7 @@ internal sealed class TermDictionaryReader : IDisposable
     {
         var results = new List<(string, long)>();
         int start = LowerBoundV1(fieldPrefix.AsSpan());
+        Span<byte> buf = stackalloc byte[4];
         for (int i = start; i < _allTerms!.Length; i++)
         {
             var term = _allTerms[i];
@@ -320,7 +321,6 @@ internal sealed class TermDictionaryReader : IDisposable
             for (int j = 0; j < bareTerm.Length; j++)
             {
                 // Convert char to UTF-8 bytes for automaton
-                Span<byte> buf = stackalloc byte[4];
                 int len = System.Text.Encoding.UTF8.GetBytes(bareTerm.Slice(j, 1), buf);
                 for (int k = 0; k < len; k++)
                 {

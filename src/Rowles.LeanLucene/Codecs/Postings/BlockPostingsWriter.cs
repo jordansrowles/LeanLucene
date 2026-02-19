@@ -32,7 +32,6 @@ internal sealed class BlockPostingsWriter : IDisposable
 
     // Per-doc norm values for impact metadata (optional)
     private readonly byte[] _normBuffer = new byte[BlockSize];
-    private bool _hasNorms;
 
     // Scratch space for bit-packing
     private readonly byte[] _packScratch = new byte[1 + 32 * 16]; // max output of Pack
@@ -54,7 +53,6 @@ internal sealed class BlockPostingsWriter : IDisposable
         _totalDocCount = 0;
         _skipEntries.Clear();
         _docStartOffset = _docOut.Position;
-        _hasNorms = false;
     }
 
     /// <summary>
@@ -65,7 +63,6 @@ internal sealed class BlockPostingsWriter : IDisposable
         _docBuffer[_bufferCount] = docId;
         _freqBuffer[_bufferCount] = freq;
         _normBuffer[_bufferCount] = norm;
-        if (norm > 0) _hasNorms = true;
         _bufferCount++;
         _totalDocCount++;
 
