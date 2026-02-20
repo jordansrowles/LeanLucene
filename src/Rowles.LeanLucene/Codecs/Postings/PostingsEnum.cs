@@ -253,8 +253,8 @@ public unsafe struct PostingsEnum : IDisposable
         // Seek past skip data to the position section
         input.Seek(skipOffset);
         int skipCount = input.ReadInt32();
-        // Skip entries: int32 LastDocId + int64 DocByteOffset (no PosFileOffset since posOut was null)
-        input.Seek(input.Position + (long)skipCount * 12);
+        // Skip entries: int32 LastDocId (4) + int64 DocByteOffset (8) + 3 bytes impact metadata = 15 per entry
+        input.Seek(input.Position + (long)skipCount * 15);
 
         // Read positions with lazy byte offsets (same VarInt format as v2)
         var positionByteOffsets = ArrayPool<long>.Shared.Rent(docFreq);
