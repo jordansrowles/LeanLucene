@@ -57,13 +57,18 @@ public sealed partial class IndexWriter
         _sortedTermsBuffer.Sort(StringComparer.Ordinal);
         var postingsOffsets = new Dictionary<string, long>();
 
-        // Write all postings to a single .pos file using v3 block-packed format
+        // Write all postings to a single .pos file using v3 block-packed format.
+        // Two-pass approach: write all data forward-only (no seeks), then back-patch
+        // per-term headers in a single sequential pass to avoid per-term buffer flushes.
         using (var posOutput = new IndexOutput(basePath + ".pos"))
         {
             // Write header at the start of the file
             CodecConstants.WriteHeader(posOutput, CodecConstants.PostingsVersion);
 
             using var blockWriter = new BlockPostingsWriter(posOutput);
+
+            // Collect per-term header positions and metadata for back-patching
+            var headerPatches = new List<(long HeaderPos, int DocFreq, long SkipOffset)>(_sortedTermsBuffer.Count);
 
             foreach (var qt in _sortedTermsBuffer)
             {
@@ -74,7 +79,7 @@ public sealed partial class IndexWriter
                 bool hasPositions = acc.HasPositions;
                 bool hasPayloads = acc.HasPayloads;
 
-                // Write per-term header: docFreq (placeholder), skipOffset (placeholder), flags
+                // Reserve space for per-term header (written with placeholder values)
                 long headerPos = posOutput.Position;
                 posOutput.WriteInt32(0);          // placeholder docFreq
                 posOutput.WriteInt64(0L);         // placeholder skipOffset
@@ -118,14 +123,18 @@ public sealed partial class IndexWriter
                     }
                 }
 
-                // Fill in the per-term header with actual values
-                long endPos = posOutput.Position;
-                posOutput.Seek(headerPos);
-                posOutput.WriteInt32(meta.DocFreq);
-                posOutput.WriteInt64(meta.SkipOffset);
-                posOutput.Seek(endPos);
-
+                headerPatches.Add((headerPos, meta.DocFreq, meta.SkipOffset));
                 postingsOffsets[qt] = headerPos;
+            }
+
+            // Back-patch all per-term headers in a single pass (one flush + sequential seeks)
+            posOutput.Flush();
+            for (int i = 0; i < headerPatches.Count; i++)
+            {
+                var (hpos, docFreq, skipOffset) = headerPatches[i];
+                posOutput.Seek(hpos);
+                posOutput.WriteInt32(docFreq);
+                posOutput.WriteInt64(skipOffset);
             }
         }
 

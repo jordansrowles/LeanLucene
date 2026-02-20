@@ -1,3 +1,5 @@
+using System.Buffers;
+using System.Text;
 using Rowles.LeanLucene.Store;
 
 namespace Rowles.LeanLucene.Codecs;
@@ -22,37 +24,64 @@ internal static class FSTBuilder
 
         if (count == 0) return;
 
-        // Pre-encode all terms to UTF-8
-        var encoded = new byte[count][];
-        for (int i = 0; i < count; i++)
-            encoded[i] = System.Text.Encoding.UTF8.GetBytes(sortedTerms[i]);
-
-        // Build index sorted by UTF-8 byte order (may differ from string ordinal for surrogates)
-        var sortedIndices = new int[count];
-        for (int i = 0; i < count; i++) sortedIndices[i] = i;
-        Array.Sort(sortedIndices, (a, b) =>
-            encoded[a].AsSpan().SequenceCompareTo(encoded[b]));
-
-        // Compute key data layout in UTF-8 sorted order
+        // Encode all terms into a single contiguous byte buffer to avoid per-term allocation.
+        // First pass: compute total byte count.
         int totalBytes = 0;
-        var starts = new int[count + 1];
+        var termByteStarts = new int[count + 1];
         for (int i = 0; i < count; i++)
         {
-            starts[i] = totalBytes;
-            totalBytes += encoded[sortedIndices[i]].Length;
+            termByteStarts[i] = totalBytes;
+            totalBytes += Encoding.UTF8.GetByteCount(sortedTerms[i]);
         }
-        starts[count] = totalBytes;
+        termByteStarts[count] = totalBytes;
 
-        // Write postings offsets in UTF-8 sorted order
-        for (int i = 0; i < count; i++)
-            output.WriteInt64(postingsOffsets[sortedTerms[sortedIndices[i]]]);
+        // Second pass: encode into a pooled buffer.
+        var allBytes = ArrayPool<byte>.Shared.Rent(totalBytes);
+        try
+        {
+            for (int i = 0; i < count; i++)
+            {
+                int start = termByteStarts[i];
+                int len = termByteStarts[i + 1] - start;
+                Encoding.UTF8.GetBytes(sortedTerms[i], allBytes.AsSpan(start, len));
+            }
 
-        // Write key starts
-        for (int i = 0; i <= count; i++)
-            output.WriteInt32(starts[i]);
+            // Build index sorted by UTF-8 byte order (may differ from string ordinal for surrogates)
+            var sortedIndices = new int[count];
+            for (int i = 0; i < count; i++) sortedIndices[i] = i;
+            Array.Sort(sortedIndices, (a, b) =>
+                allBytes.AsSpan(termByteStarts[a], termByteStarts[a + 1] - termByteStarts[a])
+                    .SequenceCompareTo(allBytes.AsSpan(termByteStarts[b], termByteStarts[b + 1] - termByteStarts[b])));
 
-        // Write concatenated UTF-8 key data
-        for (int i = 0; i < count; i++)
-            output.WriteBytes(encoded[sortedIndices[i]]);
+            // Compute key data layout in UTF-8 sorted order
+            int dataOffset = 0;
+            var starts = new int[count + 1];
+            for (int i = 0; i < count; i++)
+            {
+                starts[i] = dataOffset;
+                int idx = sortedIndices[i];
+                dataOffset += termByteStarts[idx + 1] - termByteStarts[idx];
+            }
+            starts[count] = dataOffset;
+
+            // Write postings offsets in UTF-8 sorted order
+            for (int i = 0; i < count; i++)
+                output.WriteInt64(postingsOffsets[sortedTerms[sortedIndices[i]]]);
+
+            // Write key starts
+            for (int i = 0; i <= count; i++)
+                output.WriteInt32(starts[i]);
+
+            // Write concatenated UTF-8 key data
+            for (int i = 0; i < count; i++)
+            {
+                int idx = sortedIndices[i];
+                output.WriteBytes(allBytes.AsSpan(termByteStarts[idx], termByteStarts[idx + 1] - termByteStarts[idx]));
+            }
+        }
+        finally
+        {
+            ArrayPool<byte>.Shared.Return(allBytes);
+        }
     }
 }
