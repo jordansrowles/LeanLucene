@@ -155,17 +155,18 @@ public sealed partial class IndexSearcher
 
         int docFreq = globalDFs.GetValueOrDefault((query.Field, query.Term), postings.DocFreq);
         float avgDocLength = _stats.GetAvgFieldLength(query.Field);
+        var factors = _similarity.PrecomputeFactors(_totalDocCount, docFreq, avgDocLength);
         int docBase = reader.DocBase;
+        float boost = query.Boost;
 
         while (postings.MoveNext())
         {
             int docId = postings.DocId;
             if (!reader.IsLive(docId)) continue;
 
-            int tf = postings.Freq;
             int docLength = reader.GetFieldLength(docId, query.Field);
-            float score = _similarity.Score(tf, docLength, avgDocLength, _totalDocCount, docFreq);
-            if (query.Boost != 1.0f) score *= query.Boost;
+            float score = _similarity.ScorePrecomputed(factors.Factor1, factors.Factor2, postings.Freq, docLength);
+            if (boost != 1.0f) score *= boost;
             collector.Collect(docBase + docId, score);
         }
     }
@@ -598,13 +599,13 @@ public sealed partial class IndexSearcher
                 if (postings.IsExhausted) break;
                 int docFreq = globalDFs.GetValueOrDefault((tq.Field, tq.Term), postings.DocFreq);
                 float avgDocLength = _stats.GetAvgFieldLength(tq.Field);
+                var factors = _similarity.PrecomputeFactors(_totalDocCount, docFreq, avgDocLength);
                 while (postings.MoveNext())
                 {
                     int docId = postings.DocId;
                     if (!reader.IsLive(docId)) continue;
-                    int tf = postings.Freq;
                     int docLength = reader.GetFieldLength(docId, tq.Field);
-                    float score = _similarity.Score(tf, docLength, avgDocLength, _totalDocCount, docFreq);
+                    float score = _similarity.ScorePrecomputed(factors.Factor1, factors.Factor2, postings.Freq, docLength);
                     results.Add(new ScoreDoc(docId, score));
                 }
                 break;
