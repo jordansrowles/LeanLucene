@@ -131,8 +131,11 @@ public sealed partial class IndexWriter
             {
                 acc = new PostingAccumulator();
                 _postings[pooledTerm] = acc;
+                _postingsRamBytes += acc.EstimatedBytes;
             }
+            long before = acc.EstimatedBytes;
             acc.Add(docId, pos);
+            _postingsRamBytes += acc.EstimatedBytes - before;
         }
     }
 
@@ -147,8 +150,11 @@ public sealed partial class IndexWriter
         {
             acc = new PostingAccumulator();
             _postings[pooledTerm] = acc;
+            _postingsRamBytes += acc.EstimatedBytes;
         }
+        long before = acc.EstimatedBytes;
         acc.AddDocOnly(docId);
+        _postingsRamBytes += acc.EstimatedBytes - before;
 
         // Also populate SortedDocValues for collapsing/faceting
         if (!_sortedDocValues.TryGetValue(fieldName, out var dvList))

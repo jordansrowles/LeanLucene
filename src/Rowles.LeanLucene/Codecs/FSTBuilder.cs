@@ -6,7 +6,7 @@ namespace Rowles.LeanLucene.Codecs;
 
 /// <summary>
 /// Serialises a sorted term list into a compact byte-keyed v2 dictionary format.
-/// Format: [termCount:int32][postingsOffsets: N×int64][keyStarts: (N+1)×int32][keyData: UTF-8 bytes].
+/// Format: [termCount:int32][postingsOffsets: N*int64][keyStarts: (N+1)*int32][keyData: UTF-8 bytes].
 /// This format enables O(log N) binary search on raw UTF-8 bytes without string materialisation.
 /// Terms are re-sorted in UTF-8 byte order to ensure binary search correctness
 /// (string ordinal sort can differ from UTF-8 byte sort for supplementary characters).
@@ -46,12 +46,12 @@ internal static class FSTBuilder
                 Encoding.UTF8.GetBytes(sortedTerms[i], allBytes.AsSpan(start, len));
             }
 
-            // Build index sorted by UTF-8 byte order (may differ from string ordinal for surrogates)
+            // Build index sorted by UTF-8 byte order (may differ from string ordinal for surrogates).
+            // Uses a struct IComparer for devirtualisation and to avoid delegate allocation.
             var sortedIndices = new int[count];
             for (int i = 0; i < count; i++) sortedIndices[i] = i;
-            Array.Sort(sortedIndices, (a, b) =>
-                allBytes.AsSpan(termByteStarts[a], termByteStarts[a + 1] - termByteStarts[a])
-                    .SequenceCompareTo(allBytes.AsSpan(termByteStarts[b], termByteStarts[b + 1] - termByteStarts[b])));
+            var comparer = new Utf8SpanComparer(allBytes, termByteStarts);
+            Array.Sort(sortedIndices, comparer);
 
             // Compute key data layout in UTF-8 sorted order
             int dataOffset = 0;
@@ -82,6 +82,20 @@ internal static class FSTBuilder
         finally
         {
             ArrayPool<byte>.Shared.Return(allBytes);
+        }
+    }
+
+    /// <summary>
+    /// Struct-based comparer that compares term indices by their UTF-8 byte representations.
+    /// Avoids delegate allocation and enables devirtualisation by the JIT.
+    /// </summary>
+    private readonly struct Utf8SpanComparer(byte[] allBytes, int[] termByteStarts) : IComparer<int>
+    {
+        public int Compare(int a, int b)
+        {
+            var spanA = allBytes.AsSpan(termByteStarts[a], termByteStarts[a + 1] - termByteStarts[a]);
+            var spanB = allBytes.AsSpan(termByteStarts[b], termByteStarts[b + 1] - termByteStarts[b]);
+            return spanA.SequenceCompareTo(spanB);
         }
     }
 }

@@ -51,6 +51,7 @@ public sealed partial class IndexWriter : IDisposable
 
     private int _bufferedDocCount;
     private long _estimatedRamBytes;
+    private long _postingsRamBytes; // incrementally tracked sum of all PostingAccumulator.EstimatedBytes
     private int _nextSegmentOrdinal;
     private int _commitGeneration;
     private readonly List<SegmentInfo> _committedSegments = [];
@@ -390,16 +391,13 @@ public sealed partial class IndexWriter : IDisposable
     }
 
     /// <summary>
-    /// Computes the actual RAM consumed by all buffered postings accumulators
-    /// plus stored-field data, replacing the old rough heuristic.
+    /// Returns the estimated RAM used by all buffered data. O(1) — uses the
+    /// incrementally tracked <c>_postingsRamBytes</c> instead of iterating
+    /// every <see cref="PostingAccumulator"/>.
     /// </summary>
     private long ComputeEstimatedRamBytes()
     {
-        long total = 0;
-        foreach (var acc in _postings.Values)
-            total += acc.EstimatedBytes;
-        total += _estimatedRamBytes; // stored-field + misc overhead still tracked incrementally
-        return total;
+        return _postingsRamBytes + _estimatedRamBytes;
     }
 
     private void ResetBuffer()
@@ -422,6 +420,7 @@ public sealed partial class IndexWriter : IDisposable
         _sortedTermsBuffer.Clear();
         _bufferedDocCount = 0;
         _estimatedRamBytes = 0;
+        _postingsRamBytes = 0;
         _docTokenCounts.Clear();
         _parentDocIds = null;
     }

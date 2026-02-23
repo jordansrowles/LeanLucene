@@ -60,15 +60,15 @@ public sealed partial class IndexWriter
         // Write all postings to a single .pos file using v3 block-packed format.
         // Two-pass approach: write all data forward-only (no seeks), then back-patch
         // per-term headers in a single sequential pass to avoid per-term buffer flushes.
+        // Collect per-term header positions and metadata for back-patching
+        var headerPatches = new List<(long HeaderPos, int DocFreq, long SkipOffset)>(_sortedTermsBuffer.Count);
+
         using (var posOutput = new IndexOutput(basePath + ".pos"))
         {
             // Write header at the start of the file
             CodecConstants.WriteHeader(posOutput, CodecConstants.PostingsVersion);
 
             using var blockWriter = new BlockPostingsWriter(posOutput);
-
-            // Collect per-term header positions and metadata for back-patching
-            var headerPatches = new List<(long HeaderPos, int DocFreq, long SkipOffset)>(_sortedTermsBuffer.Count);
 
             foreach (var qt in _sortedTermsBuffer)
             {
@@ -126,15 +126,20 @@ public sealed partial class IndexWriter
                 headerPatches.Add((headerPos, meta.DocFreq, meta.SkipOffset));
                 postingsOffsets[qt] = headerPos;
             }
+        }
 
-            // Back-patch all per-term headers in a single pass (one flush + sequential seeks)
-            posOutput.Flush();
+        // Back-patch all per-term headers using a raw file stream to avoid
+        // the per-seek buffer flush overhead of IndexOutput.Seek().
+        using (var patchStream = new FileStream(basePath + ".pos", FileMode.Open, FileAccess.ReadWrite, FileShare.None))
+        {
+            Span<byte> patch = stackalloc byte[12]; // int32 docFreq + int64 skipOffset
             for (int i = 0; i < headerPatches.Count; i++)
             {
                 var (hpos, docFreq, skipOffset) = headerPatches[i];
-                posOutput.Seek(hpos);
-                posOutput.WriteInt32(docFreq);
-                posOutput.WriteInt64(skipOffset);
+                patchStream.Seek(hpos, SeekOrigin.Begin);
+                System.Buffers.Binary.BinaryPrimitives.WriteInt32LittleEndian(patch, docFreq);
+                System.Buffers.Binary.BinaryPrimitives.WriteInt64LittleEndian(patch[4..], skipOffset);
+                patchStream.Write(patch);
             }
         }
 

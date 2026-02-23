@@ -22,6 +22,7 @@ internal sealed class PostingAccumulator
     private int _count;
     private int _docIdsLen; // logical length (may be < rented array length)
     private int _posBufLen;
+    private long _cachedEstimatedBytes;
 
     private const int NoPositionSentinel = -1;
 
@@ -36,6 +37,7 @@ internal sealed class PostingAccumulator
         _posBufLen = 8;
         _posBufUsed = 0;
         _count = 0;
+        _cachedEstimatedBytes = RecomputeEstimatedBytes();
     }
 
     public int Count => _count;
@@ -43,17 +45,15 @@ internal sealed class PostingAccumulator
     /// <summary>
     /// Estimated heap bytes consumed by this accumulator's pooled buffers,
     /// plus a fixed 64-byte overhead for the object itself.
-    /// Cheap to compute — just reads <c>.Length</c> on the rented arrays.
-    /// Returns ≤ 64 after <see cref="ReturnBuffers"/> has been called.
+    /// Cached and updated only when buffers grow, so reads are O(1).
     /// </summary>
-    public long EstimatedBytes
+    public long EstimatedBytes => _cachedEstimatedBytes;
+
+    private long RecomputeEstimatedBytes()
     {
-        get
-        {
-            const long ObjectOverhead = 64;
-            long bufferBytes = (long)(_docIds.Length + _freqs.Length + _posStarts.Length + _posLengths.Length + _posBuf.Length) * sizeof(int);
-            return ObjectOverhead + bufferBytes;
-        }
+        const long ObjectOverhead = 64;
+        long bufferBytes = (long)(_docIds.Length + _freqs.Length + _posStarts.Length + _posLengths.Length + _posBuf.Length) * sizeof(int);
+        return ObjectOverhead + bufferBytes;
     }
 
     public void Add(int docId, int position)
@@ -272,6 +272,7 @@ internal sealed class PostingAccumulator
         _posBufUsed = newPosBufUsed;
         _posBufLen = _posBuf.Length;
         _payloads = newPayloads;
+        _cachedEstimatedBytes = RecomputeEstimatedBytes();
     }
 
     /// <summary>Returns all pooled arrays. Call once after flush; do not use the accumulator afterwards.</summary>
@@ -292,6 +293,7 @@ internal sealed class PostingAccumulator
         _docIdsLen = 0;
         _posBufLen = 0;
         _posBufUsed = 0;
+        _cachedEstimatedBytes = 64; // object overhead only
     }
 
     private void Grow()
@@ -304,6 +306,7 @@ internal sealed class PostingAccumulator
         if (_payloads != null)
             Array.Resize(ref _payloads, newLen);
         _docIdsLen = newLen;
+        _cachedEstimatedBytes = RecomputeEstimatedBytes();
     }
 
     private void EnsurePosBufCapacity(int required)
@@ -312,6 +315,7 @@ internal sealed class PostingAccumulator
         int newLen = Math.Max(_posBufLen * 2, required);
         GrowArray(ref _posBuf, _posBufUsed, newLen);
         _posBufLen = newLen;
+        _cachedEstimatedBytes = RecomputeEstimatedBytes();
     }
 
     private static void GrowArray(ref int[] arr, int usedLength, int newMinLength)
