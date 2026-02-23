@@ -21,6 +21,7 @@ public sealed partial class IndexSearcher : IDisposable
     private readonly IndexSearcherConfig _config;
     private PostingsEnum[]? _postingsBuffer;
     private ScoreDoc[]? _collectorHeapCache;
+    private static readonly Dictionary<(string Field, string Term), int> EmptyGlobalDFs = new();
     private readonly QueryCache? _queryCache;
 
     /// <summary>Corpus-wide statistics computed at construction.</summary>
@@ -167,7 +168,7 @@ public sealed partial class IndexSearcher : IDisposable
         // so PrecomputeGlobalDocFreqs produces an empty dictionary. Skip the tree walk.
         bool skipGlobalDFs = query is PrefixQuery or WildcardQuery or FuzzyQuery;
         var globalDFs = skipGlobalDFs
-            ? new Dictionary<(string Field, string Term), int>()
+            ? EmptyGlobalDFs
             : PrecomputeGlobalDocFreqs(query);
         var collector = new TopNCollector(topN);
 
