@@ -110,7 +110,17 @@ public sealed partial class IndexWriter : IDisposable
 
         // Apply backpressure if enabled: wait for a semaphore slot before acquiring the write lock.
         // This prevents unbounded memory growth when documents are queued faster than they can be flushed.
-        _backpressureSemaphore?.Wait();
+        // Use TryWait first — if the semaphore is exhausted, force a flush to release slots
+        // (avoids deadlock when MaxBufferedDocs > MaxQueuedDocs).
+        if (_backpressureSemaphore is not null && !_backpressureSemaphore.Wait(0))
+        {
+            lock (_writeLock)
+            {
+                if (_bufferedDocCount > 0)
+                    FlushSegment();
+            }
+            _backpressureSemaphore.Wait();
+        }
 
         try
         {
@@ -155,7 +165,17 @@ public sealed partial class IndexWriter : IDisposable
         if (_backpressureSemaphore is not null)
         {
             for (int i = 0; i < documents.Count; i++)
-                _backpressureSemaphore.Wait();
+            {
+                if (!_backpressureSemaphore.Wait(0))
+                {
+                    lock (_writeLock)
+                    {
+                        if (_bufferedDocCount > 0)
+                            FlushSegment();
+                    }
+                    _backpressureSemaphore.Wait();
+                }
+            }
         }
 
         try
@@ -199,7 +219,17 @@ public sealed partial class IndexWriter : IDisposable
         if (_backpressureSemaphore is not null)
         {
             for (int i = 0; i < block.Count; i++)
-                _backpressureSemaphore.Wait();
+            {
+                if (!_backpressureSemaphore.Wait(0))
+                {
+                    lock (_writeLock)
+                    {
+                        if (_bufferedDocCount > 0)
+                            FlushSegment();
+                    }
+                    _backpressureSemaphore.Wait();
+                }
+            }
         }
 
         try
