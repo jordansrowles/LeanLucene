@@ -316,8 +316,6 @@ public sealed partial class IndexSearcher : IDisposable
 
     private TopDocs ExecuteBlockJoinQuery(BlockJoinQuery bjq, int topN)
     {
-        // Streaming approach: iterate child matches per-segment, map child→parent
-        // directly using ParentBitSet — no intermediate TopDocs materialisation
         var collector = new TopNCollector(topN);
         float boost = bjq.Boost;
 
@@ -328,8 +326,8 @@ public sealed partial class IndexSearcher : IDisposable
             var pbs = reader.GetParentBitSet();
             if (pbs is null) continue;
 
-            // Track which parents we've already scored in this segment
-            var seenParents = new HashSet<int>();
+            // BitArray for O(1) parent dedup — O(MaxDoc/8) vs O(N×32) for HashSet
+            var seenParents = new System.Collections.BitArray(reader.MaxDoc);
 
             if (bjq.ChildQuery is TermQuery tq)
             {
@@ -339,30 +337,88 @@ public sealed partial class IndexSearcher : IDisposable
                 while (pe.MoveNext())
                 {
                     int parentLocal = pbs.NextParent(pe.DocId);
-                    if (parentLocal >= 0 && seenParents.Add(parentLocal))
+                    if (parentLocal >= 0 && !seenParents[parentLocal])
+                    {
+                        seenParents[parentLocal] = true;
                         collector.Collect(docBase + parentLocal, boost);
+                    }
                 }
             }
             else
             {
-                // General path: score child query on this segment, then map to parents
-                // ExecuteQuery adds docBase, so ScoreDoc.DocId is already global
-                var globalDFs = PrecomputeGlobalDocFreqs(bjq.ChildQuery);
-                var segCollector = new TopNCollector(reader.MaxDoc);
-                ExecuteQuery(bjq.ChildQuery, reader, globalDFs, ref segCollector);
-                var childDocs = segCollector.ToTopDocs();
+                // General path: collect matching child doc IDs into a lightweight
+                // BitArray instead of materialising a TopNCollector(MaxDoc).
+                var childBits = new System.Collections.BitArray(reader.MaxDoc);
+                CollectChildDocsIntoBitArray(bjq.ChildQuery, reader, childBits);
 
-                foreach (var sd in childDocs.ScoreDocs)
+                for (int docId = 0; docId < reader.MaxDoc; docId++)
                 {
-                    int localDocId = sd.DocId - docBase;
-                    int parentLocal = pbs.NextParent(localDocId);
-                    if (parentLocal >= 0 && seenParents.Add(parentLocal))
+                    if (!childBits[docId]) continue;
+                    int parentLocal = pbs.NextParent(docId);
+                    if (parentLocal >= 0 && !seenParents[parentLocal])
+                    {
+                        seenParents[parentLocal] = true;
                         collector.Collect(docBase + parentLocal, boost);
+                    }
                 }
             }
         }
 
         return collector.ToTopDocs();
+    }
+
+    /// <summary>Collects matching doc IDs for a child query into a BitArray (doc-ID-only, no scores).</summary>
+    private void CollectChildDocsIntoBitArray(Query query, SegmentReader reader,
+        System.Collections.BitArray bits)
+    {
+        switch (query)
+        {
+            case TermQuery tq:
+            {
+                var qt = string.Concat(tq.Field, "\x00", tq.Term);
+                using var pe = reader.GetPostingsEnum(qt);
+                while (pe.MoveNext())
+                    bits[pe.DocId] = true;
+                break;
+            }
+            case BooleanQuery bq:
+            {
+                System.Collections.BitArray? mustResult = null;
+                foreach (var clause in bq.Clauses)
+                {
+                    if (clause.Occur == Occur.MustNot) continue;
+                    var clauseBits = new System.Collections.BitArray(bits.Length);
+                    CollectChildDocsIntoBitArray(clause.Query, reader, clauseBits);
+
+                    if (clause.Occur == Occur.Must)
+                        mustResult = mustResult is null ? clauseBits : mustResult.And(clauseBits);
+                    else // Should
+                        bits.Or(clauseBits);
+                }
+                if (mustResult is not null) bits.Or(mustResult);
+
+                foreach (var clause in bq.Clauses)
+                {
+                    if (clause.Occur != Occur.MustNot) continue;
+                    var excludeBits = new System.Collections.BitArray(bits.Length);
+                    CollectChildDocsIntoBitArray(clause.Query, reader, excludeBits);
+                    bits.And(excludeBits.Not());
+                }
+                break;
+            }
+            default:
+            {
+                // Fallback for complex child queries: full query execution
+                var globalDFs = PrecomputeGlobalDocFreqs(query);
+                var segCollector = new TopNCollector(reader.MaxDoc);
+                ExecuteQuery(query, reader, globalDFs, ref segCollector);
+                int docBase = reader.DocBase;
+                var childDocs = segCollector.ToTopDocs();
+                foreach (var sd in childDocs.ScoreDocs)
+                    bits[sd.DocId - docBase] = true;
+                break;
+            }
+        }
     }
 
     // Reusable buffer for PrecomputeGlobalDocFreqs to avoid per-call HashSet allocation
