@@ -1,3 +1,4 @@
+using System.Collections.Frozen;
 using System.Runtime.CompilerServices;
 using Rowles.LeanLucene.Codecs;
 using Rowles.LeanLucene.Codecs.DocValues;
@@ -17,8 +18,8 @@ public sealed partial class SegmentReader : IDisposable
     private readonly IndexInput _posInput;
     private readonly byte _postingsVersion;
     private readonly StoredFieldsReader? _storedReader;
-    private readonly Dictionary<string, byte[]> _fieldNorms;
-    private readonly Dictionary<string, int[]> _fieldLengthsPerField;
+    private readonly FrozenDictionary<string, byte[]> _fieldNorms;
+    private readonly FrozenDictionary<string, int[]> _fieldLengthsPerField;
     private readonly VectorReader? _vectorReader;
     private readonly Dictionary<(string, string), string> _qualifiedTermCache = new();
     private const int MaxQualifiedTermCacheSize = 8192;
@@ -79,17 +80,17 @@ public sealed partial class SegmentReader : IDisposable
             _liveDocs = LiveDocs.Deserialise(delPath, info.DocCount);
 
         // Load per-field norms
-        _fieldNorms = NormsReader.Read(_basePath + ".nrm");
+        _fieldNorms = NormsReader.Read(_basePath + ".nrm").ToFrozenDictionary(StringComparer.Ordinal);
 
         // Prefer exact field lengths from .fln; fall back to quantised norms
         var exactLengths = FieldLengthReader.TryRead(_basePath + ".fln");
         if (exactLengths is not null)
         {
-            _fieldLengthsPerField = exactLengths;
+            _fieldLengthsPerField = exactLengths.ToFrozenDictionary(StringComparer.Ordinal);
         }
         else
         {
-            _fieldLengthsPerField = new Dictionary<string, int[]>(_fieldNorms.Count, StringComparer.Ordinal);
+            var tempLengths = new Dictionary<string, int[]>(_fieldNorms.Count, StringComparer.Ordinal);
             foreach (var (fieldName, norms) in _fieldNorms)
             {
                 var fieldLengths = new int[norms.Length];
@@ -98,8 +99,9 @@ public sealed partial class SegmentReader : IDisposable
                     float n = norms[i] / 255f;
                     fieldLengths[i] = n <= 0f ? 1 : Math.Max(1, (int)MathF.Round(1.0f / n - 1.0f));
                 }
-                _fieldLengthsPerField[fieldName] = fieldLengths;
+                tempLengths[fieldName] = fieldLengths;
             }
+            _fieldLengthsPerField = tempLengths.ToFrozenDictionary(StringComparer.Ordinal);
         }
 
         var vecPath = _basePath + ".vec";

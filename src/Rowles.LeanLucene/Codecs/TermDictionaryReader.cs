@@ -1,3 +1,4 @@
+using System.Collections.Frozen;
 using System.Text.RegularExpressions;
 using Rowles.LeanLucene.Search;
 using Rowles.LeanLucene.Store;
@@ -19,7 +20,7 @@ internal sealed class TermDictionaryReader : IDisposable
     private readonly string[]? _allTerms;
     private readonly long[]? _allOffsets;
     // v1 hash layer for O(1) exact term lookup
-    private readonly Dictionary<string, int>? _termHashV1;
+    private readonly FrozenDictionary<string, int>? _termHashV1;
 
     private bool _disposed;
 
@@ -33,9 +34,10 @@ internal sealed class TermDictionaryReader : IDisposable
         _allTerms = allTerms;
         _allOffsets = allOffsets;
         // Build hash layer for O(1) exact lookups on v1 format
-        _termHashV1 = new Dictionary<string, int>(allTerms.Length, StringComparer.Ordinal);
+        var tempHash = new Dictionary<string, int>(allTerms.Length, StringComparer.Ordinal);
         for (int i = 0; i < allTerms.Length; i++)
-            _termHashV1[allTerms[i]] = i;
+            tempHash[allTerms[i]] = i;
+        _termHashV1 = tempHash.ToFrozenDictionary(StringComparer.Ordinal);
     }
 
     public static TermDictionaryReader Open(string filePath)

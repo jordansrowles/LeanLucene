@@ -55,7 +55,7 @@ public sealed partial class IndexWriter
         _sortedTermsBuffer.Clear();
         _sortedTermsBuffer.AddRange(_postings.Keys);
         _sortedTermsBuffer.Sort(StringComparer.Ordinal);
-        var postingsOffsets = new Dictionary<string, long>();
+        var postingsOffsets = new Dictionary<string, long>(_sortedTermsBuffer.Count);
 
         // Write all postings to a single .pos file using v3 block-packed format.
         // Two-pass approach: write all data forward-only (no seeks), then back-patch
