@@ -32,6 +32,7 @@ public struct BlockPostingsEnum : IDisposable
     private int _indexInBlock;      // position within current block
     private int _currentBlockIndex; // which block we decoded (-1 = none yet)
     private bool _exhausted;
+    private long _nextBlockOffset; // absolute file offset of the next block to decode
 
     /// <summary>Current doc ID, or <see cref="NoMoreDocs"/> if exhausted.</summary>
     public int DocId => _exhausted ? NoMoreDocs :
@@ -97,6 +98,7 @@ public struct BlockPostingsEnum : IDisposable
         _indexInBlock = -1;
         _currentBlockIndex = -1;
         _exhausted = docFreq == 0;
+        _nextBlockOffset = docStartOffset;
     }
 
     /// <summary>
@@ -156,6 +158,7 @@ public struct BlockPostingsEnum : IDisposable
                 _blockStart = blockStart;
                 _currentBlockIndex = targetBlockIdx;
                 DecodeFullBlockAtCurrentPosition();
+                _nextBlockOffset = _docInput.Position;
                 _indexInBlock = 0;
             }
 
@@ -255,8 +258,13 @@ public struct BlockPostingsEnum : IDisposable
         int blockIndex = blockStart / BlockSize;
         int remaining = _docFreq - blockStart;
 
-        if (blockIndex == 0)
-            _docInput.Seek(_docStartOffset);
+        // Seek to the correct position. Skip entries cover full blocks;
+        // the tracked _nextBlockOffset handles sequential and tail access
+        // when the shared IndexInput position may have been moved.
+        if (blockIndex < _skipCount)
+            _docInput.Seek(_docStartOffset + _skipEntries[blockIndex].DocByteOffset);
+        else
+            _docInput.Seek(_nextBlockOffset);
 
         _currentBlockIndex = blockIndex;
 
@@ -264,6 +272,8 @@ public struct BlockPostingsEnum : IDisposable
             DecodeFullBlockAtCurrentPosition();
         else
             DecodeTailAtCurrentPosition();
+
+        _nextBlockOffset = _docInput.Position;
     }
 
     private void DecodeFullBlockAtCurrentPosition()

@@ -25,6 +25,11 @@ public unsafe struct PostingsEnum : IDisposable
     private int[]? _positionData;
     private int[]? _positionStarts;
 
+    // Lazy block-at-a-time mode (v3): delegates to BlockPostingsEnum
+    // instead of pre-decoding all doc IDs/frequencies into ArrayPool arrays.
+    private BlockPostingsEnum _blockEnum;
+    private bool _lazyMode;
+
     // Lazy position decoding: store per-doc byte offsets and base pointer
     private long[]? _positionByteOffsets;
     private int[]? _positionCounts;
@@ -38,10 +43,12 @@ public unsafe struct PostingsEnum : IDisposable
     private long[]? _payloadByteOffsets;
     private int[]? _payloadLengths;
 
-    public int DocFreq => _count;
-    public int DocId => _index >= 0 && _index < _count ? _docIds![_index] : -1;
-    public int Freq => _index >= 0 && _index < _count && _freqs is not null ? _freqs[_index] : 1;
-    public bool IsExhausted => _count == 0;
+    public int DocFreq => _lazyMode ? _blockEnum.DocFreqCount : _count;
+    public int DocId => _lazyMode ? (_blockEnum.IsExhausted ? -1 : _blockEnum.DocId)
+        : (_index >= 0 && _index < _count ? _docIds![_index] : -1);
+    public int Freq => _lazyMode ? (_blockEnum.IsExhausted ? 1 : _blockEnum.Freq)
+        : (_index >= 0 && _index < _count && _freqs is not null ? _freqs[_index] : 1);
+    public bool IsExhausted => _lazyMode ? _blockEnum.IsExhausted : _count == 0;
 
     private PostingsEnum(int[]? docIds, int[]? freqs, int count,
         int[]? positionData = null, int[]? positionStarts = null)
@@ -61,6 +68,8 @@ public unsafe struct PostingsEnum : IDisposable
         _hasPayloads = false;
         _payloadByteOffsets = null;
         _payloadLengths = null;
+        _blockEnum = default;
+        _lazyMode = false;
     }
 
     private PostingsEnum(int[]? docIds, int[]? freqs, int count,
@@ -80,6 +89,30 @@ public unsafe struct PostingsEnum : IDisposable
         _lazyPosBuffer = null;
         _sourceInput = sourceInput;
         _hasPayloads = hasPayloads;
+        _payloadByteOffsets = null;
+        _payloadLengths = null;
+        _blockEnum = default;
+        _lazyMode = false;
+    }
+
+    /// <summary>Lazy mode: wraps a BlockPostingsEnum without pre-decoding.</summary>
+    private PostingsEnum(BlockPostingsEnum blockEnum)
+    {
+        _blockEnum = blockEnum;
+        _lazyMode = true;
+        _docIds = null;
+        _freqs = null;
+        _count = 0;
+        _index = -1;
+        _disposed = false;
+        _positionData = null;
+        _positionStarts = null;
+        _positionByteOffsets = null;
+        _positionCounts = null;
+        _posBasePtr = null;
+        _lazyPosBuffer = null;
+        _sourceInput = null;
+        _hasPayloads = false;
         _payloadByteOffsets = null;
         _payloadLengths = null;
     }
@@ -120,34 +153,21 @@ public unsafe struct PostingsEnum : IDisposable
         return new PostingsEnum(docIds, freqs, count);
     }
 
-    /// <summary>Eagerly decodes v3 block-packed postings into standard arrays.</summary>
+    /// <summary>Lazy v3 block-at-a-time postings — no upfront ArrayPool rental.</summary>
     private static PostingsEnum CreateV3(IndexInput input, long offset)
     {
         input.Seek(offset);
         int docFreq = input.ReadInt32();
         long skipOffset = input.ReadInt64();
-        bool hasFreqs = input.ReadBoolean();
-        input.ReadBoolean(); // hasPositions (not needed for doc-only enum)
+        input.ReadBoolean(); // hasFreqs (always decoded by BlockPostingsEnum)
+        input.ReadBoolean(); // hasPositions
         input.ReadBoolean(); // hasPayloads
 
         if (docFreq <= 0) return Empty;
 
         long docStartOffset = input.Position;
-
-        // Use BlockPostingsEnum to decode all blocks
         var blockEnum = BlockPostingsEnum.Create(input, docStartOffset, skipOffset, docFreq);
-        var docIds = ArrayPool<int>.Shared.Rent(docFreq);
-        int[]? freqs = hasFreqs ? ArrayPool<int>.Shared.Rent(docFreq) : null;
-
-        int i = 0;
-        while (blockEnum.NextDoc() != BlockPostingsEnum.NoMoreDocs)
-        {
-            docIds[i] = blockEnum.DocId;
-            if (freqs != null) freqs[i] = blockEnum.Freq;
-            i++;
-        }
-
-        return new PostingsEnum(docIds, freqs, docFreq);
+        return new PostingsEnum(blockEnum);
     }
 
     /// <summary>
@@ -395,6 +415,8 @@ public unsafe struct PostingsEnum : IDisposable
 
     public bool MoveNext()
     {
+        if (_lazyMode)
+            return _blockEnum.NextDoc() != BlockPostingsEnum.NoMoreDocs;
         if (++_index < _count)
             return true;
         _index = _count;
@@ -405,10 +427,14 @@ public unsafe struct PostingsEnum : IDisposable
 
     /// <summary>
     /// Advances to the first document >= targetDocId. Returns true if found.
-    /// Uses binary search on the pre-decoded docId array for O(log n) skip.
+    /// Lazy mode delegates to BlockPostingsEnum skip data for O(log N) seeking.
+    /// Eager mode uses binary search on the pre-decoded docId array.
     /// </summary>
     public bool Advance(int targetDocId)
     {
+        if (_lazyMode)
+            return _blockEnum.Advance(targetDocId) != BlockPostingsEnum.NoMoreDocs;
+
         if (_docIds is null || _count == 0) return false;
 
         int startIndex = Math.Max(0, _index);
@@ -443,6 +469,12 @@ public unsafe struct PostingsEnum : IDisposable
     {
         if (_disposed) return;
         _disposed = true;
+
+        if (_lazyMode)
+        {
+            _blockEnum.Dispose();
+            return;
+        }
 
         if (_docIds is not null)
         {
