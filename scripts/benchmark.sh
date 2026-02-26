@@ -57,8 +57,8 @@ declare -A SUITE_DESC=(
     [diagnostics]="DiagnosticsBenchmarks   - SlowQueryLog + Analytics hook overhead"
     [suggester]="SuggesterBenchmarks      - DidYouMean spelling (vs Lucene.NET SpellChecker)"
     [schemajson]="SchemaAndJsonBenchmarks  - schema validation + JSON mapping"
-    [compound]="CompoundFileBenchmarks   - compound file read/write (vs Lucene.NET)"
-    [indexsort]="IndexSortBenchmarks      - index-time sort + early termination"
+    [compound]="CompoundFileIndex/SearchBenchmarks - compound file read/write (vs Lucene.NET)"
+    [indexsort]="IndexSortIndex/SearchBenchmarks   - index-time sort + early termination"
     [blockjoin]="BlockJoinBenchmarks      - block-join queries (vs Lucene.NET Join)"
 )
 SUITE_ORDER=(all index query analysis boolean phrase prefix fuzzy wildcard deletion smallindex tokenbudget diagnostics suggester schemajson compound indexsort blockjoin)

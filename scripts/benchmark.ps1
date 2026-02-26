@@ -113,8 +113,8 @@ $suiteDescriptions = [ordered]@{
     diagnostics = 'DiagnosticsBenchmarks   - SlowQueryLog + Analytics hook overhead'
     suggester  = 'SuggesterBenchmarks      - DidYouMean spelling (vs Lucene.NET SpellChecker)'
     schemajson = 'SchemaAndJsonBenchmarks  - schema validation + JSON mapping'
-    compound   = 'CompoundFileBenchmarks   - compound file read/write (vs Lucene.NET)'
-    indexsort  = 'IndexSortBenchmarks      - index-time sort + early termination'
+    compound   = 'CompoundFileIndex/SearchBenchmarks - compound file read/write (vs Lucene.NET)'
+    indexsort  = 'IndexSortIndex/SearchBenchmarks   - index-time sort + early termination'
     blockjoin  = 'BlockJoinBenchmarks      - block-join queries (vs Lucene.NET Join)'
 }
 
