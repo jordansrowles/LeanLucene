@@ -168,3 +168,4 @@ internal sealed record SampleArticle(
     string Category,
     double Price,
     ReadOnlyMemory<float> Embedding);
+
