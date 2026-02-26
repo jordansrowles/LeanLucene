@@ -4,4 +4,6 @@
   <Project Path="src/Rowles.LeanLucene.Tests/Rowles.LeanLucene.Tests.csproj" />
   <Project Path="src/Rowles.LeanLucene/Rowles.LeanLucene.csproj" />
   <Project Path="src/Rowles.LeanLucene.AOT.Probe/Rowles.LeanLucene.AOT.Probe.csproj" />
+  <Project Path="src/Rowles.LeanLucene.DevBench/Rowles.LeanLucene.DevBench.csproj" />
+  <Project Path="src/Rowles.LeanLucene.Bench/Rowles.LeanLucene.Bench.csproj" />
 </Solution>

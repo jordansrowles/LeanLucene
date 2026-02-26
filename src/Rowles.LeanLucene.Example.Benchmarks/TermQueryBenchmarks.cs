@@ -1,5 +1,4 @@
 using BenchmarkDotNet.Attributes;
-using BenchmarkDotNet.Jobs;
 using Lucene.Net.Analysis.Standard;
 using Lucene.Net.Documents;
 using Lucene.Net.Index;
@@ -24,6 +23,7 @@ namespace Rowles.LeanLucene.Example.Benchmarks;
 [HtmlExporter]
 [JsonExporterAttribute.Full]
 [MarkdownExporterAttribute.GitHub]
+[RPlotExporter]
 [KeepBenchmarkFiles]
 [SimpleJob]
 public class TermQueryBenchmarks

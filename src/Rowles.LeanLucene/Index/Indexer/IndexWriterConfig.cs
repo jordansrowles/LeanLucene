@@ -44,27 +44,10 @@ public sealed class IndexWriterConfig
     public bool UseCompoundFile { get; set; }
 
     /// <summary>
-    /// Brotli compression level for stored fields. Default: <see cref="System.IO.Compression.CompressionLevel.Fastest"/>.
-    /// Higher levels reduce disk size at the cost of slower writes; decompression speed is unaffected.
-    /// For simpler configuration, use <see cref="CompressionPolicy"/> instead.
+    /// Compression algorithm for stored fields. Default: LZ4 (fast decompression).
+    /// Options: None, Lz4, Zstandard.
     /// </summary>
-    public System.IO.Compression.CompressionLevel StoredFieldCompressionLevel { get; set; } = System.IO.Compression.CompressionLevel.Fastest;
-
-    /// <summary>
-    /// Simplified compression policy. Setting this overrides <see cref="StoredFieldCompressionLevel"/>.
-    /// Default: null (uses <see cref="StoredFieldCompressionLevel"/> directly).
-    /// </summary>
-    public FieldCompressionPolicy? CompressionPolicy
-    {
-        get => _compressionPolicy;
-        set
-        {
-            _compressionPolicy = value;
-            if (value.HasValue)
-                StoredFieldCompressionLevel = value.Value.ToCompressionLevel();
-        }
-    }
-    private FieldCompressionPolicy? _compressionPolicy;
+    public FieldCompressionPolicy CompressionPolicy { get; set; } = FieldCompressionPolicy.Lz4;
 
     /// <summary>
     /// Number of documents per stored field block. Larger blocks compress better but
@@ -138,4 +121,16 @@ public sealed class IndexWriterConfig
     /// searches that match this sort. Default: null (insertion order).
     /// </summary>
     public IndexSort? IndexSort { get; set; }
+
+    /// <summary>
+    /// Hard ceiling in bytes. When <see cref="ComputeEstimatedRamBytes"/> exceeds this value,
+    /// IndexWriter force-flushes and requests a GC. Default: 0 (disabled).
+    /// </summary>
+    public long FlushThrottleBytes { get; set; }
+
+    /// <summary>
+    /// Maximum number of unmerged segments before AddDocument blocks until a merge completes.
+    /// Provides backpressure to prevent unbounded segment accumulation. Default: 0 (disabled).
+    /// </summary>
+    public int MergeThrottleSegments { get; set; }
 }

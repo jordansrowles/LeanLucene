@@ -51,6 +51,7 @@ public sealed partial class IndexWriter : IDisposable
 
     private int _bufferedDocCount;
     private long _estimatedRamBytes;
+    private long _postingsRamBytes; // incrementally tracked sum of all PostingAccumulator.EstimatedBytes
     private int _nextSegmentOrdinal;
     private int _commitGeneration;
     private readonly List<SegmentInfo> _committedSegments = [];
@@ -109,12 +110,26 @@ public sealed partial class IndexWriter : IDisposable
 
         // Apply backpressure if enabled: wait for a semaphore slot before acquiring the write lock.
         // This prevents unbounded memory growth when documents are queued faster than they can be flushed.
-        _backpressureSemaphore?.Wait();
+        // Use TryWait first — if the semaphore is exhausted, force a flush to release slots
+        // (avoids deadlock when MaxBufferedDocs > MaxQueuedDocs).
+        if (_backpressureSemaphore is not null && !_backpressureSemaphore.Wait(0))
+        {
+            lock (_writeLock)
+            {
+                if (_bufferedDocCount > 0)
+                    FlushSegment();
+            }
+            _backpressureSemaphore.Wait();
+        }
 
         try
         {
             lock (_writeLock)
             {
+                // Merge backpressure: if too many unmerged segments, flush and merge now
+                if (ShouldThrottleForMerge() && _bufferedDocCount > 0)
+                    FlushSegment();
+
                 // Track that we've acquired a slot
                 if (_backpressureSemaphore is not null)
                     _semaphoreSlotsHeld++;
@@ -150,7 +165,17 @@ public sealed partial class IndexWriter : IDisposable
         if (_backpressureSemaphore is not null)
         {
             for (int i = 0; i < documents.Count; i++)
-                _backpressureSemaphore.Wait();
+            {
+                if (!_backpressureSemaphore.Wait(0))
+                {
+                    lock (_writeLock)
+                    {
+                        if (_bufferedDocCount > 0)
+                            FlushSegment();
+                    }
+                    _backpressureSemaphore.Wait();
+                }
+            }
         }
 
         try
@@ -194,7 +219,17 @@ public sealed partial class IndexWriter : IDisposable
         if (_backpressureSemaphore is not null)
         {
             for (int i = 0; i < block.Count; i++)
-                _backpressureSemaphore.Wait();
+            {
+                if (!_backpressureSemaphore.Wait(0))
+                {
+                    lock (_writeLock)
+                    {
+                        if (_bufferedDocCount > 0)
+                            FlushSegment();
+                    }
+                    _backpressureSemaphore.Wait();
+                }
+            }
         }
 
         try
@@ -266,6 +301,9 @@ public sealed partial class IndexWriter : IDisposable
         // Apply pending deletions to pre-existing segments only (for UpdateDocument)
         if (preFlushSegmentCount > 0 && _pendingDeletes.Count > 0)
             ApplyPendingDeletions(_committedSegments.GetRange(0, preFlushSegmentCount));
+
+        // Flush any DWPT pool buffers before the main flush
+        FlushDwptPool();
 
         // Flush any remaining buffered documents
         if (_bufferedDocCount > 0)
@@ -360,9 +398,36 @@ public sealed partial class IndexWriter : IDisposable
     {
         if (_bufferedDocCount >= _config.MaxBufferedDocs)
             return true;
-        if (_estimatedRamBytes >= (long)(_config.RamBufferSizeMB * 1024 * 1024))
+        long ram = ComputeEstimatedRamBytes();
+        if (ram >= (long)(_config.RamBufferSizeMB * 1024 * 1024))
             return true;
+        if (_config.FlushThrottleBytes > 0 && ram >= _config.FlushThrottleBytes)
+        {
+            GC.Collect(2, GCCollectionMode.Aggressive, blocking: true);
+            return true;
+        }
         return false;
+    }
+
+    /// <summary>
+    /// Checks whether merge backpressure should pause indexing.
+    /// When <see cref="IndexWriterConfig.MergeThrottleSegments"/> is set and the
+    /// number of committed segments exceeds it, this returns true.
+    /// </summary>
+    private bool ShouldThrottleForMerge()
+    {
+        return _config.MergeThrottleSegments > 0
+            && _committedSegments.Count >= _config.MergeThrottleSegments;
+    }
+
+    /// <summary>
+    /// Returns the estimated RAM used by all buffered data. O(1) — uses the
+    /// incrementally tracked <c>_postingsRamBytes</c> instead of iterating
+    /// every <see cref="PostingAccumulator"/>.
+    /// </summary>
+    private long ComputeEstimatedRamBytes()
+    {
+        return _postingsRamBytes + _estimatedRamBytes;
     }
 
     private void ResetBuffer()
@@ -385,6 +450,7 @@ public sealed partial class IndexWriter : IDisposable
         _sortedTermsBuffer.Clear();
         _bufferedDocCount = 0;
         _estimatedRamBytes = 0;
+        _postingsRamBytes = 0;
         _docTokenCounts.Clear();
         _parentDocIds = null;
     }

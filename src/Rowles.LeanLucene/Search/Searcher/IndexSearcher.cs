@@ -21,6 +21,7 @@ public sealed partial class IndexSearcher : IDisposable
     private readonly IndexSearcherConfig _config;
     private PostingsEnum[]? _postingsBuffer;
     private ScoreDoc[]? _collectorHeapCache;
+    private static readonly Dictionary<(string Field, string Term), int> EmptyGlobalDFs = new();
     private readonly QueryCache? _queryCache;
 
     /// <summary>Corpus-wide statistics computed at construction.</summary>
@@ -167,7 +168,7 @@ public sealed partial class IndexSearcher : IDisposable
         // so PrecomputeGlobalDocFreqs produces an empty dictionary. Skip the tree walk.
         bool skipGlobalDFs = query is PrefixQuery or WildcardQuery or FuzzyQuery;
         var globalDFs = skipGlobalDFs
-            ? new Dictionary<(string Field, string Term), int>()
+            ? EmptyGlobalDFs
             : PrecomputeGlobalDocFreqs(query);
         var collector = new TopNCollector(topN);
 
@@ -315,72 +316,107 @@ public sealed partial class IndexSearcher : IDisposable
 
     private TopDocs ExecuteBlockJoinQuery(BlockJoinQuery bjq, int topN)
     {
-        // Map child docs directly to parent docs using a bitset — no intermediate List<int>
-        var parentBits = ArrayPool<bool>.Shared.Rent(_totalDocCount);
-        Array.Clear(parentBits, 0, _totalDocCount);
-        int parentCount = 0;
+        var collector = new TopNCollector(topN);
+        float boost = bjq.Boost;
 
-        try
+        for (int r = 0; r < _readers.Count; r++)
         {
-            // Stream child doc IDs directly into parent mapping without materialising TopDocs
-            CollectParentsFromChildQuery(bjq.ChildQuery, parentBits, ref parentCount);
-
-            if (parentCount == 0)
-                return TopDocs.Empty;
-
-            // Collect parent doc IDs from the bitset directly into TopNCollector
-            int take = Math.Min(parentCount, topN);
-            float score = bjq.Boost;
-            var collector = new TopNCollector(take);
-            for (int i = 0; i < _totalDocCount && collector.TotalHits < parentCount; i++)
-            {
-                if (parentBits[i])
-                    collector.Collect(i, score);
-            }
-
-            return collector.ToTopDocs();
-        }
-        finally
-        {
-            ArrayPool<bool>.Shared.Return(parentBits, clearArray: false);
-        }
-    }
-
-    /// <summary>
-    /// Executes a child query once across all segments, mapping each matching child doc ID to its parent
-    /// and setting the parent bit directly — uses a single SearchCore call instead of per-segment collectors.
-    /// </summary>
-    private void CollectParentsFromChildQuery(Query childQuery, bool[] parentBits, ref int parentCount)
-    {
-        // Single-pass child query execution: one collector across all segments
-        var childDocs = SearchCore(childQuery, _totalDocCount);
-
-        foreach (var sd in childDocs.ScoreDocs)
-        {
-            int globalDocId = sd.DocId;
-
-            // Binary search to find which segment owns this doc ID
-            int r = Array.BinarySearch(_docBases, globalDocId);
-            if (r < 0) r = ~r - 1;
-            if (r < 0) continue;
-
             var reader = _readers[r];
             int docBase = _docBases[r];
-            int localDocId = globalDocId - docBase;
             var pbs = reader.GetParentBitSet();
+            if (pbs is null) continue;
 
-            if (pbs is not null)
+            // BitArray for O(1) parent dedup — O(MaxDoc/8) vs O(N×32) for HashSet
+            var seenParents = new System.Collections.BitArray(reader.MaxDoc);
+
+            if (bjq.ChildQuery is TermQuery tq)
             {
-                int parentLocal = pbs.NextParent(localDocId);
-                if (parentLocal >= 0)
+                // Fast path: stream PostingsEnum directly
+                var qt = string.Concat(tq.Field, "\x00", tq.Term);
+                using var pe = reader.GetPostingsEnum(qt);
+                while (pe.MoveNext())
                 {
-                    int globalParent = docBase + parentLocal;
-                    if (!parentBits[globalParent])
+                    int parentLocal = pbs.NextParent(pe.DocId);
+                    if (parentLocal >= 0 && !seenParents[parentLocal])
                     {
-                        parentBits[globalParent] = true;
-                        parentCount++;
+                        seenParents[parentLocal] = true;
+                        collector.Collect(docBase + parentLocal, boost);
                     }
                 }
+            }
+            else
+            {
+                // General path: collect matching child doc IDs into a lightweight
+                // BitArray instead of materialising a TopNCollector(MaxDoc).
+                var childBits = new System.Collections.BitArray(reader.MaxDoc);
+                CollectChildDocsIntoBitArray(bjq.ChildQuery, reader, childBits);
+
+                for (int docId = 0; docId < reader.MaxDoc; docId++)
+                {
+                    if (!childBits[docId]) continue;
+                    int parentLocal = pbs.NextParent(docId);
+                    if (parentLocal >= 0 && !seenParents[parentLocal])
+                    {
+                        seenParents[parentLocal] = true;
+                        collector.Collect(docBase + parentLocal, boost);
+                    }
+                }
+            }
+        }
+
+        return collector.ToTopDocs();
+    }
+
+    /// <summary>Collects matching doc IDs for a child query into a BitArray (doc-ID-only, no scores).</summary>
+    private void CollectChildDocsIntoBitArray(Query query, SegmentReader reader,
+        System.Collections.BitArray bits)
+    {
+        switch (query)
+        {
+            case TermQuery tq:
+            {
+                var qt = string.Concat(tq.Field, "\x00", tq.Term);
+                using var pe = reader.GetPostingsEnum(qt);
+                while (pe.MoveNext())
+                    bits[pe.DocId] = true;
+                break;
+            }
+            case BooleanQuery bq:
+            {
+                System.Collections.BitArray? mustResult = null;
+                foreach (var clause in bq.Clauses)
+                {
+                    if (clause.Occur == Occur.MustNot) continue;
+                    var clauseBits = new System.Collections.BitArray(bits.Length);
+                    CollectChildDocsIntoBitArray(clause.Query, reader, clauseBits);
+
+                    if (clause.Occur == Occur.Must)
+                        mustResult = mustResult is null ? clauseBits : mustResult.And(clauseBits);
+                    else // Should
+                        bits.Or(clauseBits);
+                }
+                if (mustResult is not null) bits.Or(mustResult);
+
+                foreach (var clause in bq.Clauses)
+                {
+                    if (clause.Occur != Occur.MustNot) continue;
+                    var excludeBits = new System.Collections.BitArray(bits.Length);
+                    CollectChildDocsIntoBitArray(clause.Query, reader, excludeBits);
+                    bits.And(excludeBits.Not());
+                }
+                break;
+            }
+            default:
+            {
+                // Fallback for complex child queries: full query execution
+                var globalDFs = PrecomputeGlobalDocFreqs(query);
+                var segCollector = new TopNCollector(reader.MaxDoc);
+                ExecuteQuery(query, reader, globalDFs, ref segCollector);
+                int docBase = reader.DocBase;
+                var childDocs = segCollector.ToTopDocs();
+                foreach (var sd in childDocs.ScoreDocs)
+                    bits[sd.DocId - docBase] = true;
+                break;
             }
         }
     }

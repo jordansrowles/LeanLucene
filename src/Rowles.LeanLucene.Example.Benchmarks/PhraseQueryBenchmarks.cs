@@ -25,6 +25,7 @@ namespace Rowles.LeanLucene.Example.Benchmarks;
 [HtmlExporter]
 [JsonExporterAttribute.Full]
 [MarkdownExporterAttribute.GitHub]
+[RPlotExporter]
 [SimpleJob]
 public class PhraseQueryBenchmarks
 {

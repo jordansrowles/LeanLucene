@@ -11,6 +11,21 @@ namespace Rowles.LeanLucene.Search.Searcher;
 /// </summary>
 public sealed partial class IndexSearcher
 {
+    // Per-thread scratch buffers for ExecuteBooleanFallback to avoid ArrayPool rent/return per query.
+    // Falls back to ArrayPool when nested (recursive BooleanQuery sub-queries).
+    [ThreadStatic] private static float[]? t_fallbackScores;
+    [ThreadStatic] private static bool[]? t_fallbackInCandidate;
+    [ThreadStatic] private static int[]? t_fallbackCandidateIds;
+    [ThreadStatic] private static bool[]? t_fallbackInClause;
+    [ThreadStatic] private static bool t_fallbackInUse;
+
+    private static T[] EnsureScratch<T>(ref T[]? buffer, int minSize)
+    {
+        if (buffer is null || buffer.Length < minSize)
+            buffer = new T[minSize];
+        return buffer;
+    }
+
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static bool IsAllTermQueryBoolean(BooleanQuery bq)
     {
@@ -140,17 +155,18 @@ public sealed partial class IndexSearcher
 
         int docFreq = globalDFs.GetValueOrDefault((query.Field, query.Term), postings.DocFreq);
         float avgDocLength = _stats.GetAvgFieldLength(query.Field);
+        var factors = _similarity.PrecomputeFactors(_totalDocCount, docFreq, avgDocLength);
         int docBase = reader.DocBase;
+        float boost = query.Boost;
 
         while (postings.MoveNext())
         {
             int docId = postings.DocId;
             if (!reader.IsLive(docId)) continue;
 
-            int tf = postings.Freq;
             int docLength = reader.GetFieldLength(docId, query.Field);
-            float score = _similarity.Score(tf, docLength, avgDocLength, _totalDocCount, docFreq);
-            if (query.Boost != 1.0f) score *= query.Boost;
+            float score = _similarity.ScorePrecomputed(factors.Factor1, factors.Factor2, postings.Freq, docLength);
+            if (boost != 1.0f) score *= boost;
             collector.Collect(docBase + docId, score);
         }
     }
@@ -385,20 +401,37 @@ public sealed partial class IndexSearcher
 
     /// <summary>
     /// Fallback BooleanQuery execution for mixed clause types (nested BooleanQuery, RangeQuery, etc.).
-    /// Uses pooled float[] for scores and bool[] for candidate tracking instead of Dictionary/HashSet.
+    /// Uses [ThreadStatic] scratch arrays (zero allocation steady-state). Falls back to ArrayPool
+    /// when called recursively (nested BooleanQuery sub-queries).
     /// </summary>
     private void ExecuteBooleanFallback(BooleanQuery query, SegmentReader reader,
         Dictionary<(string Field, string Term), int> globalDFs, ref TopNCollector collector)
     {
         int maxDoc = reader.MaxDoc;
-        var scores = ArrayPool<float>.Shared.Rent(maxDoc);
-        var inCandidate = ArrayPool<bool>.Shared.Rent(maxDoc);
+
+        // Use per-thread scratch if not already in use (handles recursive calls via ArrayPool fallback)
+        bool useScratch = !t_fallbackInUse;
+        float[] scores;
+        bool[] inCandidate;
+        int[] candidateIds;
+
+        if (useScratch)
+        {
+            t_fallbackInUse = true;
+            scores = EnsureScratch(ref t_fallbackScores, maxDoc);
+            inCandidate = EnsureScratch(ref t_fallbackInCandidate, maxDoc);
+            candidateIds = EnsureScratch(ref t_fallbackCandidateIds, maxDoc);
+        }
+        else
+        {
+            scores = ArrayPool<float>.Shared.Rent(maxDoc);
+            inCandidate = ArrayPool<bool>.Shared.Rent(maxDoc);
+            candidateIds = ArrayPool<int>.Shared.Rent(maxDoc);
+        }
+
         Array.Clear(scores, 0, maxDoc);
         Array.Clear(inCandidate, 0, maxDoc);
         int candidateCount = 0;
-
-        // Compact candidate list: avoids O(maxDoc) scans during intersection
-        var candidateIds = ArrayPool<int>.Shared.Rent(maxDoc);
         int candidateIdCount = 0;
 
         try
@@ -434,9 +467,21 @@ public sealed partial class IndexSearcher
                         // Early termination: no candidates left to intersect
                         if (candidateCount == 0) break;
 
-                        // Mark which results appear in this clause
-                        var inClause = ArrayPool<bool>.Shared.Rent(maxDoc);
+                        // Use per-thread scratch for inClause too
+                        bool[] inClause;
+                        bool inClauseFromPool;
+                        if (useScratch)
+                        {
+                            inClause = EnsureScratch(ref t_fallbackInClause, maxDoc);
+                            inClauseFromPool = false;
+                        }
+                        else
+                        {
+                            inClause = ArrayPool<bool>.Shared.Rent(maxDoc);
+                            inClauseFromPool = true;
+                        }
                         Array.Clear(inClause, 0, maxDoc);
+
                         foreach (var sr in results)
                         {
                             inClause[sr.DocId] = true;
@@ -462,7 +507,8 @@ public sealed partial class IndexSearcher
                         candidateIdCount = writeIdx;
                         candidateCount = writeIdx;
 
-                        ArrayPool<bool>.Shared.Return(inClause, clearArray: false);
+                        if (inClauseFromPool)
+                            ArrayPool<bool>.Shared.Return(inClause, clearArray: false);
                     }
                 }
 
@@ -528,9 +574,14 @@ public sealed partial class IndexSearcher
         }
         finally
         {
-            ArrayPool<float>.Shared.Return(scores, clearArray: false);
-            ArrayPool<bool>.Shared.Return(inCandidate, clearArray: false);
-            ArrayPool<int>.Shared.Return(candidateIds, clearArray: false);
+            if (useScratch)
+                t_fallbackInUse = false;
+            else
+            {
+                ArrayPool<float>.Shared.Return(scores, clearArray: false);
+                ArrayPool<bool>.Shared.Return(inCandidate, clearArray: false);
+                ArrayPool<int>.Shared.Return(candidateIds, clearArray: false);
+            }
         }
     }
 
@@ -548,13 +599,13 @@ public sealed partial class IndexSearcher
                 if (postings.IsExhausted) break;
                 int docFreq = globalDFs.GetValueOrDefault((tq.Field, tq.Term), postings.DocFreq);
                 float avgDocLength = _stats.GetAvgFieldLength(tq.Field);
+                var factors = _similarity.PrecomputeFactors(_totalDocCount, docFreq, avgDocLength);
                 while (postings.MoveNext())
                 {
                     int docId = postings.DocId;
                     if (!reader.IsLive(docId)) continue;
-                    int tf = postings.Freq;
                     int docLength = reader.GetFieldLength(docId, tq.Field);
-                    float score = _similarity.Score(tf, docLength, avgDocLength, _totalDocCount, docFreq);
+                    float score = _similarity.ScorePrecomputed(factors.Factor1, factors.Factor2, postings.Freq, docLength);
                     results.Add(new ScoreDoc(docId, score));
                 }
                 break;

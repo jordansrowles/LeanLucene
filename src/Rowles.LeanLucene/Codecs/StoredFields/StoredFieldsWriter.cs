@@ -1,10 +1,10 @@
-using System.IO.Compression;
+using System.Buffers;
 
 namespace Rowles.LeanLucene.Codecs.StoredFields;
 
 /// <summary>
-/// Writes stored field data (.fdt) with Brotli block compression and a parallel offset index (.fdx).
-/// Documents are grouped into blocks of 16 and compressed together.
+/// Writes stored field data (.fdt) with configurable compression (LZ4/Zstandard/None)
+/// and a parallel offset index (.fdx). Documents are grouped into blocks of 16.
 /// Each field supports multiple values.
 /// </summary>
 internal static class StoredFieldsWriter
@@ -16,7 +16,7 @@ internal static class StoredFieldsWriter
     /// </summary>
     internal static void Write(string fdtPath, string fdxPath,
         List<int> docStarts, List<int> fieldIds, List<string> values, List<string> fieldNames,
-        int blockSize = DefaultBlockSize, CompressionLevel compressionLevel = CompressionLevel.Fastest)
+        int blockSize = DefaultBlockSize, FieldCompressionPolicy compression = FieldCompressionPolicy.Lz4)
     {
         int docCount = docStarts.Count;
 
@@ -25,15 +25,14 @@ internal static class StoredFieldsWriter
 
         CodecConstants.WriteHeader(fdtWriter, CodecConstants.StoredFieldsVersion);
         fdtWriter.Write(blockSize);
+        fdtWriter.Write((byte)compression);
 
         var blockOffsets = new List<long>();
 
         var rawStream = new MemoryStream(4096);
         var rawWriter = new BinaryWriter(rawStream, System.Text.Encoding.UTF8, leaveOpen: true);
-        var compStream = new MemoryStream(4096);
         Span<byte> encodeBuf = stackalloc byte[512];
 
-        // Temp buffers for per-doc field grouping
         var distinctFieldIds = new List<int>(16);
 
         for (int blockStart = 0; blockStart < docCount; blockStart += blockSize)
@@ -52,7 +51,6 @@ internal static class StoredFieldsWriter
                 int entryStart = docStarts[docIdx];
                 int entryEnd = docIdx + 1 < docCount ? docStarts[docIdx + 1] : fieldIds.Count;
 
-                // Find distinct fields for this doc
                 distinctFieldIds.Clear();
                 for (int e = entryStart; e < entryEnd; e++)
                 {
@@ -71,7 +69,6 @@ internal static class StoredFieldsWriter
                     rawWriter.Write(nameByteCount);
                     rawWriter.Write(nameBuf[..nameByteCount]);
 
-                    // Count values for this field
                     int valueCount = 0;
                     for (int e = entryStart; e < entryEnd; e++)
                         if (fieldIds[e] == fid) valueCount++;
@@ -92,13 +89,9 @@ internal static class StoredFieldsWriter
             rawWriter.Flush();
 
             int rawLength = (int)rawStream.Length;
-            compStream.SetLength(0);
-            compStream.Position = 0;
-            using (var brotli = new BrotliStream(compStream, compressionLevel, leaveOpen: true))
-            {
-                brotli.Write(rawStream.GetBuffer().AsSpan(0, rawLength));
-            }
-            int compLength = (int)compStream.Length;
+            var rawData = rawStream.GetBuffer().AsSpan(0, rawLength);
+
+            var (compData, compLength) = StoredFieldCompression.Compress(rawData, compression);
 
             blockOffsets.Add(fdtStream.Position);
             fdtWriter.Write(blockDocCount);
@@ -106,12 +99,11 @@ internal static class StoredFieldsWriter
             fdtWriter.Write(compLength);
             for (int i = 0; i < blockDocCount; i++)
                 fdtWriter.Write(intraOffsets[i]);
-            fdtWriter.Write(compStream.GetBuffer().AsSpan(0, compLength));
+            fdtWriter.Write(compData.AsSpan(0, compLength));
         }
 
         rawWriter.Dispose();
         rawStream.Dispose();
-        compStream.Dispose();
 
         fdtWriter.Flush();
 
@@ -127,21 +119,19 @@ internal static class StoredFieldsWriter
     }
 
     internal static void Write(string fdtPath, string fdxPath, IReadOnlyList<Dictionary<string, List<string>>> docs,
-        int blockSize = DefaultBlockSize, CompressionLevel compressionLevel = CompressionLevel.Fastest)
+        int blockSize = DefaultBlockSize, FieldCompressionPolicy compression = FieldCompressionPolicy.Lz4)
     {
         using var fdtStream = new FileStream(fdtPath, FileMode.Create, FileAccess.Write, FileShare.None);
         using var fdtWriter = new BinaryWriter(fdtStream, System.Text.Encoding.UTF8, leaveOpen: false);
 
-        // Header: codec header + block size
         CodecConstants.WriteHeader(fdtWriter, CodecConstants.StoredFieldsVersion);
         fdtWriter.Write(blockSize);
+        fdtWriter.Write((byte)compression);
 
         var blockOffsets = new List<long>();
 
-        // Reusable buffers across blocks
         var rawStream = new MemoryStream(4096);
         var rawWriter = new BinaryWriter(rawStream, System.Text.Encoding.UTF8, leaveOpen: true);
-        var compStream = new MemoryStream(4096);
         Span<byte> encodeBuf = stackalloc byte[512];
 
         for (int blockStart = 0; blockStart < docs.Count; blockStart += blockSize)
@@ -149,7 +139,6 @@ internal static class StoredFieldsWriter
             int blockEnd = Math.Min(blockStart + blockSize, docs.Count);
             int blockCount = blockEnd - blockStart;
 
-            // Reset reusable streams
             rawStream.SetLength(0);
             rawStream.Position = 0;
 
@@ -167,7 +156,6 @@ internal static class StoredFieldsWriter
                     rawWriter.Write(nameByteCount);
                     rawWriter.Write(nameBuf[..nameByteCount]);
 
-                    // Write value count, then each value
                     rawWriter.Write(values.Count);
                     foreach (var value in values)
                     {
@@ -182,33 +170,24 @@ internal static class StoredFieldsWriter
             rawWriter.Flush();
 
             int rawLength = (int)rawStream.Length;
+            var rawData = rawStream.GetBuffer().AsSpan(0, rawLength);
 
-            // Compress with Brotli (quality 4 = fast), reuse compStream
-            compStream.SetLength(0);
-            compStream.Position = 0;
-            using (var brotli = new BrotliStream(compStream, compressionLevel, leaveOpen: true))
-            {
-                brotli.Write(rawStream.GetBuffer().AsSpan(0, rawLength));
-            }
-            int compLength = (int)compStream.Length;
+            var (compData, compLength) = StoredFieldCompression.Compress(rawData, compression);
 
-            // Write block: [int: docCount][int: rawLength][int: compLength][int[]: intraOffsets][byte[]: compData]
             blockOffsets.Add(fdtStream.Position);
             fdtWriter.Write(blockCount);
             fdtWriter.Write(rawLength);
             fdtWriter.Write(compLength);
             for (int i = 0; i < blockCount; i++)
                 fdtWriter.Write(intraOffsets[i]);
-            fdtWriter.Write(compStream.GetBuffer().AsSpan(0, compLength));
+            fdtWriter.Write(compData.AsSpan(0, compLength));
         }
 
         rawWriter.Dispose();
         rawStream.Dispose();
-        compStream.Dispose();
 
         fdtWriter.Flush();
 
-        // Write .fdx: [header][int: blockSize][int: docCount][int: blockCount][long[]: blockOffsets]
         using var fdxStream = new FileStream(fdxPath, FileMode.Create, FileAccess.Write, FileShare.None);
         using var fdxWriter = new BinaryWriter(fdxStream, System.Text.Encoding.UTF8, leaveOpen: false);
 

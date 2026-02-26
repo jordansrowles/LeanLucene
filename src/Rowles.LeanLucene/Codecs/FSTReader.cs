@@ -180,47 +180,143 @@ internal sealed class FSTReader
         return results;
     }
 
-    /// <summary>Returns all terms within Levenshtein distance for a field, with edit distances.</summary>
+    /// <summary>Returns all terms within Levenshtein distance for a field, with edit distances.
+    /// Uses prefix-sharing DP on sorted terms: consecutive terms sharing a prefix reuse
+    /// the Levenshtein row up to the longest common prefix. Dead prefixes (row min > maxEdits)
+    /// skip ahead via binary search.</summary>
     public List<(string Term, long Offset, int Distance)> GetFuzzyMatches(string fieldPrefix, ReadOnlySpan<char> queryTerm, int maxEdits)
     {
         int prefixByteCount = Encoding.UTF8.GetByteCount(fieldPrefix);
         Span<byte> prefixUtf8 = prefixByteCount <= 256 ? stackalloc byte[prefixByteCount] : new byte[prefixByteCount];
         Encoding.UTF8.GetBytes(fieldPrefix, prefixUtf8);
 
-        // Encode query term to UTF-8 for byte-level Levenshtein (avoids DecodeKey allocation)
         int queryByteCount = Encoding.UTF8.GetByteCount(queryTerm);
         Span<byte> queryUtf8 = queryByteCount <= 256 ? stackalloc byte[queryByteCount] : new byte[queryByteCount];
         Encoding.UTF8.GetBytes(queryTerm, queryUtf8);
         bool queryIsAscii = queryByteCount == queryTerm.Length;
 
-        var results = new List<(string, long, int)>();
         int start = LowerBound(prefixUtf8);
+        if (start >= _termCount) return [];
+
+        // Non-ASCII queries fall back to the original per-term bounded Levenshtein
+        if (!queryIsAscii)
+            return GetFuzzyMatchesFallback(fieldPrefix, queryTerm, maxEdits, prefixUtf8, start);
+
+        var results = new List<(string, long, int)>();
+        int qLen = queryByteCount; // ASCII: byte count == char count
+        int rowSize = qLen + 1;
+
+        // dpStack[d] holds the DP row after processing d bytes of the bare term.
+        // Consecutive sorted terms share a prefix → reuse rows up to the LCP.
+        int stackCapacity = qLen + maxEdits + 4;
+        var dpStack = new int[stackCapacity][];
+        for (int r = 0; r < stackCapacity; r++)
+            dpStack[r] = new int[rowSize];
+        // Row 0 (empty prefix): row[j] = j
+        for (int j = 0; j <= qLen; j++)
+            dpStack[0][j] = j;
+
+        int prevBareStart = -1;
+        int prevBareLen = 0;
+
+        for (int idx = start; idx < _termCount; idx++)
+        {
+            var key = GetKeySpan(idx);
+            if (!key.StartsWith(prefixUtf8))
+                break;
+
+            var bare = key[prefixByteCount..];
+            int bareLen = bare.Length;
+
+            // Length filter: edit distance is at least |len difference|
+            if (Math.Abs(bareLen - qLen) > maxEdits)
+            {
+                // Still update prevBare so LCP works for the next term
+                prevBareStart = _keyStarts[idx] + prefixByteCount;
+                prevBareLen = bareLen;
+                continue;
+            }
+
+            // Find LCP with previous bare term to reuse DP rows
+            int lcp = 0;
+            if (prevBareStart >= 0)
+            {
+                var prevBare = _keyData.AsSpan(prevBareStart, prevBareLen);
+                int minLen = Math.Min(prevBareLen, bareLen);
+                while (lcp < minLen && prevBare[lcp] == bare[lcp])
+                    lcp++;
+            }
+
+            // Grow dpStack if bare term is longer than expected
+            if (bareLen + 1 > stackCapacity)
+            {
+                int newCap = bareLen + 4;
+                var newStack = new int[newCap][];
+                Array.Copy(dpStack, newStack, stackCapacity);
+                for (int r = stackCapacity; r < newCap; r++)
+                    newStack[r] = new int[rowSize];
+                dpStack = newStack;
+                stackCapacity = newCap;
+            }
+
+            // Advance DP from LCP depth to full bare length
+            bool dead = false;
+            for (int d = lcp; d < bareLen; d++)
+            {
+                var prevRow = dpStack[d];
+                var currRow = dpStack[d + 1];
+                currRow[0] = d + 1;
+                int rowMin = d + 1;
+                byte b = bare[d];
+
+                for (int j = 1; j <= qLen; j++)
+                {
+                    int cost = queryUtf8[j - 1] == b ? 0 : 1;
+                    int val = prevRow[j - 1] + cost;
+                    int del = prevRow[j] + 1;
+                    if (del < val) val = del;
+                    int ins = currRow[j - 1] + 1;
+                    if (ins < val) val = ins;
+                    currRow[j] = val;
+                    if (val < rowMin) rowMin = val;
+                }
+
+                if (rowMin > maxEdits)
+                {
+                    dead = true;
+                    break;
+                }
+            }
+
+            // Always update prevBare for LCP sharing with the next term,
+            // regardless of whether this term was dead or matched.
+            prevBareStart = _keyStarts[idx] + prefixByteCount;
+            prevBareLen = bareLen;
+
+            if (!dead)
+            {
+                int finalDist = dpStack[bareLen][qLen];
+                if (finalDist <= maxEdits)
+                    results.Add((DecodeKey(idx), _offsets[idx], finalDist));
+            }
+        }
+
+        return results;
+    }
+
+    /// <summary>Original O(T) linear scan fallback for non-ASCII queries.</summary>
+    private List<(string Term, long Offset, int Distance)> GetFuzzyMatchesFallback(
+        string fieldPrefix, ReadOnlySpan<char> queryTerm, int maxEdits,
+        ReadOnlySpan<byte> prefixUtf8, int start)
+    {
         int queryTermLen = queryTerm.Length;
+        var results = new List<(string, long, int)>();
 
         for (int i = start; i < _termCount; i++)
         {
             var key = GetKeySpan(i);
             if (!key.StartsWith(prefixUtf8))
                 break;
-
-            int bareByteLen = key.Length - prefixByteCount;
-            if (bareByteLen - maxEdits > queryTermLen || queryTermLen - maxEdits > bareByteLen)
-                continue;
-
-            // Try ASCII byte-level Levenshtein to avoid string allocation
-            if (queryIsAscii)
-            {
-                var bareBytes = key[prefixByteCount..];
-                int dist = LevenshteinDistance.ComputeAsciiBounded(queryUtf8, bareBytes, maxEdits);
-                if (dist >= 0)
-                {
-                    // ASCII path succeeded
-                    if (dist <= maxEdits)
-                        results.Add((DecodeKey(i), _offsets[i], dist));
-                    continue;
-                }
-                // Non-ASCII term — fall through to char-based path
-            }
 
             var fullTerm = DecodeKey(i);
             var bareTerm = fullTerm.AsSpan(fieldPrefix.Length);
@@ -354,6 +450,47 @@ internal sealed class FSTReader
 
     private static bool IsRegexMeta(char c) =>
         c is '.' or '*' or '+' or '?' or '[' or '(' or '{' or '|' or '\\' or '^' or '$';
+
+    /// <summary>
+    /// Intersects the term dictionary with an automaton, returning matching terms.
+    /// Operates on bare term bytes (after fieldPrefix). Uses CanMatch for pruning.
+    /// </summary>
+    public List<(string Term, long Offset)> IntersectAutomaton(string fieldPrefix, IAutomaton automaton)
+    {
+        int prefixByteCount = Encoding.UTF8.GetByteCount(fieldPrefix);
+        Span<byte> prefixUtf8 = prefixByteCount <= 256 ? stackalloc byte[prefixByteCount] : new byte[prefixByteCount];
+        Encoding.UTF8.GetBytes(fieldPrefix, prefixUtf8);
+
+        var results = new List<(string, long)>();
+        int start = LowerBound(prefixUtf8);
+
+        for (int i = start; i < _termCount; i++)
+        {
+            var key = GetKeySpan(i);
+            if (!key.StartsWith(prefixUtf8))
+                break;
+
+            // Run bare term bytes through the automaton
+            var bareBytes = key[prefixByteCount..];
+            int state = automaton.Start;
+            bool dead = false;
+
+            for (int j = 0; j < bareBytes.Length; j++)
+            {
+                state = automaton.Step(state, bareBytes[j]);
+                if (!automaton.CanMatch(state))
+                {
+                    dead = true;
+                    break;
+                }
+            }
+
+            if (!dead && automaton.IsAccept(state))
+                results.Add((DecodeKey(i), _offsets[i]));
+        }
+
+        return results;
+    }
 
     /// <summary>FNV-1a hash of a byte span.</summary>
     private static int HashBytes(ReadOnlySpan<byte> data)

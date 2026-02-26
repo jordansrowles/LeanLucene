@@ -55,79 +55,45 @@ public sealed partial class IndexWriter
         _sortedTermsBuffer.Clear();
         _sortedTermsBuffer.AddRange(_postings.Keys);
         _sortedTermsBuffer.Sort(StringComparer.Ordinal);
-        var postingsOffsets = new Dictionary<string, long>();
+        var postingsOffsets = new Dictionary<string, long>(_sortedTermsBuffer.Count);
 
-        // Write all postings to a single .pos file using pooled IndexOutput
-        int skipInterval = _config.PostingsSkipInterval;
+        // Write all postings to a single .pos file using v3 block-packed format.
+        // Two-pass approach: write all data forward-only (no seeks), then back-patch
+        // per-term headers in a single sequential pass to avoid per-term buffer flushes.
+        // Collect per-term header positions and metadata for back-patching
+        var headerPatches = new List<(long HeaderPos, int DocFreq, long SkipOffset)>(_sortedTermsBuffer.Count);
+
         using (var posOutput = new IndexOutput(basePath + ".pos"))
         {
             // Write header at the start of the file
             CodecConstants.WriteHeader(posOutput, CodecConstants.PostingsVersion);
-            
+
+            using var blockWriter = new BlockPostingsWriter(posOutput);
+
             foreach (var qt in _sortedTermsBuffer)
             {
                 var acc = _postings[qt];
                 var ids = acc.DocIds;
 
-                postingsOffsets[qt] = posOutput.Position;
-                posOutput.WriteInt32(ids.Length);
-
-                // Write skip pointer entries (every skipInterval docs)
-                int skipCount = ids.Length >= skipInterval ? (ids.Length - 1) / skipInterval : 0;
-                posOutput.WriteInt32(skipCount);
-
-                if (skipCount > 0)
-                {
-                    // Reserve space for skip entries, fill in after writing deltas
-                    long skipTablePos = posOutput.Position;
-                    for (int s = 0; s < skipCount; s++)
-                    {
-                        posOutput.WriteInt32(0); // placeholder docId
-                        posOutput.WriteInt32(0); // placeholder byte offset
-                    }
-                    long deltaStartPos = posOutput.Position;
-
-                    int prev = 0;
-                    for (int i = 0; i < ids.Length; i++)
-                    {
-                        if (i > 0 && i % skipInterval == 0)
-                        {
-                            int skipIdx = (i / skipInterval) - 1;
-                            long currentPos = posOutput.Position;
-                            posOutput.Seek(skipTablePos + skipIdx * 8);
-                            posOutput.WriteInt32(ids[i - 1]); // docId at boundary
-                            posOutput.WriteInt32((int)(currentPos - deltaStartPos)); // byte offset
-                            posOutput.Seek(currentPos);
-                        }
-                        posOutput.WriteVarInt(ids[i] - prev);
-                        prev = ids[i];
-                    }
-                }
-                else
-                {
-                    // Small posting list — write deltas directly
-                    int prev = 0;
-                    foreach (var id in ids)
-                    {
-                        posOutput.WriteVarInt(id - prev);
-                        prev = id;
-                    }
-                }
-
                 bool hasFreqs = acc.HasFreqs;
-                posOutput.WriteBoolean(hasFreqs);
-                if (hasFreqs)
-                {
-                    for (int i = 0; i < ids.Length; i++)
-                        posOutput.WriteVarInt(acc.GetFreq(i));
-                }
-
                 bool hasPositions = acc.HasPositions;
-                posOutput.WriteBoolean(hasPositions);
-
                 bool hasPayloads = acc.HasPayloads;
+
+                // Reserve space for per-term header (written with placeholder values)
+                long headerPos = posOutput.Position;
+                posOutput.WriteInt32(0);          // placeholder docFreq
+                posOutput.WriteInt64(0L);         // placeholder skipOffset
+                posOutput.WriteBoolean(hasFreqs);
+                posOutput.WriteBoolean(hasPositions);
                 posOutput.WriteBoolean(hasPayloads);
 
+                // Write block-packed doc IDs + frequencies
+                blockWriter.StartTerm();
+                for (int i = 0; i < ids.Length; i++)
+                    blockWriter.AddPosting(ids[i], hasFreqs ? acc.GetFreq(i) : 1);
+                var meta = blockWriter.FinishTerm();
+
+                // Write positions in VarInt format (same as v2) after skip data
                 if (hasPositions)
                 {
                     for (int i = 0; i < ids.Length; i++)
@@ -156,6 +122,24 @@ public sealed partial class IndexWriter
                         }
                     }
                 }
+
+                headerPatches.Add((headerPos, meta.DocFreq, meta.SkipOffset));
+                postingsOffsets[qt] = headerPos;
+            }
+        }
+
+        // Back-patch all per-term headers using a raw file stream to avoid
+        // the per-seek buffer flush overhead of IndexOutput.Seek().
+        using (var patchStream = new FileStream(basePath + ".pos", FileMode.Open, FileAccess.ReadWrite, FileShare.None))
+        {
+            Span<byte> patch = stackalloc byte[12]; // int32 docFreq + int64 skipOffset
+            for (int i = 0; i < headerPatches.Count; i++)
+            {
+                var (hpos, docFreq, skipOffset) = headerPatches[i];
+                patchStream.Seek(hpos, SeekOrigin.Begin);
+                System.Buffers.Binary.BinaryPrimitives.WriteInt32LittleEndian(patch, docFreq);
+                System.Buffers.Binary.BinaryPrimitives.WriteInt64LittleEndian(patch[4..], skipOffset);
+                patchStream.Write(patch);
             }
         }
 
@@ -196,7 +180,7 @@ public sealed partial class IndexWriter
         // Write stored fields (.fdt + .fdx) from flat buffer
         StoredFieldsWriter.Write(basePath + ".fdt", basePath + ".fdx",
             _sfDocStarts, _sfFieldIds, _sfValues, _sfFieldIdToName,
-            _config.StoredFieldBlockSize, _config.StoredFieldCompressionLevel);
+            _config.StoredFieldBlockSize, _config.CompressionPolicy);
 
         // Write numeric field index (.num)
         WriteNumericIndex(basePath + ".num");

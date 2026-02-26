@@ -4,7 +4,7 @@ using System.IO.Compression;
 namespace Rowles.LeanLucene.Codecs.StoredFields;
 
 /// <summary>
-/// Reads stored fields (.fdt) with Brotli block compression and multi-valued field support.
+/// Reads stored fields (.fdt) with LZ4/Zstandard/Brotli block compression and multi-valued field support.
 /// Paired with <see cref="StoredFieldsWriter"/>.
 /// </summary>
 internal sealed class StoredFieldsReader : IDisposable
@@ -13,71 +13,96 @@ internal sealed class StoredFieldsReader : IDisposable
     private readonly BinaryReader _reader;
     private readonly int _blockSize;
     private readonly long[] _blockOffsets;
+    private readonly FieldCompressionPolicy _compression;
 
     // Decompressed block cache (last used block)
     private int _cachedBlockIndex = -1;
     private byte[]? _cachedBlockData;
     private int[]? _cachedIntraOffsets;
 
-    // Reusable MemoryStream + BinaryReader for ReadDocument (avoid per-call allocation)
+    // Reusable MemoryStream + BinaryReader for ReadDocument
     private MemoryStream? _docStream;
     private BinaryReader? _docReader;
 
     private bool _disposed;
 
-    private StoredFieldsReader(FileStream fs, BinaryReader reader, int blockSize, long[] blockOffsets)
+    private StoredFieldsReader(FileStream fs, BinaryReader reader, int blockSize, long[] blockOffsets, FieldCompressionPolicy compression)
     {
         _fs = fs;
         _reader = reader;
         _blockSize = blockSize;
         _blockOffsets = blockOffsets;
+        _compression = compression;
     }
 
     public static StoredFieldsReader Open(string fdtPath, string fdxPath)
     {
+        // Read .fdx to get block offsets
         using var fdxStream = new FileStream(fdxPath, FileMode.Open, FileAccess.Read, FileShare.Read);
         using var fdxReader = new BinaryReader(fdxStream, System.Text.Encoding.UTF8, leaveOpen: false);
 
-        // Check if this is the new format (magic number) or old format (version byte)
         int firstInt = fdxReader.ReadInt32();
         int blockSize;
         int docCount;
         int blockCount;
-        
+        byte version;
+
         if (firstInt == CodecConstants.Magic)
         {
-            // New format: validate version
-            byte version = fdxReader.ReadByte();
+            version = fdxReader.ReadByte();
             if (version > CodecConstants.StoredFieldsVersion)
                 throw new InvalidDataException(
                     $"Unsupported stored fields format version {version}. " +
                     $"This build supports up to version {CodecConstants.StoredFieldsVersion}. " +
                     "Please upgrade LeanLucene.");
-            
+
             blockSize = fdxReader.ReadInt32();
             docCount = fdxReader.ReadInt32();
             blockCount = fdxReader.ReadInt32();
         }
         else
         {
-            // Old format: first int is version byte (3) in the low byte
-            // The old format was: [byte version][int blockSize][int docCount][int blockCount]
-            // But we read it as int, so we need to reconstruct
             fdxStream.Seek(0, SeekOrigin.Begin);
-            byte oldVersion = fdxReader.ReadByte();
+            version = fdxReader.ReadByte();
             blockSize = fdxReader.ReadInt32();
             docCount = fdxReader.ReadInt32();
             blockCount = fdxReader.ReadInt32();
         }
-        
+
         var blockOffsets = new long[blockCount];
         for (int i = 0; i < blockCount; i++)
             blockOffsets[i] = fdxReader.ReadInt64();
 
+        // Open .fdt and read its header to get compression type
         var fs = new FileStream(fdtPath, FileMode.Open, FileAccess.Read, FileShare.Read);
         var reader = new BinaryReader(fs, System.Text.Encoding.UTF8, leaveOpen: true);
-        
-        return new StoredFieldsReader(fs, reader, blockSize, blockOffsets);
+
+        FieldCompressionPolicy compression;
+        int fdtFirst = reader.ReadInt32();
+        if (fdtFirst == CodecConstants.Magic)
+        {
+            byte fdtVersion = reader.ReadByte();
+            int fdtBlockSize = reader.ReadInt32();
+            if (fdtVersion >= 5)
+            {
+                compression = (FieldCompressionPolicy)reader.ReadByte();
+            }
+            else
+            {
+                // v4: Brotli
+                compression = FieldCompressionPolicy.Brotli;
+            }
+        }
+        else
+        {
+            // Pre-magic: Brotli
+            fs.Seek(0, SeekOrigin.Begin);
+            reader.ReadByte(); // old version byte
+            reader.ReadInt32(); // blockSize
+            compression = FieldCompressionPolicy.Brotli;
+        }
+
+        return new StoredFieldsReader(fs, reader, blockSize, blockOffsets, compression);
     }
 
     public Dictionary<string, List<string>> ReadDocument(int docId)
@@ -88,7 +113,6 @@ internal sealed class StoredFieldsReader : IDisposable
         if (blockIndex != _cachedBlockIndex)
         {
             DecompressBlock(blockIndex);
-            // Invalidate reusable stream since block data changed
             _docReader?.Dispose();
             _docStream?.Dispose();
             _docStream = new MemoryStream(_cachedBlockData!, 0, _cachedBlockData!.Length, writable: false, publiclyVisible: true);
@@ -142,16 +166,8 @@ internal sealed class StoredFieldsReader : IDisposable
         {
             _reader.BaseStream.ReadExactly(compData.AsSpan(0, compLength));
 
-            using var compStream = new MemoryStream(compData, 0, compLength);
-            using var brotli = new BrotliStream(compStream, CompressionMode.Decompress);
-            var rawData = new byte[rawLength];
-            int totalRead = 0;
-            while (totalRead < rawLength)
-            {
-                int read = brotli.Read(rawData, totalRead, rawLength - totalRead);
-                if (read == 0) break;
-                totalRead += read;
-            }
+            var rawData = StoredFieldCompression.Decompress(
+                compData.AsSpan(0, compLength), rawLength, _compression);
 
             _cachedBlockIndex = blockIndex;
             _cachedBlockData = rawData;

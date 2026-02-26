@@ -17,6 +17,7 @@ namespace Rowles.LeanLucene.Example.Benchmarks;
 [HtmlExporter]
 [JsonExporterAttribute.Full]
 [MarkdownExporterAttribute.GitHub]
+[RPlotExporter]
 [KeepBenchmarkFiles]
 [SimpleJob]
 public class DiagnosticsBenchmarks

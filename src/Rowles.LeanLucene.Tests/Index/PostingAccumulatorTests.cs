@@ -269,4 +269,55 @@ public sealed class PostingAccumulatorTests
 
         Assert.Null(acc.GetPayload(0, 0));
     }
+
+    [Fact]
+    public void EstimatedBytes_AfterAdd_ReflectsBufferSize()
+    {
+        var acc = new PostingAccumulator();
+
+        acc.Add(0, 1);
+
+        // After a single Add the rented buffers are live; estimated bytes must exceed
+        // the 64-byte object overhead and be a reasonable size for the initial buffers.
+        // Initial rent: 4 × int[4] (docIds, freqs, posStarts, posLengths) + int[8] (posBuf)
+        // ArrayPool may return arrays >= requested, so we check a lower bound.
+        long bytes = acc.EstimatedBytes;
+        Assert.True(bytes > 64, $"Expected > 64 but was {bytes}");
+
+        // 5 arrays × 4 elements × 4 bytes = 80 bytes minimum for doc arrays alone,
+        // plus 8 × 4 = 32 for posBuf, plus 64 overhead = 176 minimum.
+        Assert.True(bytes >= 176, $"Expected >= 176 but was {bytes}");
+    }
+
+    [Fact]
+    public void EstimatedBytes_AfterResize_Increases()
+    {
+        var acc = new PostingAccumulator();
+        acc.Add(0, 1);
+        long bytesBefore = acc.EstimatedBytes;
+
+        // Add enough distinct docs to force Grow() past the initial ArrayPool bucket.
+        // ArrayPool.Rent(4) typically returns a 16-element array, so we need to
+        // exceed 16 docs to trigger a rental from a larger bucket.
+        for (int i = 1; i <= 20; i++)
+            acc.Add(i, i * 10);
+
+        long bytesAfter = acc.EstimatedBytes;
+        Assert.True(bytesAfter > bytesBefore,
+            $"Expected EstimatedBytes to increase after resize: before={bytesBefore}, after={bytesAfter}");
+    }
+
+    [Fact]
+    public void EstimatedBytes_AfterReturnBuffers_IsMinimal()
+    {
+        var acc = new PostingAccumulator();
+        for (int i = 0; i < 10; i++)
+            acc.Add(i, i);
+
+        acc.ReturnBuffers();
+
+        // After returning all buffers, only the 64-byte object overhead remains.
+        Assert.True(acc.EstimatedBytes <= 64,
+            $"Expected <= 64 after ReturnBuffers but was {acc.EstimatedBytes}");
+    }
 }

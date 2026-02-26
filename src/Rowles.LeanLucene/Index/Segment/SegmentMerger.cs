@@ -216,91 +216,57 @@ public sealed class SegmentMerger
 
         var postingsOffsets = new Dictionary<string, long>();
 
-        // Write .pos
-        int skipInterval = _skipInterval;
-        using (var posStream = new BinaryWriter(File.Create(basePath + ".pos")))
+        // Write .pos using v3 block-packed format
+        using (var posOutput = new Store.IndexOutput(basePath + ".pos"))
         {
-            // Write header at the start of the file
-            CodecConstants.WriteHeader(posStream, CodecConstants.PostingsVersion);
-            
+            CodecConstants.WriteHeader(posOutput, CodecConstants.PostingsVersion);
+
+            using var blockWriter = new BlockPostingsWriter(posOutput);
+
             foreach (var qt in sortedTerms)
             {
-                postingsOffsets[qt] = posStream.BaseStream.Position;
                 var ids = postingsData[qt];
-                posStream.Write(ids.Length);
+                bool hasFreqsFlag = allFreqs.ContainsKey(qt);
+                bool hasPositionsFlag = allPositions.TryGetValue(qt, out var posMap) && posMap.Count > 0;
 
-                int skipCount = ids.Length >= skipInterval ? (ids.Length - 1) / skipInterval : 0;
-                posStream.Write(skipCount);
+                // Per-term header
+                long headerPos = posOutput.Position;
+                posOutput.WriteInt32(0);          // placeholder docFreq
+                posOutput.WriteInt64(0L);         // placeholder skipOffset
+                posOutput.WriteBoolean(hasFreqsFlag);
+                posOutput.WriteBoolean(hasPositionsFlag);
+                posOutput.WriteBoolean(false);    // hasPayloads (not preserved through merge)
 
-                if (skipCount > 0)
+                blockWriter.StartTerm();
+                var freqMap = hasFreqsFlag ? allFreqs[qt] : null;
+                foreach (var id in ids)
+                    blockWriter.AddPosting(id, freqMap?.GetValueOrDefault(id, 1) ?? 1);
+                var meta = blockWriter.FinishTerm();
+
+                // Write positions (VarInt format)
+                if (hasPositionsFlag)
                 {
-                    long skipTablePos = posStream.BaseStream.Position;
-                    for (int s = 0; s < skipCount; s++)
-                    {
-                        posStream.Write(0);
-                        posStream.Write(0);
-                    }
-                    long deltaStartPos = posStream.BaseStream.Position;
-
-                    int prev = 0;
-                    for (int i = 0; i < ids.Length; i++)
-                    {
-                        if (i > 0 && i % skipInterval == 0)
-                        {
-                            int skipIdx = (i / skipInterval) - 1;
-                            long currentPos = posStream.BaseStream.Position;
-                            posStream.BaseStream.Seek(skipTablePos + skipIdx * 8, SeekOrigin.Begin);
-                            posStream.Write(ids[i - 1]);
-                            posStream.Write((int)(currentPos - deltaStartPos));
-                            posStream.BaseStream.Seek(currentPos, SeekOrigin.Begin);
-                        }
-                        PostingsWriter.WriteVarInt(posStream, ids[i] - prev);
-                        prev = ids[i];
-                    }
-                }
-                else
-                {
-                    int prev = 0;
                     foreach (var id in ids)
                     {
-                        PostingsWriter.WriteVarInt(posStream, id - prev);
-                        prev = id;
-                    }
-                }
-
-                if (allFreqs.TryGetValue(qt, out var freqMap))
-                {
-                    posStream.Write(true);
-                    foreach (var id in ids)
-                        PostingsWriter.WriteVarInt(posStream, freqMap.GetValueOrDefault(id, 1));
-                }
-                else
-                {
-                    posStream.Write(false);
-                }
-
-                // Preserve positional data through merges (v2 format: hasPositions + hasPayloads)
-                if (allPositions.TryGetValue(qt, out var posMap) && posMap.Count > 0)
-                {
-                    posStream.Write(true); // hasPositions
-                    posStream.Write(false); // hasPayloads (not preserved through merge yet)
-                    foreach (var id in ids)
-                    {
-                        var positions = posMap.GetValueOrDefault(id, []);
-                        PostingsWriter.WriteVarInt(posStream, positions.Length);
+                        var positions = posMap!.GetValueOrDefault(id, []);
+                        posOutput.WriteVarInt(positions.Length);
                         int prevPos = 0;
                         foreach (var p in positions)
                         {
-                            PostingsWriter.WriteVarInt(posStream, p - prevPos);
+                            posOutput.WriteVarInt(p - prevPos);
                             prevPos = p;
                         }
                     }
                 }
-                else
-                {
-                    posStream.Write(false); // hasPositions
-                    posStream.Write(false); // hasPayloads
-                }
+
+                // Fill in header
+                long endPos = posOutput.Position;
+                posOutput.Seek(headerPos);
+                posOutput.WriteInt32(meta.DocFreq);
+                posOutput.WriteInt64(meta.SkipOffset);
+                posOutput.Seek(endPos);
+
+                postingsOffsets[qt] = headerPos;
             }
         }
 
@@ -376,15 +342,55 @@ public sealed class SegmentMerger
         {
             posInput.Seek(postingsOffset);
 
-            int count = posInput.ReadInt32();
-            int postingSkipCount = posInput.ReadInt32();
-            if (postingSkipCount > 0)
-                posInput.Seek(posInput.Position + postingSkipCount * 8L);
+            int count;
+            int[]? oldIds;
+            int[]? freqs;
+            bool hasPositions;
+            bool hasPayloads;
 
-            var oldIds = ArrayPool<int>.Shared.Rent(count);
-            var freqs = ArrayPool<int>.Shared.Rent(count);
-            try
+            if (postingsVersion >= 3)
             {
+                // V3 block-packed format: per-term header then blocks
+                count = posInput.ReadInt32();
+                long skipOffset = posInput.ReadInt64();
+                bool hasFreqsFlag = posInput.ReadBoolean();
+                hasPositions = posInput.ReadBoolean();
+                hasPayloads = posInput.ReadBoolean();
+
+                long docStartOffset = posInput.Position;
+
+                // Decode doc IDs + freqs via BlockPostingsEnum
+                var blockEnum = BlockPostingsEnum.Create(posInput, docStartOffset, skipOffset, count);
+                oldIds = ArrayPool<int>.Shared.Rent(count);
+                freqs = ArrayPool<int>.Shared.Rent(count);
+
+                int idx = 0;
+                while (blockEnum.NextDoc() != BlockPostingsEnum.NoMoreDocs)
+                {
+                    oldIds[idx] = blockEnum.DocId;
+                    freqs[idx] = hasFreqsFlag ? blockEnum.Freq : 1;
+                    idx++;
+                }
+
+                // Seek past skip data to position section
+                if (hasPositions)
+                {
+                    posInput.Seek(skipOffset);
+                    int skipCount = posInput.ReadInt32();
+                    posInput.Seek(posInput.Position + (long)skipCount * 12);
+                }
+            }
+            else
+            {
+                // V1/V2 VarInt format
+                count = posInput.ReadInt32();
+                int postingSkipCount = posInput.ReadInt32();
+                if (postingSkipCount > 0)
+                    posInput.Seek(posInput.Position + postingSkipCount * 8L);
+
+                oldIds = ArrayPool<int>.Shared.Rent(count);
+                freqs = ArrayPool<int>.Shared.Rent(count);
+
                 int prev = 0;
                 for (int j = 0; j < count; j++)
                 {
@@ -392,8 +398,8 @@ public sealed class SegmentMerger
                     oldIds[j] = prev;
                 }
 
-                bool hasFreqs = posInput.ReadBoolean();
-                if (hasFreqs)
+                bool hasFreqsFlag = posInput.ReadBoolean();
+                if (hasFreqsFlag)
                 {
                     for (int j = 0; j < count; j++)
                         freqs[j] = posInput.ReadVarInt();
@@ -403,24 +409,20 @@ public sealed class SegmentMerger
                     Array.Fill(freqs, 1, 0, count);
                 }
 
-                bool hasPositions = posInput.ReadBoolean();
+                hasPositions = posInput.ReadBoolean();
+                hasPayloads = postingsVersion >= 2 && posInput.ReadBoolean();
+            }
 
-                bool hasPayloads = false;
-                if (postingsVersion >= 2)
-                    hasPayloads = posInput.ReadBoolean();
-
+            try
+            {
                 int[][]? positions = null;
-                byte[]?[][]? payloads = null;
                 if (hasPositions)
                 {
                     positions = new int[count][];
-                    if (hasPayloads) payloads = new byte[]?[count][];
-
                     for (int j = 0; j < count; j++)
                     {
                         int posCount = posInput.ReadVarInt();
                         positions[j] = new int[posCount];
-                        if (hasPayloads) payloads![j] = new byte[]?[posCount];
                         int prevPos = 0;
                         for (int k = 0; k < posCount; k++)
                         {
@@ -430,7 +432,7 @@ public sealed class SegmentMerger
                             {
                                 int payloadLen = posInput.ReadVarInt();
                                 if (payloadLen > 0)
-                                    payloads![j][k] = posInput.ReadBytes(payloadLen);
+                                    posInput.Seek(posInput.Position + payloadLen);
                             }
                         }
                     }

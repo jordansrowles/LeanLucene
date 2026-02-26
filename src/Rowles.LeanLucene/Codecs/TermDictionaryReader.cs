@@ -1,3 +1,4 @@
+using System.Collections.Frozen;
 using System.Text.RegularExpressions;
 using Rowles.LeanLucene.Search;
 using Rowles.LeanLucene.Store;
@@ -19,7 +20,7 @@ internal sealed class TermDictionaryReader : IDisposable
     private readonly string[]? _allTerms;
     private readonly long[]? _allOffsets;
     // v1 hash layer for O(1) exact term lookup
-    private readonly Dictionary<string, int>? _termHashV1;
+    private readonly FrozenDictionary<string, int>? _termHashV1;
 
     private bool _disposed;
 
@@ -33,9 +34,10 @@ internal sealed class TermDictionaryReader : IDisposable
         _allTerms = allTerms;
         _allOffsets = allOffsets;
         // Build hash layer for O(1) exact lookups on v1 format
-        _termHashV1 = new Dictionary<string, int>(allTerms.Length, StringComparer.Ordinal);
+        var tempHash = new Dictionary<string, int>(allTerms.Length, StringComparer.Ordinal);
         for (int i = 0; i < allTerms.Length; i++)
-            _termHashV1[allTerms[i]] = i;
+            tempHash[allTerms[i]] = i;
+        _termHashV1 = tempHash.ToFrozenDictionary(StringComparer.Ordinal);
     }
 
     public static TermDictionaryReader Open(string filePath)
@@ -292,6 +294,49 @@ internal sealed class TermDictionaryReader : IDisposable
     }
 
     // ── Helpers ─────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Intersects the term dictionary with an automaton, returning matching terms.
+    /// Delegates to FSTReader on v2; falls back to brute-force scan on v1.
+    /// </summary>
+    public List<(string Term, long Offset)> IntersectAutomaton(string fieldPrefix, IAutomaton automaton)
+    {
+        if (_fstReader is not null)
+            return _fstReader.IntersectAutomaton(fieldPrefix, automaton);
+        return IntersectAutomatonV1(fieldPrefix, automaton);
+    }
+
+    private List<(string Term, long Offset)> IntersectAutomatonV1(string fieldPrefix, IAutomaton automaton)
+    {
+        var results = new List<(string, long)>();
+        int start = LowerBoundV1(fieldPrefix.AsSpan());
+        Span<byte> buf = stackalloc byte[4];
+        for (int i = start; i < _allTerms!.Length; i++)
+        {
+            var term = _allTerms[i];
+            if (!term.StartsWith(fieldPrefix, StringComparison.Ordinal))
+                break;
+
+            var bareTerm = term.AsSpan(fieldPrefix.Length);
+            int state = automaton.Start;
+            bool dead = false;
+            for (int j = 0; j < bareTerm.Length; j++)
+            {
+                // Convert char to UTF-8 bytes for automaton
+                int len = System.Text.Encoding.UTF8.GetBytes(bareTerm.Slice(j, 1), buf);
+                for (int k = 0; k < len; k++)
+                {
+                    state = automaton.Step(state, buf[k]);
+                    if (!automaton.CanMatch(state)) { dead = true; break; }
+                }
+                if (dead) break;
+            }
+
+            if (!dead && automaton.IsAccept(state))
+                results.Add((term, _allOffsets![i]));
+        }
+        return results;
+    }
 
     private int LowerBoundV1(ReadOnlySpan<char> key)
     {

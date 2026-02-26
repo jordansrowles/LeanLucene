@@ -1,19 +1,19 @@
-using System.IO.Compression;
-
 namespace Rowles.LeanLucene.Codecs.StoredFields;
 
 /// <summary>
-/// Simple compression policy for stored fields.
-/// Maps to the underlying Brotli compression level.
+/// Compression algorithm for stored fields.
 /// </summary>
-public enum FieldCompressionPolicy
+public enum FieldCompressionPolicy : byte
 {
     /// <summary>No compression. Fastest writes, largest on-disc size.</summary>
-    None,
+    None = 0,
 
-    /// <summary>Fast compression (Brotli Fastest). Good balance of speed and size.</summary>
-    Fast,
+    /// <summary>LZ4 compression. Extremely fast decompression (~3 GB/s).</summary>
+    Lz4 = 1,
 
-    /// <summary>High compression (Brotli Optimal). Smaller files, slower writes.</summary>
-    High
+    /// <summary>Zstandard compression. Better ratio than LZ4, still very fast.</summary>
+    Zstandard = 2,
+
+    /// <summary>Brotli compression (legacy, for reading old segments only).</summary>
+    Brotli = 3
 }

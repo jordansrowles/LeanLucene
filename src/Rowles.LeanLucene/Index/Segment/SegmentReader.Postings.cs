@@ -17,7 +17,7 @@ public sealed partial class SegmentReader
         if (!TryGetCachedOffset(qualifiedTerm, out long offset))
             return PostingsEnum.Empty;
 
-        return PostingsEnum.Create(_posInput, offset);
+        return PostingsEnum.Create(_posInput, offset, _postingsVersion);
     }
 
     /// <summary>
@@ -25,7 +25,7 @@ public sealed partial class SegmentReader
     /// Use when the offset was already obtained from a term scan (e.g. prefix/wildcard).
     /// </summary>
     public PostingsEnum GetPostingsEnumAtOffset(long offset)
-        => PostingsEnum.Create(_posInput, offset);
+        => PostingsEnum.Create(_posInput, offset, _postingsVersion);
 
     /// <summary>
     /// Returns a PostingsEnum with decoded positions for phrase queries.
@@ -83,24 +83,44 @@ public sealed partial class SegmentReader
 
     private int[] ReadPostingsAtOffset(long offset)
     {
+        if (_postingsVersion >= 3)
+        {
+            using var pe = PostingsEnum.Create(_posInput, offset, _postingsVersion);
+            var ids = new int[pe.DocFreq];
+            int i = 0;
+            while (pe.MoveNext()) ids[i++] = pe.DocId;
+            return ids;
+        }
+
         _posInput.Seek(offset);
         int count = _posInput.ReadInt32();
         // Skip past skip entries
         int skipCount = _posInput.ReadInt32();
         if (skipCount > 0)
             _posInput.Seek(_posInput.Position + skipCount * 8L);
-        var ids = new int[count];
+        var docIds = new int[count];
         int prev = 0;
         for (int i = 0; i < count; i++)
         {
             prev = ReadNextDocId(_posInput, prev);
-            ids[i] = prev;
+            docIds[i] = prev;
         }
-        return ids;
+        return docIds;
     }
 
     private int ReadTermFrequency(long offset, int targetDocId)
     {
+        if (_postingsVersion >= 3)
+        {
+            using var pe = PostingsEnum.Create(_posInput, offset, _postingsVersion);
+            while (pe.MoveNext())
+            {
+                if (pe.DocId == targetDocId) return pe.Freq;
+                if (pe.DocId > targetDocId) return 0;
+            }
+            return 0;
+        }
+
         _posInput.Seek(offset);
         int count = _posInput.ReadInt32();
         // Skip past skip entries
@@ -131,6 +151,19 @@ public sealed partial class SegmentReader
 
     private int[]? ReadPositionsAtOffset(long offset, int docId)
     {
+        if (_postingsVersion >= 3)
+        {
+            using var pe = PostingsEnum.CreateWithPositions(_posInput, offset, _postingsVersion);
+            while (pe.MoveNext())
+            {
+                if (pe.DocId == docId)
+                    return pe.GetCurrentPositions().ToArray();
+                if (pe.DocId > docId)
+                    return null;
+            }
+            return null;
+        }
+
         _posInput.Seek(offset);
         int count = _posInput.ReadInt32();
         // Skip past skip entries

@@ -1,64 +1,50 @@
-using System.Collections;
-using Rowles.LeanLucene.Store;
+using Rowles.LeanLucene.Util;
 
 namespace Rowles.LeanLucene.Index.Segment;
 
 /// <summary>
-/// Per-segment bitset tracking deleted document IDs.
+/// Per-segment deletion tracker using a Roaring bitmap of deleted document IDs.
+/// Sparse deletions use very little memory compared to the previous BitArray approach.
 /// </summary>
 internal sealed class LiveDocs
 {
-    private readonly BitArray _bits;
-    private int _liveCount;
+    private readonly RoaringBitmap _deletedDocs;
+    private readonly int _maxDoc;
 
     public LiveDocs(int maxDoc)
     {
-        // All documents are initially live (true).
-        _bits = new BitArray(maxDoc, true);
-        _liveCount = maxDoc;
+        _deletedDocs = new RoaringBitmap();
+        _maxDoc = maxDoc;
     }
 
-    private LiveDocs(BitArray bits)
+    private LiveDocs(RoaringBitmap deletedDocs, int maxDoc)
     {
-        _bits = bits;
-        _liveCount = 0;
-        for (int i = 0; i < bits.Length; i++)
-        {
-            if (bits[i]) _liveCount++;
-        }
+        _deletedDocs = deletedDocs;
+        _maxDoc = maxDoc;
     }
 
-    public int LiveCount => _liveCount;
-    public int MaxDoc => _bits.Length;
+    public int LiveCount => _maxDoc - _deletedDocs.Cardinality;
+    public int MaxDoc => _maxDoc;
+    public int DeletedCount => _deletedDocs.Cardinality;
 
     public void Delete(int docId)
     {
-        if (_bits[docId])
-        {
-            _bits[docId] = false;
-            _liveCount--;
-        }
+        _deletedDocs.Add(docId);
     }
 
-    public bool IsLive(int docId) => _bits[docId];
+    public bool IsLive(int docId) => !_deletedDocs.Contains(docId);
+
+    /// <summary>Returns the underlying deleted-docs bitmap for set operations.</summary>
+    internal RoaringBitmap DeletedBitmap => _deletedDocs;
 
     public static void Serialise(string filePath, LiveDocs liveDocs)
     {
-        // Write as raw bytes: [int: length] [bytes: packed bits]
-        var bytes = new byte[(liveDocs._bits.Length + 7) / 8];
-        liveDocs._bits.CopyTo(bytes, 0);
-
-        using var writer = new BinaryWriter(File.Create(filePath));
-        writer.Write(liveDocs._bits.Length);
-        writer.Write(bytes);
+        liveDocs._deletedDocs.Serialise(filePath);
     }
 
     public static LiveDocs Deserialise(string filePath, int maxDoc)
     {
-        using var input = new IndexInput(filePath);
-        var length = input.ReadInt32();
-        var bytes = input.ReadBytes((length + 7) / 8);
-        var bits = new BitArray(bytes) { Length = length };
-        return new LiveDocs(bits);
+        var deletedDocs = RoaringBitmap.Deserialise(filePath);
+        return new LiveDocs(deletedDocs, maxDoc);
     }
 }
