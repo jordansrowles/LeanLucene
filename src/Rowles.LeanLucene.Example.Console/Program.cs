@@ -77,6 +77,73 @@ PrintResults(searcher.Search(queryVector, queryVector.TopK), sampleArticles);
 WriteSection("Done");
 Console.WriteLine($"Index files are in: {indexPath}");
 
+// ── Phrase query stress repro (mirrors PhraseQueryBenchmarks.ExactThreeWord @ 100K) ──
+WriteSection("Phrase query stress test (100K docs, ExactThreeWord)");
+const int docCount = 100_000;
+const int iterations = 500;
+const int topN = 25;
+
+var phraseIndexPath = Path.Combine(Path.GetTempPath(), $"leanlucene-phrase-stress-{Guid.NewGuid():N}");
+Directory.CreateDirectory(phraseIndexPath);
+
+try
+{
+    // Build docs identical to BenchmarkData.BuildDocuments
+    string[] Topics = ["catalog", "ranking", "analytics", "ingestion", "compression", "vectorization", "querying", "throughput"];
+    string[] Domains = ["ecommerce", "observability", "knowledgebase", "documentation", "telemetry", "support", "security", "monitoring"];
+    var docs = new string[docCount];
+    for (int i = 0; i < docCount; i++)
+    {
+        var keyword = (i % 3) switch { 0 => "search", 1 => "vector", _ => "performance" };
+        var topic = Topics[i % Topics.Length];
+        var domain = Domains[(i * 7) % Domains.Length];
+        docs[i] = $"doc {i} {keyword} benchmark for {domain} {topic} dotnet segment index bm25 retrieval latency throughput memory mapped files";
+    }
+
+    // Index with same config as benchmark
+    var phraseDir = new MMapDirectory(phraseIndexPath);
+    using (var w = new IndexWriter(phraseDir, new IndexWriterConfig { MaxBufferedDocs = 10_000, RamBufferSizeMB = 256 }))
+    {
+        for (int i = 0; i < docs.Length; i++)
+        {
+            var doc = new LeanDocument();
+            doc.Add(new StringField("id", i.ToString(System.Globalization.CultureInfo.InvariantCulture)));
+            doc.Add(new TextField("body", docs[i]));
+            w.AddDocument(doc);
+        }
+        w.Commit();
+    }
+
+    using var phraseSearcher = new IndexSearcher(phraseDir);
+    Console.WriteLine($"Indexed {docCount} docs, total: {phraseSearcher.Stats.TotalDocCount}, live: {phraseSearcher.Stats.LiveDocCount}");
+
+    int failures = 0;
+    var sw = System.Diagnostics.Stopwatch.StartNew();
+    for (int iter = 0; iter < iterations; iter++)
+    {
+        try
+        {
+            var result = phraseSearcher.Search(
+                new PhraseQuery("body", "segment", "index", "bm25"), topN);
+            if (iter == 0)
+                Console.WriteLine($"  First result: TotalHits={result.TotalHits}");
+        }
+        catch (Exception ex)
+        {
+            failures++;
+            if (failures <= 3)
+                Console.WriteLine($"  FAIL iter {iter}: {ex.GetType().Name}: {ex.Message}");
+        }
+    }
+    sw.Stop();
+    Console.WriteLine($"  {iterations} iterations in {sw.ElapsedMilliseconds} ms, {failures} failures");
+}
+finally
+{
+    if (Directory.Exists(phraseIndexPath))
+        Directory.Delete(phraseIndexPath, recursive: true);
+}
+
 return;
 
 static LeanDocument ToDocument(SampleArticle article)

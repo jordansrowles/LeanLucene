@@ -93,6 +93,8 @@ param(
 
     [switch]$Dry,
 
+    [switch]$GcDump,
+
     [Parameter(ValueFromRemainingArguments = $true)]
     [string[]]$BenchmarkArgs
 )
@@ -297,6 +299,15 @@ if ($Dry) {
     }
     Write-Host ""
     exit 0
+}
+
+if ($GcDump) {
+    $runArgs += '--gcdump'
+    if (-not (Get-Command dotnet-gcdump -ErrorAction SilentlyContinue)) {
+        Write-Host 'Installing dotnet-gcdump global tool...'
+        dotnet tool install -g dotnet-gcdump
+    }
+    Write-Host "GcDump: enabled"
 }
 
 Write-Host ""
