@@ -92,10 +92,16 @@ internal static class Program
             RunSuite<SchemaAndJsonBenchmarks>("schemajson", typeDataDir, runId, benchmarkArgs, suiteSummaries);
 
         if (suite is BenchmarkSuite.All or BenchmarkSuite.Compound)
-            RunSuite<CompoundFileBenchmarks>("compound", typeDataDir, runId, benchmarkArgs, suiteSummaries);
+        {
+            RunSuite<CompoundFileIndexBenchmarks>("compound-index", typeDataDir, runId, benchmarkArgs, suiteSummaries);
+            RunSuite<CompoundFileSearchBenchmarks>("compound-search", typeDataDir, runId, benchmarkArgs, suiteSummaries);
+        }
 
         if (suite is BenchmarkSuite.All or BenchmarkSuite.IndexSort)
-            RunSuite<IndexSortBenchmarks>("indexsort", typeDataDir, runId, benchmarkArgs, suiteSummaries);
+        {
+            RunSuite<IndexSortIndexBenchmarks>("indexsort-index", typeDataDir, runId, benchmarkArgs, suiteSummaries);
+            RunSuite<IndexSortSearchBenchmarks>("indexsort-search", typeDataDir, runId, benchmarkArgs, suiteSummaries);
+        }
 
         if (suite is BenchmarkSuite.All or BenchmarkSuite.BlockJoin)
             RunSuite<BlockJoinBenchmarks>("blockjoin", typeDataDir, runId, benchmarkArgs, suiteSummaries);
@@ -203,8 +209,8 @@ internal static class Program
               diagnostics      DiagnosticsBenchmarks — SlowQueryLog + Analytics hook overhead
               suggester        SuggesterBenchmarks — DidYouMean spelling correction (vs Lucene.NET)
               schemajson       SchemaAndJsonBenchmarks — schema validation + JSON mapping
-              compound         CompoundFileBenchmarks — compound file read/write (vs Lucene.NET)
-              indexsort        IndexSortBenchmarks — index-time sort + early termination
+              compound         CompoundFileIndex/SearchBenchmarks — compound file read/write (vs Lucene.NET)
+              indexsort        IndexSortIndex/SearchBenchmarks — index-time sort + early termination
               blockjoin        BlockJoinBenchmarks — block-join queries (vs Lucene.NET)
 
             Output:

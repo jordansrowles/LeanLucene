@@ -36,6 +36,9 @@ public class PhraseQueryBenchmarks
     [ParamsSource(nameof(DocCounts))]
     public int DocumentCount { get; set; }
 
+    [Params("ExactTwoWord", "ExactThreeWord", "SlopTwoWord")]
+    public string PhraseType { get; set; } = "ExactTwoWord";
+
     private string _leanIndexPath = string.Empty;
     private LeanMMapDirectory? _leanDirectory;
     private LeanIndexSearcher? _leanSearcher;
@@ -65,58 +68,42 @@ public class PhraseQueryBenchmarks
         _luceneDirectory?.Dispose();
     }
 
-    // --- Exact phrase (2 words) ---
-
     [Benchmark(Baseline = true)]
-    public int LeanLucene_ExactPhrase_TwoWords()
+    public int LeanLucene_PhraseQuery()
     {
-        var query = new Rowles.LeanLucene.Search.Queries.PhraseQuery("body", "search", "benchmark");
-        return _leanSearcher!.Search(query, TopN).TotalHits;
+        return PhraseType switch
+        {
+            "ExactTwoWord" => _leanSearcher!.Search(
+                new Rowles.LeanLucene.Search.Queries.PhraseQuery("body", "search", "benchmark"), TopN).TotalHits,
+            "ExactThreeWord" => _leanSearcher!.Search(
+                new Rowles.LeanLucene.Search.Queries.PhraseQuery("body", "segment", "index", "bm25"), TopN).TotalHits,
+            "SlopTwoWord" => _leanSearcher!.Search(
+                new Rowles.LeanLucene.Search.Queries.PhraseQuery("body", slop: 2, "search", "latency"), TopN).TotalHits,
+            _ => 0
+        };
     }
 
     [Benchmark]
-    public int LuceneNet_ExactPhrase_TwoWords()
+    public int LuceneNet_PhraseQuery()
     {
         var pq = new Lucene.Net.Search.PhraseQuery();
-        pq.Add(new Term("body", "search"));
-        pq.Add(new Term("body", "benchmark"));
-        return _luceneSearcher!.Search(pq, TopN).TotalHits;
-    }
-
-    // --- Exact phrase (3 words) ---
-
-    [Benchmark]
-    public int LeanLucene_ExactPhrase_ThreeWords()
-    {
-        var query = new Rowles.LeanLucene.Search.Queries.PhraseQuery("body", "segment", "index", "bm25");
-        return _leanSearcher!.Search(query, TopN).TotalHits;
-    }
-
-    [Benchmark]
-    public int LuceneNet_ExactPhrase_ThreeWords()
-    {
-        var pq = new Lucene.Net.Search.PhraseQuery();
-        pq.Add(new Term("body", "segment"));
-        pq.Add(new Term("body", "index"));
-        pq.Add(new Term("body", "bm25"));
-        return _luceneSearcher!.Search(pq, TopN).TotalHits;
-    }
-
-    // --- Slop phrase ---
-
-    [Benchmark]
-    public int LeanLucene_SlopPhrase_TwoWords()
-    {
-        var query = new Rowles.LeanLucene.Search.Queries.PhraseQuery("body", slop: 2, "search", "latency");
-        return _leanSearcher!.Search(query, TopN).TotalHits;
-    }
-
-    [Benchmark]
-    public int LuceneNet_SlopPhrase_TwoWords()
-    {
-        var pq = new Lucene.Net.Search.PhraseQuery { Slop = 2 };
-        pq.Add(new Term("body", "search"));
-        pq.Add(new Term("body", "latency"));
+        switch (PhraseType)
+        {
+            case "ExactTwoWord":
+                pq.Add(new Term("body", "search"));
+                pq.Add(new Term("body", "benchmark"));
+                break;
+            case "ExactThreeWord":
+                pq.Add(new Term("body", "segment"));
+                pq.Add(new Term("body", "index"));
+                pq.Add(new Term("body", "bm25"));
+                break;
+            case "SlopTwoWord":
+                pq.Slop = 2;
+                pq.Add(new Term("body", "search"));
+                pq.Add(new Term("body", "latency"));
+                break;
+        }
         return _luceneSearcher!.Search(pq, TopN).TotalHits;
     }
 
