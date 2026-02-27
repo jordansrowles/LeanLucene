@@ -69,6 +69,7 @@ public class PhraseQueryBenchmarks
     }
 
     [Benchmark(Baseline = true)]
+    [MethodImpl(MethodImplOptions.NoInlining)]
     public int LeanLucene_PhraseQuery()
     {
         return PhraseType switch
@@ -84,6 +85,7 @@ public class PhraseQueryBenchmarks
     }
 
     [Benchmark]
+    [MethodImpl(MethodImplOptions.NoInlining)]
     public int LuceneNet_PhraseQuery()
     {
         var pq = new Lucene.Net.Search.PhraseQuery();

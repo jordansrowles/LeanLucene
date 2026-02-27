@@ -35,6 +35,7 @@ public class IndexSortIndexBenchmarks
     }
 
     [Benchmark(Baseline = true)]
+    [MethodImpl(MethodImplOptions.NoInlining)]
     public int LeanLucene_Index_Unsorted()
     {
         var path = Path.Combine(Path.GetTempPath(), $"leanlucene-bench-sort-{Guid.NewGuid():N}");
@@ -61,6 +62,7 @@ public class IndexSortIndexBenchmarks
     }
 
     [Benchmark]
+    [MethodImpl(MethodImplOptions.NoInlining)]
     public int LeanLucene_Index_Sorted()
     {
         var path = Path.Combine(Path.GetTempPath(), $"leanlucene-bench-sort-{Guid.NewGuid():N}");

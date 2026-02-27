@@ -74,6 +74,7 @@ public class BlockJoinBenchmarks
     }
 
     [Benchmark(Baseline = true)]
+    [MethodImpl(MethodImplOptions.NoInlining)]
     public int LeanLucene_IndexBlocks()
     {
         var path = Path.Combine(Path.GetTempPath(), $"leanlucene-bench-block-{Guid.NewGuid():N}");
@@ -100,6 +101,7 @@ public class BlockJoinBenchmarks
     }
 
     [Benchmark]
+    [MethodImpl(MethodImplOptions.NoInlining)]
     public int LeanLucene_BlockJoinQuery()
     {
         var childQuery = new LeanTermQuery("body", "comment");
@@ -109,6 +111,7 @@ public class BlockJoinBenchmarks
     }
 
     [Benchmark]
+    [MethodImpl(MethodImplOptions.NoInlining)]
     public int LuceneNet_IndexBlocks()
     {
         using var directory = new RAMDirectory();
@@ -145,6 +148,7 @@ public class BlockJoinBenchmarks
     }
 
     [Benchmark]
+    [MethodImpl(MethodImplOptions.NoInlining)]
     public int LuceneNet_ToParentBlockJoinQuery()
     {
         var childQuery = new Lucene.Net.Search.TermQuery(new Term("body", "comment"));

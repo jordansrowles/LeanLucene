@@ -69,6 +69,7 @@ public class WildcardQueryBenchmarks
     }
 
     [Benchmark(Baseline = true)]
+    [MethodImpl(MethodImplOptions.NoInlining)]
     public int LeanLucene_WildcardQuery()
     {
         var query = new Rowles.LeanLucene.Search.Queries.WildcardQuery("body", WildcardPattern);
@@ -76,6 +77,7 @@ public class WildcardQueryBenchmarks
     }
 
     [Benchmark]
+    [MethodImpl(MethodImplOptions.NoInlining)]
     public int LuceneNet_WildcardQuery()
     {
         var query = new Lucene.Net.Search.WildcardQuery(new Term("body", WildcardPattern));

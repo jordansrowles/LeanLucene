@@ -40,6 +40,7 @@ public class DeletionBenchmarks
     }
 
     [Benchmark(Baseline = true)]
+    [MethodImpl(MethodImplOptions.NoInlining)]
     public int LeanLucene_DeleteDocuments()
     {
         var path = Path.Combine(Path.GetTempPath(), $"leanlucene-bench-del-{Guid.NewGuid():N}");
@@ -76,6 +77,7 @@ public class DeletionBenchmarks
     }
 
     [Benchmark]
+    [MethodImpl(MethodImplOptions.NoInlining)]
     public int LuceneNet_DeleteDocuments()
     {
         using var directory = new RAMDirectory();

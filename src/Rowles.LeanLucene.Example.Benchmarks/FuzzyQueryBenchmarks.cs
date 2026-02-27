@@ -68,6 +68,7 @@ public class FuzzyQueryBenchmarks
     }
 
     [Benchmark(Baseline = true)]
+    [MethodImpl(MethodImplOptions.NoInlining)]
     public int LeanLucene_FuzzyQuery()
     {
         var query = new Rowles.LeanLucene.Search.Queries.FuzzyQuery("body", QueryTerm, maxEdits: 2);
@@ -75,6 +76,7 @@ public class FuzzyQueryBenchmarks
     }
 
     [Benchmark]
+    [MethodImpl(MethodImplOptions.NoInlining)]
     public int LuceneNet_FuzzyQuery()
     {
         var query = new Lucene.Net.Search.FuzzyQuery(new Term("body", QueryTerm), 2);

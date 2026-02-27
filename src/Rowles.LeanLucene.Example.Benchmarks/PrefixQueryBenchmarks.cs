@@ -68,6 +68,7 @@ public class PrefixQueryBenchmarks
     }
 
     [Benchmark(Baseline = true)]
+    [MethodImpl(MethodImplOptions.NoInlining)]
     public int LeanLucene_PrefixQuery()
     {
         var query = new Rowles.LeanLucene.Search.Queries.PrefixQuery("body", QueryPrefix);
@@ -75,6 +76,7 @@ public class PrefixQueryBenchmarks
     }
 
     [Benchmark]
+    [MethodImpl(MethodImplOptions.NoInlining)]
     public int LuceneNet_PrefixQuery()
     {
         var query = new Lucene.Net.Search.PrefixQuery(new Term("body", QueryPrefix));

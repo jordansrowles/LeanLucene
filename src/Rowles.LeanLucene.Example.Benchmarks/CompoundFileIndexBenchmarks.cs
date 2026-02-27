@@ -40,6 +40,7 @@ public class CompoundFileIndexBenchmarks
     }
 
     [Benchmark(Baseline = true)]
+    [MethodImpl(MethodImplOptions.NoInlining)]
     public int LeanLucene_Index_NoCompound()
     {
         var path = Path.Combine(Path.GetTempPath(), $"leanlucene-bench-cfs-{Guid.NewGuid():N}");
@@ -67,6 +68,7 @@ public class CompoundFileIndexBenchmarks
     }
 
     [Benchmark]
+    [MethodImpl(MethodImplOptions.NoInlining)]
     public int LeanLucene_Index_Compound()
     {
         var path = Path.Combine(Path.GetTempPath(), $"leanlucene-bench-cfs-{Guid.NewGuid():N}");
@@ -94,6 +96,7 @@ public class CompoundFileIndexBenchmarks
     }
 
     [Benchmark]
+    [MethodImpl(MethodImplOptions.NoInlining)]
     public int LuceneNet_Index_Compound()
     {
         using var directory = new RAMDirectory();

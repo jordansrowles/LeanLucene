@@ -68,6 +68,7 @@ public class BooleanQueryBenchmarks
     }
 
     [Benchmark(Baseline = true)]
+    [MethodImpl(MethodImplOptions.NoInlining)]
     public int LeanLucene_BooleanQuery()
     {
         var bq = new Rowles.LeanLucene.Search.Queries.BooleanQuery();
@@ -90,6 +91,7 @@ public class BooleanQueryBenchmarks
     }
 
     [Benchmark]
+    [MethodImpl(MethodImplOptions.NoInlining)]
     public int LuceneNet_BooleanQuery()
     {
         var bq = new Lucene.Net.Search.BooleanQuery();

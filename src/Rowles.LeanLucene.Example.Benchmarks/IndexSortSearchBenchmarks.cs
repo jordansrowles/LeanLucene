@@ -56,6 +56,7 @@ public class IndexSortSearchBenchmarks
     }
 
     [Benchmark(Baseline = true)]
+    [MethodImpl(MethodImplOptions.NoInlining)]
     public int LeanLucene_SortedSearch_EarlyTermination()
     {
         var topDocs = _sortedSearcher!.Search(new TermQuery("body", "product"), TopN, SortField.Numeric("price"));
@@ -63,6 +64,7 @@ public class IndexSortSearchBenchmarks
     }
 
     [Benchmark]
+    [MethodImpl(MethodImplOptions.NoInlining)]
     public int LeanLucene_SortedSearch_PostSort()
     {
         var topDocs = _unsortedSearcher!.Search(new TermQuery("body", "product"), TopN, SortField.Numeric("price"));

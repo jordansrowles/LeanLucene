@@ -72,6 +72,7 @@ public class CompoundFileSearchBenchmarks
     }
 
     [Benchmark(Baseline = true)]
+    [MethodImpl(MethodImplOptions.NoInlining)]
     public int LeanLucene_Search_NoCompound()
     {
         var topDocs = _leanNoCompoundSearcher!.Search(new LeanTermQuery("body", "search"), TopN);
@@ -79,6 +80,7 @@ public class CompoundFileSearchBenchmarks
     }
 
     [Benchmark]
+    [MethodImpl(MethodImplOptions.NoInlining)]
     public int LeanLucene_Search_Compound()
     {
         var topDocs = _leanCompoundSearcher!.Search(new LeanTermQuery("body", "search"), TopN);
@@ -86,6 +88,7 @@ public class CompoundFileSearchBenchmarks
     }
 
     [Benchmark]
+    [MethodImpl(MethodImplOptions.NoInlining)]
     public int LuceneNet_Search_Compound()
     {
         var query = new Lucene.Net.Search.TermQuery(new Term("body", "search"));
