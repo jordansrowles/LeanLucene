@@ -35,6 +35,8 @@ public unsafe struct PostingsEnum : IDisposable
     private int[]? _positionCounts;
     private byte* _posBasePtr;
     private int[]? _lazyPosBuffer;
+    private int _lastDecodedPosIndex; // cache: skip re-decode if same doc
+    private int _lastDecodedPosCount; // number of valid positions in _lazyPosBuffer
     // Prevents the IndexInput from being disposed/GC'd while this PostingsEnum holds a raw pointer
     private IndexInput? _sourceInput;
 
@@ -64,6 +66,8 @@ public unsafe struct PostingsEnum : IDisposable
         _positionCounts = null;
         _posBasePtr = null;
         _lazyPosBuffer = null;
+        _lastDecodedPosIndex = -1;
+        _lastDecodedPosCount = 0;
         _sourceInput = null;
         _hasPayloads = false;
         _payloadByteOffsets = null;
@@ -87,6 +91,8 @@ public unsafe struct PostingsEnum : IDisposable
         _positionCounts = positionCounts;
         _posBasePtr = posBasePtr;
         _lazyPosBuffer = null;
+        _lastDecodedPosIndex = -1;
+        _lastDecodedPosCount = 0;
         _sourceInput = sourceInput;
         _hasPayloads = hasPayloads;
         _payloadByteOffsets = null;
@@ -111,6 +117,8 @@ public unsafe struct PostingsEnum : IDisposable
         _positionCounts = null;
         _posBasePtr = null;
         _lazyPosBuffer = null;
+        _lastDecodedPosIndex = -1;
+        _lastDecodedPosCount = 0;
         _sourceInput = null;
         _hasPayloads = false;
         _payloadByteOffsets = null;
@@ -303,6 +311,8 @@ public unsafe struct PostingsEnum : IDisposable
     /// <summary>
     /// Returns positions for the current document. Supports both eager (pre-decoded) and
     /// lazy (on-demand) position data. Returns empty span if positions were not available.
+    /// Caches the last decoded result to avoid redundant VarInt decoding when called
+    /// multiple times for the same document (common in phrase evaluation).
     /// </summary>
     public ReadOnlySpan<int> GetCurrentPositions()
     {
@@ -323,6 +333,10 @@ public unsafe struct PostingsEnum : IDisposable
             int posCount = _positionCounts[_index];
             if (posCount == 0)
                 return ReadOnlySpan<int>.Empty;
+
+            // Cache hit: same doc index as last decode — return cached buffer
+            if (_index == _lastDecodedPosIndex && _lazyPosBuffer is not null)
+                return new ReadOnlySpan<int>(_lazyPosBuffer, 0, _lastDecodedPosCount);
 
             // Ensure position buffer is large enough
             if (_lazyPosBuffer is null || _lazyPosBuffer.Length < posCount)
@@ -366,6 +380,10 @@ public unsafe struct PostingsEnum : IDisposable
                     pos += payloadLen;
                 }
             }
+
+            // Cache this decode result
+            _lastDecodedPosIndex = _index;
+            _lastDecodedPosCount = posCount;
 
             return new ReadOnlySpan<int>(_lazyPosBuffer, 0, posCount);
         }

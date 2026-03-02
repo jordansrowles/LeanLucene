@@ -183,8 +183,9 @@ internal sealed class FSTReader
     /// <summary>Returns all terms within Levenshtein distance for a field, with edit distances.
     /// Uses prefix-sharing DP on sorted terms: consecutive terms sharing a prefix reuse
     /// the Levenshtein row up to the longest common prefix. Dead prefixes (row min > maxEdits)
-    /// skip ahead via binary search.</summary>
-    public List<(string Term, long Offset, int Distance)> GetFuzzyMatches(string fieldPrefix, ReadOnlySpan<char> queryTerm, int maxEdits)
+    /// skip ahead via binary search.
+    /// When more than <paramref name="maxExpansions"/> terms match, only the closest are kept.</summary>
+    public List<(string Term, long Offset, int Distance)> GetFuzzyMatches(string fieldPrefix, ReadOnlySpan<char> queryTerm, int maxEdits, int maxExpansions = 64)
     {
         int prefixByteCount = Encoding.UTF8.GetByteCount(fieldPrefix);
         Span<byte> prefixUtf8 = prefixByteCount <= 256 ? stackalloc byte[prefixByteCount] : new byte[prefixByteCount];
@@ -200,9 +201,10 @@ internal sealed class FSTReader
 
         // Non-ASCII queries fall back to the original per-term bounded Levenshtein
         if (!queryIsAscii)
-            return GetFuzzyMatchesFallback(fieldPrefix, queryTerm, maxEdits, prefixUtf8, start);
+            return GetFuzzyMatchesFallback(fieldPrefix, queryTerm, maxEdits, maxExpansions, prefixUtf8, start);
 
-        var results = new List<(string, long, int)>();
+        // Phase 1: collect (ordinal, distance) pairs without decoding strings
+        var candidates = new List<(int Ordinal, int Distance)>();
         int qLen = queryByteCount; // ASCII: byte count == char count
         int rowSize = qLen + 1;
 
@@ -297,20 +299,31 @@ internal sealed class FSTReader
             {
                 int finalDist = dpStack[bareLen][qLen];
                 if (finalDist <= maxEdits)
-                    results.Add((DecodeKey(idx), _offsets[idx], finalDist));
+                    candidates.Add((idx, finalDist));
             }
         }
+
+        // Phase 2: truncate to maxExpansions closest matches, then decode strings
+        if (maxExpansions > 0 && candidates.Count > maxExpansions)
+        {
+            candidates.Sort((a, b) => a.Distance.CompareTo(b.Distance));
+            candidates.RemoveRange(maxExpansions, candidates.Count - maxExpansions);
+        }
+
+        var results = new List<(string, long, int)>(candidates.Count);
+        foreach (var (ordinal, distance) in candidates)
+            results.Add((DecodeKey(ordinal), _offsets[ordinal], distance));
 
         return results;
     }
 
     /// <summary>Original O(T) linear scan fallback for non-ASCII queries.</summary>
     private List<(string Term, long Offset, int Distance)> GetFuzzyMatchesFallback(
-        string fieldPrefix, ReadOnlySpan<char> queryTerm, int maxEdits,
+        string fieldPrefix, ReadOnlySpan<char> queryTerm, int maxEdits, int maxExpansions,
         ReadOnlySpan<byte> prefixUtf8, int start)
     {
         int queryTermLen = queryTerm.Length;
-        var results = new List<(string, long, int)>();
+        var candidates = new List<(int Ordinal, int Distance)>();
 
         for (int i = start; i < _termCount; i++)
         {
@@ -326,8 +339,20 @@ internal sealed class FSTReader
 
             int distance = LevenshteinDistance.ComputeBounded(queryTerm, bareTerm, maxEdits);
             if (distance <= maxEdits)
-                results.Add((fullTerm, _offsets[i], distance));
+                candidates.Add((i, distance));
         }
+
+        // Truncate to maxExpansions closest matches
+        if (maxExpansions > 0 && candidates.Count > maxExpansions)
+        {
+            candidates.Sort((a, b) => a.Distance.CompareTo(b.Distance));
+            candidates.RemoveRange(maxExpansions, candidates.Count - maxExpansions);
+        }
+
+        var results = new List<(string, long, int)>(candidates.Count);
+        foreach (var (ordinal, distance) in candidates)
+            results.Add((DecodeKey(ordinal), _offsets[ordinal], distance));
+
         return results;
     }
 

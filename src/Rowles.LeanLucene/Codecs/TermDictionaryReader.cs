@@ -180,14 +180,14 @@ internal sealed class TermDictionaryReader : IDisposable
 
     // ── Fuzzy Scan ──────────────────────────────────────────────────────────
 
-    public List<(string Term, long Offset, int Distance)> GetFuzzyMatches(string fieldPrefix, ReadOnlySpan<char> queryTerm, int maxEdits)
+    public List<(string Term, long Offset, int Distance)> GetFuzzyMatches(string fieldPrefix, ReadOnlySpan<char> queryTerm, int maxEdits, int maxExpansions = 64)
     {
         if (_fstReader is not null)
-            return _fstReader.GetFuzzyMatches(fieldPrefix, queryTerm, maxEdits);
-        return GetFuzzyMatchesV1(fieldPrefix, queryTerm, maxEdits);
+            return _fstReader.GetFuzzyMatches(fieldPrefix, queryTerm, maxEdits, maxExpansions);
+        return GetFuzzyMatchesV1(fieldPrefix, queryTerm, maxEdits, maxExpansions);
     }
 
-    private List<(string Term, long Offset, int Distance)> GetFuzzyMatchesV1(string fieldPrefix, ReadOnlySpan<char> queryTerm, int maxEdits)
+    private List<(string Term, long Offset, int Distance)> GetFuzzyMatchesV1(string fieldPrefix, ReadOnlySpan<char> queryTerm, int maxEdits, int maxExpansions)
     {
         var results = new List<(string, long, int)>();
         int start = LowerBoundV1(fieldPrefix.AsSpan());
@@ -204,6 +204,14 @@ internal sealed class TermDictionaryReader : IDisposable
             if (distance <= maxEdits)
                 results.Add((term, _allOffsets![i], distance));
         }
+
+        // Truncate to maxExpansions closest matches
+        if (maxExpansions > 0 && results.Count > maxExpansions)
+        {
+            results.Sort((a, b) => a.Item3.CompareTo(b.Item3));
+            results.RemoveRange(maxExpansions, results.Count - maxExpansions);
+        }
+
         return results;
     }
 

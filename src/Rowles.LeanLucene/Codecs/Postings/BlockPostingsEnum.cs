@@ -241,16 +241,25 @@ public struct BlockPostingsEnum : IDisposable
         return i;
     }
 
-    /// <summary>Finds the first skip entry whose LastDocId ≥ target.</summary>
+    /// <summary>Finds the first skip entry whose LastDocId ≥ target using binary search.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private int FindSkipBlock(int target)
     {
-        // Linear scan over skip entries (typically < 100 entries for most posting lists)
-        for (int i = 0; i < _skipCount; i++)
+        if (_skipCount == 0) return -1;
+
+        int lo = 0, hi = _skipCount - 1;
+
+        while (lo <= hi)
         {
-            if (_skipEntries[i].LastDocId >= target)
-                return i;
+            int mid = lo + ((hi - lo) >> 1);
+            if (_skipEntries[mid].LastDocId < target)
+                lo = mid + 1;
+            else
+                hi = mid - 1;
         }
-        return -1; // target is past all full blocks → must be in tail
+
+        // lo is the first index where LastDocId >= target, or _skipCount if none
+        return lo < _skipCount ? lo : -1;
     }
 
     private void DecodeBlockAt(int blockStart)
