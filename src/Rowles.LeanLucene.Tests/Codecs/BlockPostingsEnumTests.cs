@@ -287,9 +287,11 @@ public sealed class BlockPostingsEnumTests : IDisposable
         var pe = BlockPostingsEnum.Create(input, meta.DocStartOffset, meta.SkipOffset, meta.DocFreq);
 
         // Advance to various targets across the entire range
+        int maxDocId = (count - 1) * 3;
         int[] targets = [0, 3, 126, 384, count / 2 * 3, (count - 2) * 3, (count - 1) * 3];
         foreach (int target in targets)
         {
+            if (target > maxDocId) continue;
             pe = BlockPostingsEnum.Create(input, meta.DocStartOffset, meta.SkipOffset, meta.DocFreq);
             int doc = pe.Advance(target);
             Assert.Equal(target, doc);

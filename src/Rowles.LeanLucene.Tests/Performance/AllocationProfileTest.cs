@@ -134,13 +134,13 @@ public class AllocationProfileTest : IDisposable
         for (int w = 0; w < 50; w++) _searcher.Search(new FuzzyQuery("body", "serch"), 25);
 
         GC.Collect(2, GCCollectionMode.Forced, true, true);
-        long before = GC.GetTotalAllocatedBytes(precise: true);
+        long before = GC.GetAllocatedBytesForCurrentThread();
 
         const int iterations = 1000;
         for (int q = 0; q < iterations; q++)
             _searcher.Search(new FuzzyQuery("body", "serch"), 25);
 
-        long totalAlloc = GC.GetTotalAllocatedBytes(precise: true) - before;
+        long totalAlloc = GC.GetAllocatedBytesForCurrentThread() - before;
         long perQuery = totalAlloc / iterations;
 
         _output.WriteLine($"FuzzyQuery: {perQuery} B/query, total {totalAlloc / 1024.0:F1} KB for {iterations} queries");

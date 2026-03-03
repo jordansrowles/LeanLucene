@@ -218,8 +218,12 @@ internal sealed class FSTReader
         for (int j = 0; j <= qLen; j++)
             dpStack[0][j] = j;
 
-        int prevBareStart = -1;
-        int prevBareLen = 0;
+        // Track the dpStack source term separately from prevBare.
+        // Length-filtered and dead terms may not fully compute dpStack rows,
+        // so LCP must be computed against the term that last modified the stack.
+        int dpBareStart = -1;
+        int dpBareLen = 0;
+        int dpValidDepth = 0; // dpStack[0..dpValidDepth] are valid
 
         for (int idx = start; idx < _termCount; idx++)
         {
@@ -232,20 +236,15 @@ internal sealed class FSTReader
 
             // Length filter: edit distance is at least |len difference|
             if (Math.Abs(bareLen - qLen) > maxEdits)
-            {
-                // Still update prevBare so LCP works for the next term
-                prevBareStart = _keyStarts[idx] + prefixByteCount;
-                prevBareLen = bareLen;
                 continue;
-            }
 
-            // Find LCP with previous bare term to reuse DP rows
+            // Find LCP with the last term that modified dpStack
             int lcp = 0;
-            if (prevBareStart >= 0)
+            if (dpBareStart >= 0)
             {
-                var prevBare = _keyData.AsSpan(prevBareStart, prevBareLen);
-                int minLen = Math.Min(prevBareLen, bareLen);
-                while (lcp < minLen && prevBare[lcp] == bare[lcp])
+                var dpBare = _keyData.AsSpan(dpBareStart, dpBareLen);
+                int minLen = Math.Min(Math.Min(dpBareLen, bareLen), dpValidDepth);
+                while (lcp < minLen && dpBare[lcp] == bare[lcp])
                     lcp++;
             }
 
@@ -263,6 +262,7 @@ internal sealed class FSTReader
 
             // Advance DP from LCP depth to full bare length
             bool dead = false;
+            int lastComputedDepth = lcp;
             for (int d = lcp; d < bareLen; d++)
             {
                 var prevRow = dpStack[d];
@@ -283,6 +283,7 @@ internal sealed class FSTReader
                     if (val < rowMin) rowMin = val;
                 }
 
+                lastComputedDepth = d + 1;
                 if (rowMin > maxEdits)
                 {
                     dead = true;
@@ -290,10 +291,10 @@ internal sealed class FSTReader
                 }
             }
 
-            // Always update prevBare for LCP sharing with the next term,
-            // regardless of whether this term was dead or matched.
-            prevBareStart = _keyStarts[idx] + prefixByteCount;
-            prevBareLen = bareLen;
+            // Update dpStack source to this term (it actually modified the stack)
+            dpBareStart = _keyStarts[idx] + prefixByteCount;
+            dpBareLen = bareLen;
+            dpValidDepth = lastComputedDepth;
 
             if (!dead)
             {
