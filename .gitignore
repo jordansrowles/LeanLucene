@@ -3,6 +3,8 @@
 ##
 ## Get latest from `dotnet new gitignore`
 
+bench/*
+
 .netcoredbg_hist
 
 # dotenv files
