@@ -95,6 +95,7 @@ public class DiagnosticsBenchmarks
     }
 
     [Benchmark(Baseline = true)]
+    [MethodImpl(MethodImplOptions.NoInlining)]
     public int LeanLucene_Search_NoHooks()
     {
         var topDocs = _noHooksSearcher!.Search(new TermQuery("body", "search"), TopN);
@@ -102,6 +103,7 @@ public class DiagnosticsBenchmarks
     }
 
     [Benchmark]
+    [MethodImpl(MethodImplOptions.NoInlining)]
     public int LeanLucene_Search_SlowQueryLog()
     {
         var topDocs = _slowLogSearcher!.Search(new TermQuery("body", "search"), TopN);
@@ -109,6 +111,7 @@ public class DiagnosticsBenchmarks
     }
 
     [Benchmark]
+    [MethodImpl(MethodImplOptions.NoInlining)]
     public int LeanLucene_Search_Analytics()
     {
         var topDocs = _analyticsSearcher!.Search(new TermQuery("body", "search"), TopN);
@@ -116,6 +119,7 @@ public class DiagnosticsBenchmarks
     }
 
     [Benchmark]
+    [MethodImpl(MethodImplOptions.NoInlining)]
     public int LeanLucene_Search_AllHooks()
     {
         var topDocs = _allHooksSearcher!.Search(new TermQuery("body", "search"), TopN);

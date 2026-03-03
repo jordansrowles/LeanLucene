@@ -38,6 +38,7 @@ DOC_COUNT=0
 DRY=false
 LIST=false
 HELP=false
+GCDUMP=false
 EXTRA_ARGS=()
 
 # ── Suite / strategy / type descriptions ──────────────────────────────────────
@@ -57,8 +58,8 @@ declare -A SUITE_DESC=(
     [diagnostics]="DiagnosticsBenchmarks   - SlowQueryLog + Analytics hook overhead"
     [suggester]="SuggesterBenchmarks      - DidYouMean spelling (vs Lucene.NET SpellChecker)"
     [schemajson]="SchemaAndJsonBenchmarks  - schema validation + JSON mapping"
-    [compound]="CompoundFileBenchmarks   - compound file read/write (vs Lucene.NET)"
-    [indexsort]="IndexSortBenchmarks      - index-time sort + early termination"
+    [compound]="CompoundFileIndex/SearchBenchmarks - compound file read/write (vs Lucene.NET)"
+    [indexsort]="IndexSortIndex/SearchBenchmarks   - index-time sort + early termination"
     [blockjoin]="BlockJoinBenchmarks      - block-join queries (vs Lucene.NET Join)"
 )
 SUITE_ORDER=(all index query analysis boolean phrase prefix fuzzy wildcard deletion smallindex tokenbudget diagnostics suggester schemajson compound indexsort blockjoin)
@@ -100,6 +101,7 @@ while [[ $# -gt 0 ]]; do
         --doccount) DOC_COUNT="$2"; shift 2 ;;
         --dry)     DRY=true;       shift ;;
         --list)    LIST=true;      shift ;;
+        --gcdump)  GCDUMP=true;    shift ;;
         --help|-h) HELP=true;      shift ;;
         --)        shift; EXTRA_ARGS+=("$@"); break ;;
         *)         EXTRA_ARGS+=("$1"); shift ;;
@@ -283,6 +285,16 @@ if $DRY; then
     fi
     echo ""
     exit 0
+fi
+
+# ── GC dump tool check ─────────────────────────────────────────────────────────
+if $GCDUMP; then
+    RUN_ARGS+=(--gcdump)
+    if ! command -v dotnet-gcdump &>/dev/null; then
+        echo "Installing dotnet-gcdump global tool..."
+        dotnet tool install -g dotnet-gcdump
+    fi
+    echo "GcDump: enabled"
 fi
 
 # ── Execute ────────────────────────────────────────────────────────────────────

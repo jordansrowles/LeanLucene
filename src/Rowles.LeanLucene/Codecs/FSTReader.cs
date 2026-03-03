@@ -183,8 +183,9 @@ internal sealed class FSTReader
     /// <summary>Returns all terms within Levenshtein distance for a field, with edit distances.
     /// Uses prefix-sharing DP on sorted terms: consecutive terms sharing a prefix reuse
     /// the Levenshtein row up to the longest common prefix. Dead prefixes (row min > maxEdits)
-    /// skip ahead via binary search.</summary>
-    public List<(string Term, long Offset, int Distance)> GetFuzzyMatches(string fieldPrefix, ReadOnlySpan<char> queryTerm, int maxEdits)
+    /// skip ahead via binary search.
+    /// When more than <paramref name="maxExpansions"/> terms match, only the closest are kept.</summary>
+    public List<(string Term, long Offset, int Distance)> GetFuzzyMatches(string fieldPrefix, ReadOnlySpan<char> queryTerm, int maxEdits, int maxExpansions = 64)
     {
         int prefixByteCount = Encoding.UTF8.GetByteCount(fieldPrefix);
         Span<byte> prefixUtf8 = prefixByteCount <= 256 ? stackalloc byte[prefixByteCount] : new byte[prefixByteCount];
@@ -200,9 +201,10 @@ internal sealed class FSTReader
 
         // Non-ASCII queries fall back to the original per-term bounded Levenshtein
         if (!queryIsAscii)
-            return GetFuzzyMatchesFallback(fieldPrefix, queryTerm, maxEdits, prefixUtf8, start);
+            return GetFuzzyMatchesFallback(fieldPrefix, queryTerm, maxEdits, maxExpansions, prefixUtf8, start);
 
-        var results = new List<(string, long, int)>();
+        // Phase 1: collect (ordinal, distance) pairs without decoding strings
+        var candidates = new List<(int Ordinal, int Distance)>();
         int qLen = queryByteCount; // ASCII: byte count == char count
         int rowSize = qLen + 1;
 
@@ -216,8 +218,12 @@ internal sealed class FSTReader
         for (int j = 0; j <= qLen; j++)
             dpStack[0][j] = j;
 
-        int prevBareStart = -1;
-        int prevBareLen = 0;
+        // Track the dpStack source term separately from prevBare.
+        // Length-filtered and dead terms may not fully compute dpStack rows,
+        // so LCP must be computed against the term that last modified the stack.
+        int dpBareStart = -1;
+        int dpBareLen = 0;
+        int dpValidDepth = 0; // dpStack[0..dpValidDepth] are valid
 
         for (int idx = start; idx < _termCount; idx++)
         {
@@ -230,20 +236,15 @@ internal sealed class FSTReader
 
             // Length filter: edit distance is at least |len difference|
             if (Math.Abs(bareLen - qLen) > maxEdits)
-            {
-                // Still update prevBare so LCP works for the next term
-                prevBareStart = _keyStarts[idx] + prefixByteCount;
-                prevBareLen = bareLen;
                 continue;
-            }
 
-            // Find LCP with previous bare term to reuse DP rows
+            // Find LCP with the last term that modified dpStack
             int lcp = 0;
-            if (prevBareStart >= 0)
+            if (dpBareStart >= 0)
             {
-                var prevBare = _keyData.AsSpan(prevBareStart, prevBareLen);
-                int minLen = Math.Min(prevBareLen, bareLen);
-                while (lcp < minLen && prevBare[lcp] == bare[lcp])
+                var dpBare = _keyData.AsSpan(dpBareStart, dpBareLen);
+                int minLen = Math.Min(Math.Min(dpBareLen, bareLen), dpValidDepth);
+                while (lcp < minLen && dpBare[lcp] == bare[lcp])
                     lcp++;
             }
 
@@ -261,6 +262,7 @@ internal sealed class FSTReader
 
             // Advance DP from LCP depth to full bare length
             bool dead = false;
+            int lastComputedDepth = lcp;
             for (int d = lcp; d < bareLen; d++)
             {
                 var prevRow = dpStack[d];
@@ -281,6 +283,7 @@ internal sealed class FSTReader
                     if (val < rowMin) rowMin = val;
                 }
 
+                lastComputedDepth = d + 1;
                 if (rowMin > maxEdits)
                 {
                     dead = true;
@@ -288,29 +291,40 @@ internal sealed class FSTReader
                 }
             }
 
-            // Always update prevBare for LCP sharing with the next term,
-            // regardless of whether this term was dead or matched.
-            prevBareStart = _keyStarts[idx] + prefixByteCount;
-            prevBareLen = bareLen;
+            // Update dpStack source to this term (it actually modified the stack)
+            dpBareStart = _keyStarts[idx] + prefixByteCount;
+            dpBareLen = bareLen;
+            dpValidDepth = lastComputedDepth;
 
             if (!dead)
             {
                 int finalDist = dpStack[bareLen][qLen];
                 if (finalDist <= maxEdits)
-                    results.Add((DecodeKey(idx), _offsets[idx], finalDist));
+                    candidates.Add((idx, finalDist));
             }
         }
+
+        // Phase 2: truncate to maxExpansions closest matches, then decode strings
+        if (maxExpansions > 0 && candidates.Count > maxExpansions)
+        {
+            candidates.Sort((a, b) => a.Distance.CompareTo(b.Distance));
+            candidates.RemoveRange(maxExpansions, candidates.Count - maxExpansions);
+        }
+
+        var results = new List<(string, long, int)>(candidates.Count);
+        foreach (var (ordinal, distance) in candidates)
+            results.Add((DecodeKey(ordinal), _offsets[ordinal], distance));
 
         return results;
     }
 
     /// <summary>Original O(T) linear scan fallback for non-ASCII queries.</summary>
     private List<(string Term, long Offset, int Distance)> GetFuzzyMatchesFallback(
-        string fieldPrefix, ReadOnlySpan<char> queryTerm, int maxEdits,
+        string fieldPrefix, ReadOnlySpan<char> queryTerm, int maxEdits, int maxExpansions,
         ReadOnlySpan<byte> prefixUtf8, int start)
     {
         int queryTermLen = queryTerm.Length;
-        var results = new List<(string, long, int)>();
+        var candidates = new List<(int Ordinal, int Distance)>();
 
         for (int i = start; i < _termCount; i++)
         {
@@ -326,8 +340,20 @@ internal sealed class FSTReader
 
             int distance = LevenshteinDistance.ComputeBounded(queryTerm, bareTerm, maxEdits);
             if (distance <= maxEdits)
-                results.Add((fullTerm, _offsets[i], distance));
+                candidates.Add((i, distance));
         }
+
+        // Truncate to maxExpansions closest matches
+        if (maxExpansions > 0 && candidates.Count > maxExpansions)
+        {
+            candidates.Sort((a, b) => a.Distance.CompareTo(b.Distance));
+            candidates.RemoveRange(maxExpansions, candidates.Count - maxExpansions);
+        }
+
+        var results = new List<(string, long, int)>(candidates.Count);
+        foreach (var (ordinal, distance) in candidates)
+            results.Add((DecodeKey(ordinal), _offsets[ordinal], distance));
+
         return results;
     }
 

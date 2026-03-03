@@ -33,6 +33,7 @@ public class TokenBudgetBenchmarks
     }
 
     [Benchmark(Baseline = true)]
+    [MethodImpl(MethodImplOptions.NoInlining)]
     public int LeanLucene_Index_NoBudget()
     {
         return IndexWithConfig(new IndexWriterConfig
@@ -43,6 +44,7 @@ public class TokenBudgetBenchmarks
     }
 
     [Benchmark]
+    [MethodImpl(MethodImplOptions.NoInlining)]
     public int LeanLucene_Index_WithBudget_Truncate()
     {
         return IndexWithConfig(new IndexWriterConfig
@@ -55,6 +57,7 @@ public class TokenBudgetBenchmarks
     }
 
     [Benchmark]
+    [MethodImpl(MethodImplOptions.NoInlining)]
     public int LeanLucene_Index_WithBudget_Reject()
     {
         return IndexWithConfig(new IndexWriterConfig

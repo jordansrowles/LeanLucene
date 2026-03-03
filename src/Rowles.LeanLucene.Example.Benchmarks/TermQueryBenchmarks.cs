@@ -70,6 +70,7 @@ public class TermQueryBenchmarks
     }
 
     [Benchmark(Baseline = true)]
+    [MethodImpl(MethodImplOptions.NoInlining)]
     public int LeanLucene_TermQuery()
     {
         var topDocs = _leanSearcher!.Search(new LeanTermQuery("body", QueryTerm), TopN);
@@ -77,6 +78,7 @@ public class TermQueryBenchmarks
     }
 
     [Benchmark]
+    [MethodImpl(MethodImplOptions.NoInlining)]
     public int LuceneNet_TermQuery()
     {
         var query = new LuceneTermQuery(new Term("body", QueryTerm));

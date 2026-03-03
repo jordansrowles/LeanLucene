@@ -11,7 +11,7 @@ using LeanTextField = Rowles.LeanLucene.Document.Fields.TextField;
 namespace Rowles.LeanLucene.Example.Benchmarks;
 
 /// <summary>
-/// Measures index-time sort overhead and sorted-search early termination benefit.
+/// Measures sorted-search benefit: early termination (sorted index) vs post-sort (unsorted index).
 /// </summary>
 [MemoryDiagnoser]
 [HtmlExporter]
@@ -20,7 +20,7 @@ namespace Rowles.LeanLucene.Example.Benchmarks;
 [RPlotExporter]
 [KeepBenchmarkFiles]
 [SimpleJob]
-public class IndexSortBenchmarks
+public class IndexSortSearchBenchmarks
 {
     private const int TopN = 25;
 
@@ -29,9 +29,6 @@ public class IndexSortBenchmarks
     [ParamsSource(nameof(DocCounts))]
     public int DocumentCount { get; set; }
 
-    private (string Body, double Price)[] _documentsWithPrices = [];
-
-    // Pre-built indices for search benchmarks
     private string _unsortedPath = string.Empty;
     private string _sortedPath = string.Empty;
     private LeanMMapDirectory? _unsortedDir;
@@ -42,8 +39,8 @@ public class IndexSortBenchmarks
     [GlobalSetup]
     public void Setup()
     {
-        _documentsWithPrices = BenchmarkData.BuildDocumentsWithPrices(DocumentCount);
-        BuildSearchIndices();
+        var documentsWithPrices = BenchmarkData.BuildDocumentsWithPrices(DocumentCount);
+        BuildSearchIndices(documentsWithPrices);
     }
 
     [GlobalCleanup]
@@ -59,88 +56,22 @@ public class IndexSortBenchmarks
     }
 
     [Benchmark(Baseline = true)]
-    public int LeanLucene_Index_Unsorted()
-    {
-        var path = Path.Combine(Path.GetTempPath(), $"leanlucene-bench-sort-{Guid.NewGuid():N}");
-        Directory.CreateDirectory(path);
-
-        try
-        {
-            var directory = new LeanMMapDirectory(path);
-            using var writer = new IndexWriter(directory, new IndexWriterConfig
-            {
-                MaxBufferedDocs = 10_000,
-                RamBufferSizeMB = 256
-            });
-
-            IndexDocuments(writer);
-            writer.Commit();
-            return _documentsWithPrices.Length;
-        }
-        finally
-        {
-            if (Directory.Exists(path))
-                Directory.Delete(path, recursive: true);
-        }
-    }
-
-    [Benchmark]
-    public int LeanLucene_Index_Sorted()
-    {
-        var path = Path.Combine(Path.GetTempPath(), $"leanlucene-bench-sort-{Guid.NewGuid():N}");
-        Directory.CreateDirectory(path);
-
-        try
-        {
-            var directory = new LeanMMapDirectory(path);
-            using var writer = new IndexWriter(directory, new IndexWriterConfig
-            {
-                MaxBufferedDocs = 10_000,
-                RamBufferSizeMB = 256,
-                IndexSort = new IndexSort(SortField.Numeric("price"))
-            });
-
-            IndexDocuments(writer);
-            writer.Commit();
-            return _documentsWithPrices.Length;
-        }
-        finally
-        {
-            if (Directory.Exists(path))
-                Directory.Delete(path, recursive: true);
-        }
-    }
-
-    [Benchmark]
+    [MethodImpl(MethodImplOptions.NoInlining)]
     public int LeanLucene_SortedSearch_EarlyTermination()
     {
-        // Search on pre-sorted index with matching sort — can early-terminate
         var topDocs = _sortedSearcher!.Search(new TermQuery("body", "product"), TopN, SortField.Numeric("price"));
         return topDocs.TotalHits;
     }
 
     [Benchmark]
+    [MethodImpl(MethodImplOptions.NoInlining)]
     public int LeanLucene_SortedSearch_PostSort()
     {
-        // Search on unsorted index — must post-sort results
         var topDocs = _unsortedSearcher!.Search(new TermQuery("body", "product"), TopN, SortField.Numeric("price"));
         return topDocs.TotalHits;
     }
 
-    private void IndexDocuments(IndexWriter writer)
-    {
-        for (int i = 0; i < _documentsWithPrices.Length; i++)
-        {
-            var (body, price) = _documentsWithPrices[i];
-            var doc = new LeanDocument();
-            doc.Add(new LeanStringField("id", i.ToString(System.Globalization.CultureInfo.InvariantCulture)));
-            doc.Add(new LeanTextField("body", body));
-            doc.Add(new NumericField("price", price));
-            writer.AddDocument(doc);
-        }
-    }
-
-    private void BuildSearchIndices()
+    private void BuildSearchIndices((string Body, double Price)[] documentsWithPrices)
     {
         _unsortedPath = Path.Combine(Path.GetTempPath(), $"leanlucene-bench-sort-ns-{Guid.NewGuid():N}");
         Directory.CreateDirectory(_unsortedPath);
@@ -152,7 +83,7 @@ public class IndexSortBenchmarks
             RamBufferSizeMB = 256
         }))
         {
-            IndexDocuments(writer);
+            IndexDocuments(writer, documentsWithPrices);
             writer.Commit();
         }
         _unsortedSearcher = new LeanIndexSearcher(_unsortedDir);
@@ -168,9 +99,22 @@ public class IndexSortBenchmarks
             IndexSort = new IndexSort(SortField.Numeric("price"))
         }))
         {
-            IndexDocuments(writer);
+            IndexDocuments(writer, documentsWithPrices);
             writer.Commit();
         }
         _sortedSearcher = new LeanIndexSearcher(_sortedDir);
+    }
+
+    private static void IndexDocuments(IndexWriter writer, (string Body, double Price)[] documentsWithPrices)
+    {
+        for (int i = 0; i < documentsWithPrices.Length; i++)
+        {
+            var (body, price) = documentsWithPrices[i];
+            var doc = new LeanDocument();
+            doc.Add(new LeanStringField("id", i.ToString(System.Globalization.CultureInfo.InvariantCulture)));
+            doc.Add(new LeanTextField("body", body));
+            doc.Add(new NumericField("price", price));
+            writer.AddDocument(doc);
+        }
     }
 }

@@ -70,6 +70,7 @@ public class SuggesterBenchmarks
     }
 
     [Benchmark(Baseline = true)]
+    [MethodImpl(MethodImplOptions.NoInlining)]
     public int LeanLucene_DidYouMean()
     {
         int total = 0;
@@ -82,6 +83,7 @@ public class SuggesterBenchmarks
     }
 
     [Benchmark]
+    [MethodImpl(MethodImplOptions.NoInlining)]
     public int LuceneNet_SpellChecker()
     {
         int total = 0;

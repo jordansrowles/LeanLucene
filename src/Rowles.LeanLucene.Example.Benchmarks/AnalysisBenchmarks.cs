@@ -42,6 +42,7 @@ public class AnalysisBenchmarks
     }
 
     [Benchmark(Baseline = true)]
+    [MethodImpl(MethodImplOptions.NoInlining)]
     public int LeanLucene_Analyse()
     {
         int totalTokens = 0;
@@ -54,6 +55,7 @@ public class AnalysisBenchmarks
     }
 
     [Benchmark]
+    [MethodImpl(MethodImplOptions.NoInlining)]
     public int LuceneNet_Analyse()
     {
         int totalTokens = 0;

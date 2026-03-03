@@ -35,6 +35,7 @@ public class SmallIndexBenchmarks
     }
 
     [Benchmark]
+    [MethodImpl(MethodImplOptions.NoInlining)]
     public int IndexAndQuery_Roundtrip()
     {
         var path = Path.Combine(Path.GetTempPath(), $"leanlucene-bench-small-{Guid.NewGuid():N}");

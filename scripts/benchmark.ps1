@@ -93,6 +93,8 @@ param(
 
     [switch]$Dry,
 
+    [switch]$GcDump,
+
     [Parameter(ValueFromRemainingArguments = $true)]
     [string[]]$BenchmarkArgs
 )
@@ -113,8 +115,8 @@ $suiteDescriptions = [ordered]@{
     diagnostics = 'DiagnosticsBenchmarks   - SlowQueryLog + Analytics hook overhead'
     suggester  = 'SuggesterBenchmarks      - DidYouMean spelling (vs Lucene.NET SpellChecker)'
     schemajson = 'SchemaAndJsonBenchmarks  - schema validation + JSON mapping'
-    compound   = 'CompoundFileBenchmarks   - compound file read/write (vs Lucene.NET)'
-    indexsort  = 'IndexSortBenchmarks      - index-time sort + early termination'
+    compound   = 'CompoundFileIndex/SearchBenchmarks - compound file read/write (vs Lucene.NET)'
+    indexsort  = 'IndexSortIndex/SearchBenchmarks   - index-time sort + early termination'
     blockjoin  = 'BlockJoinBenchmarks      - block-join queries (vs Lucene.NET Join)'
 }
 
@@ -297,6 +299,15 @@ if ($Dry) {
     }
     Write-Host ""
     exit 0
+}
+
+if ($GcDump) {
+    $runArgs += '--gcdump'
+    if (-not (Get-Command dotnet-gcdump -ErrorAction SilentlyContinue)) {
+        Write-Host 'Installing dotnet-gcdump global tool...'
+        dotnet tool install -g dotnet-gcdump
+    }
+    Write-Host "GcDump: enabled"
 }
 
 Write-Host ""

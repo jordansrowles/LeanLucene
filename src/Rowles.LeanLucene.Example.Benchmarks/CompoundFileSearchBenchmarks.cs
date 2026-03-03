@@ -2,11 +2,9 @@ using BenchmarkDotNet.Attributes;
 using Lucene.Net.Analysis.Standard;
 using Lucene.Net.Documents;
 using Lucene.Net.Index;
-using Lucene.Net.Search;
-using LeanTermQuery = Rowles.LeanLucene.Search.Queries.TermQuery;
 using Lucene.Net.Store;
 using Lucene.Net.Util;
-using Rowles.LeanLucene.Store;
+using LeanTermQuery = Rowles.LeanLucene.Search.Queries.TermQuery;
 using LeanDocument = Rowles.LeanLucene.Document.LeanDocument;
 using LeanIndexSearcher = Rowles.LeanLucene.Search.Searcher.IndexSearcher;
 using LeanIndexWriter = Rowles.LeanLucene.Index.Indexer.IndexWriter;
@@ -21,8 +19,7 @@ using LuceneTextField = Lucene.Net.Documents.TextField;
 namespace Rowles.LeanLucene.Example.Benchmarks;
 
 /// <summary>
-/// Compares compound file read/write performance: LeanLucene compound vs non-compound,
-/// plus Lucene.NET compound baseline.
+/// Measures search performance on compound vs non-compound indices: LeanLucene and Lucene.NET.
 /// </summary>
 [MemoryDiagnoser]
 [HtmlExporter]
@@ -31,7 +28,7 @@ namespace Rowles.LeanLucene.Example.Benchmarks;
 [RPlotExporter]
 [KeepBenchmarkFiles]
 [SimpleJob]
-public class CompoundFileBenchmarks
+public class CompoundFileSearchBenchmarks
 {
     private const int TopN = 25;
 
@@ -40,9 +37,6 @@ public class CompoundFileBenchmarks
     [ParamsSource(nameof(DocCounts))]
     public int DocumentCount { get; set; }
 
-    private string[] _documents = [];
-
-    // Pre-built indices for search benchmarks
     private string _leanNoCompoundPath = string.Empty;
     private string _leanCompoundPath = string.Empty;
     private LeanMMapDirectory? _leanNoCompoundDir;
@@ -57,9 +51,9 @@ public class CompoundFileBenchmarks
     [GlobalSetup]
     public void Setup()
     {
-        _documents = BenchmarkData.BuildDocuments(DocumentCount);
-        BuildLeanSearchIndices();
-        BuildLuceneNetSearchIndex();
+        var documents = BenchmarkData.BuildDocuments(DocumentCount);
+        BuildLeanSearchIndices(documents);
+        BuildLuceneNetSearchIndex(documents);
     }
 
     [GlobalCleanup]
@@ -78,60 +72,7 @@ public class CompoundFileBenchmarks
     }
 
     [Benchmark(Baseline = true)]
-    public int LeanLucene_Index_NoCompound()
-    {
-        var path = Path.Combine(Path.GetTempPath(), $"leanlucene-bench-cfs-{Guid.NewGuid():N}");
-        System.IO.Directory.CreateDirectory(path);
-
-        try
-        {
-            var directory = new LeanMMapDirectory(path);
-            using var writer = new LeanIndexWriter(directory, new LeanIndexWriterConfig
-            {
-                MaxBufferedDocs = 10_000,
-                RamBufferSizeMB = 256,
-                UseCompoundFile = false
-            });
-
-            IndexDocuments(writer);
-            writer.Commit();
-            return _documents.Length;
-        }
-        finally
-        {
-            if (System.IO.Directory.Exists(path))
-                System.IO.Directory.Delete(path, recursive: true);
-        }
-    }
-
-    [Benchmark]
-    public int LeanLucene_Index_Compound()
-    {
-        var path = Path.Combine(Path.GetTempPath(), $"leanlucene-bench-cfs-{Guid.NewGuid():N}");
-        System.IO.Directory.CreateDirectory(path);
-
-        try
-        {
-            var directory = new LeanMMapDirectory(path);
-            using var writer = new LeanIndexWriter(directory, new LeanIndexWriterConfig
-            {
-                MaxBufferedDocs = 10_000,
-                RamBufferSizeMB = 256,
-                UseCompoundFile = true
-            });
-
-            IndexDocuments(writer);
-            writer.Commit();
-            return _documents.Length;
-        }
-        finally
-        {
-            if (System.IO.Directory.Exists(path))
-                System.IO.Directory.Delete(path, recursive: true);
-        }
-    }
-
-    [Benchmark]
+    [MethodImpl(MethodImplOptions.NoInlining)]
     public int LeanLucene_Search_NoCompound()
     {
         var topDocs = _leanNoCompoundSearcher!.Search(new LeanTermQuery("body", "search"), TopN);
@@ -139,6 +80,7 @@ public class CompoundFileBenchmarks
     }
 
     [Benchmark]
+    [MethodImpl(MethodImplOptions.NoInlining)]
     public int LeanLucene_Search_Compound()
     {
         var topDocs = _leanCompoundSearcher!.Search(new LeanTermQuery("body", "search"), TopN);
@@ -146,31 +88,7 @@ public class CompoundFileBenchmarks
     }
 
     [Benchmark]
-    public int LuceneNet_Index_Compound()
-    {
-        using var directory = new RAMDirectory();
-        using var analyzer = new StandardAnalyzer(LuceneVersion.LUCENE_48);
-        using var writer = new Lucene.Net.Index.IndexWriter(directory,
-            new Lucene.Net.Index.IndexWriterConfig(LuceneVersion.LUCENE_48, analyzer)
-            {
-                UseCompoundFile = true
-            });
-
-        for (int i = 0; i < _documents.Length; i++)
-        {
-            var doc = new Lucene.Net.Documents.Document
-            {
-                new LuceneStringField("id", i.ToString(System.Globalization.CultureInfo.InvariantCulture), Field.Store.NO),
-                new LuceneTextField("body", _documents[i], Field.Store.NO)
-            };
-            writer.AddDocument(doc);
-        }
-
-        writer.Commit();
-        return _documents.Length;
-    }
-
-    [Benchmark]
+    [MethodImpl(MethodImplOptions.NoInlining)]
     public int LuceneNet_Search_Compound()
     {
         var query = new Lucene.Net.Search.TermQuery(new Term("body", "search"));
@@ -178,18 +96,7 @@ public class CompoundFileBenchmarks
         return topDocs.TotalHits;
     }
 
-    private void IndexDocuments(LeanIndexWriter writer)
-    {
-        for (int i = 0; i < _documents.Length; i++)
-        {
-            var doc = new LeanDocument();
-            doc.Add(new LeanStringField("id", i.ToString(System.Globalization.CultureInfo.InvariantCulture)));
-            doc.Add(new LeanTextField("body", _documents[i]));
-            writer.AddDocument(doc);
-        }
-    }
-
-    private void BuildLeanSearchIndices()
+    private void BuildLeanSearchIndices(string[] documents)
     {
         _leanNoCompoundPath = Path.Combine(Path.GetTempPath(), $"leanlucene-bench-cfs-nc-{Guid.NewGuid():N}");
         System.IO.Directory.CreateDirectory(_leanNoCompoundPath);
@@ -202,7 +109,7 @@ public class CompoundFileBenchmarks
             UseCompoundFile = false
         }))
         {
-            IndexDocuments(writer);
+            IndexDocuments(writer, documents);
             writer.Commit();
         }
         _leanNoCompoundSearcher = new LeanIndexSearcher(_leanNoCompoundDir);
@@ -218,13 +125,13 @@ public class CompoundFileBenchmarks
             UseCompoundFile = true
         }))
         {
-            IndexDocuments(writer);
+            IndexDocuments(writer, documents);
             writer.Commit();
         }
         _leanCompoundSearcher = new LeanIndexSearcher(_leanCompoundDir);
     }
 
-    private void BuildLuceneNetSearchIndex()
+    private void BuildLuceneNetSearchIndex(string[] documents)
     {
         _luceneCompoundDirectory = new RAMDirectory();
         using var analyzer = new StandardAnalyzer(LuceneVersion.LUCENE_48);
@@ -235,12 +142,12 @@ public class CompoundFileBenchmarks
                 UseCompoundFile = true
             }))
         {
-            for (int i = 0; i < _documents.Length; i++)
+            for (int i = 0; i < documents.Length; i++)
             {
                 var doc = new Lucene.Net.Documents.Document
                 {
                     new LuceneStringField("id", i.ToString(System.Globalization.CultureInfo.InvariantCulture), Field.Store.NO),
-                    new LuceneTextField("body", _documents[i], Field.Store.NO)
+                    new LuceneTextField("body", documents[i], Field.Store.NO)
                 };
                 writer.AddDocument(doc);
             }
@@ -249,5 +156,16 @@ public class CompoundFileBenchmarks
 
         _luceneCompoundReader = DirectoryReader.Open(_luceneCompoundDirectory);
         _luceneCompoundSearcher = new LuceneIndexSearcher(_luceneCompoundReader);
+    }
+
+    private static void IndexDocuments(LeanIndexWriter writer, string[] documents)
+    {
+        for (int i = 0; i < documents.Length; i++)
+        {
+            var doc = new LeanDocument();
+            doc.Add(new LeanStringField("id", i.ToString(System.Globalization.CultureInfo.InvariantCulture)));
+            doc.Add(new LeanTextField("body", documents[i]));
+            writer.AddDocument(doc);
+        }
     }
 }

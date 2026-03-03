@@ -35,6 +35,9 @@ public class BooleanQueryBenchmarks
     [ParamsSource(nameof(DocCounts))]
     public int DocumentCount { get; set; }
 
+    [Params("Must", "Should", "MustNot")]
+    public string BooleanType { get; set; } = "Must";
+
     private string _leanIndexPath = string.Empty;
     private LeanMMapDirectory? _leanDirectory;
     private LeanIndexSearcher? _leanSearcher;
@@ -64,69 +67,49 @@ public class BooleanQueryBenchmarks
         _luceneDirectory?.Dispose();
     }
 
-    // --- Must (AND) ---
-
     [Benchmark(Baseline = true)]
-    public int LeanLucene_Must()
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public int LeanLucene_BooleanQuery()
     {
         var bq = new Rowles.LeanLucene.Search.Queries.BooleanQuery();
-        bq.Add(new Rowles.LeanLucene.Search.Queries.TermQuery("body", "search"), Rowles.LeanLucene.Search.Occur.Must);
-        bq.Add(new Rowles.LeanLucene.Search.Queries.TermQuery("body", "benchmark"), Rowles.LeanLucene.Search.Occur.Must);
+        switch (BooleanType)
+        {
+            case "Must":
+                bq.Add(new Rowles.LeanLucene.Search.Queries.TermQuery("body", "search"), Rowles.LeanLucene.Search.Occur.Must);
+                bq.Add(new Rowles.LeanLucene.Search.Queries.TermQuery("body", "benchmark"), Rowles.LeanLucene.Search.Occur.Must);
+                break;
+            case "Should":
+                bq.Add(new Rowles.LeanLucene.Search.Queries.TermQuery("body", "search"), Rowles.LeanLucene.Search.Occur.Should);
+                bq.Add(new Rowles.LeanLucene.Search.Queries.TermQuery("body", "vector"), Rowles.LeanLucene.Search.Occur.Should);
+                break;
+            case "MustNot":
+                bq.Add(new Rowles.LeanLucene.Search.Queries.TermQuery("body", "benchmark"), Rowles.LeanLucene.Search.Occur.Must);
+                bq.Add(new Rowles.LeanLucene.Search.Queries.TermQuery("body", "vector"), Rowles.LeanLucene.Search.Occur.MustNot);
+                break;
+        }
         return _leanSearcher!.Search(bq, TopN).TotalHits;
     }
 
     [Benchmark]
-    public int LuceneNet_Must()
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public int LuceneNet_BooleanQuery()
     {
-        var bq = new Lucene.Net.Search.BooleanQuery
+        var bq = new Lucene.Net.Search.BooleanQuery();
+        switch (BooleanType)
         {
-            { new Lucene.Net.Search.TermQuery(new Term("body", "search")), Occur.MUST },
-            { new Lucene.Net.Search.TermQuery(new Term("body", "benchmark")), Occur.MUST }
-        };
-        return _luceneSearcher!.Search(bq, TopN).TotalHits;
-    }
-
-    // --- Should (OR) ---
-
-    [Benchmark]
-    public int LeanLucene_Should()
-    {
-        var bq = new Rowles.LeanLucene.Search.Queries.BooleanQuery();
-        bq.Add(new Rowles.LeanLucene.Search.Queries.TermQuery("body", "search"), Rowles.LeanLucene.Search.Occur.Should);
-        bq.Add(new Rowles.LeanLucene.Search.Queries.TermQuery("body", "vector"), Rowles.LeanLucene.Search.Occur.Should);
-        return _leanSearcher!.Search(bq, TopN).TotalHits;
-    }
-
-    [Benchmark]
-    public int LuceneNet_Should()
-    {
-        var bq = new Lucene.Net.Search.BooleanQuery
-        {
-            { new Lucene.Net.Search.TermQuery(new Term("body", "search")), Occur.SHOULD },
-            { new Lucene.Net.Search.TermQuery(new Term("body", "vector")), Occur.SHOULD }
-        };
-        return _luceneSearcher!.Search(bq, TopN).TotalHits;
-    }
-
-    // --- MustNot ---
-
-    [Benchmark]
-    public int LeanLucene_MustNot()
-    {
-        var bq = new Rowles.LeanLucene.Search.Queries.BooleanQuery();
-        bq.Add(new Rowles.LeanLucene.Search.Queries.TermQuery("body", "benchmark"), Rowles.LeanLucene.Search.Occur.Must);
-        bq.Add(new Rowles.LeanLucene.Search.Queries.TermQuery("body", "vector"), Rowles.LeanLucene.Search.Occur.MustNot);
-        return _leanSearcher!.Search(bq, TopN).TotalHits;
-    }
-
-    [Benchmark]
-    public int LuceneNet_MustNot()
-    {
-        var bq = new Lucene.Net.Search.BooleanQuery
-        {
-            { new Lucene.Net.Search.TermQuery(new Term("body", "benchmark")), Occur.MUST },
-            { new Lucene.Net.Search.TermQuery(new Term("body", "vector")), Occur.MUST_NOT }
-        };
+            case "Must":
+                bq.Add(new Lucene.Net.Search.TermQuery(new Term("body", "search")), Occur.MUST);
+                bq.Add(new Lucene.Net.Search.TermQuery(new Term("body", "benchmark")), Occur.MUST);
+                break;
+            case "Should":
+                bq.Add(new Lucene.Net.Search.TermQuery(new Term("body", "search")), Occur.SHOULD);
+                bq.Add(new Lucene.Net.Search.TermQuery(new Term("body", "vector")), Occur.SHOULD);
+                break;
+            case "MustNot":
+                bq.Add(new Lucene.Net.Search.TermQuery(new Term("body", "benchmark")), Occur.MUST);
+                bq.Add(new Lucene.Net.Search.TermQuery(new Term("body", "vector")), Occur.MUST_NOT);
+                break;
+        }
         return _luceneSearcher!.Search(bq, TopN).TotalHits;
     }
 

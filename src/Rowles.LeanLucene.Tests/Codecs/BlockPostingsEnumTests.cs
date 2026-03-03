@@ -265,6 +265,77 @@ public sealed class BlockPostingsEnumTests : IDisposable
         Assert.Equal(BlockPostingsEnum.NoMoreDocs, pe.NextDoc());
     }
 
+    [Theory]
+    [InlineData(128)]    // 1 full block, no skip binary search
+    [InlineData(256)]    // 2 blocks
+    [InlineData(1024)]   // 8 blocks
+    [InlineData(10_000)] // 78 blocks — binary search is meaningful
+    [InlineData(100_000)]// 781 blocks — binary search critical
+    public void Advance_BinarySearchSkip_CorrectAtAllScales(int count)
+    {
+        var docIds = new int[count];
+        var freqs = new int[count];
+        for (int i = 0; i < count; i++)
+        {
+            docIds[i] = i * 3; // gaps of 3
+            freqs[i] = 1;
+        }
+
+        var (docPath, meta) = WritePostings(docIds, freqs);
+
+        using var input = new IndexInput(docPath);
+        var pe = BlockPostingsEnum.Create(input, meta.DocStartOffset, meta.SkipOffset, meta.DocFreq);
+
+        // Advance to various targets across the entire range
+        int maxDocId = (count - 1) * 3;
+        int[] targets = [0, 3, 126, 384, count / 2 * 3, (count - 2) * 3, (count - 1) * 3];
+        foreach (int target in targets)
+        {
+            if (target > maxDocId) continue;
+            pe = BlockPostingsEnum.Create(input, meta.DocStartOffset, meta.SkipOffset, meta.DocFreq);
+            int doc = pe.Advance(target);
+            Assert.Equal(target, doc);
+        }
+
+        // Advance to a value between entries (should land on next entry)
+        pe = BlockPostingsEnum.Create(input, meta.DocStartOffset, meta.SkipOffset, meta.DocFreq);
+        int midTarget = (count / 2) * 3 + 1; // between two entries
+        int expected = ((count / 2) + 1) * 3;
+        int result = pe.Advance(midTarget);
+        Assert.Equal(expected, result);
+
+        // Advance past end
+        pe = BlockPostingsEnum.Create(input, meta.DocStartOffset, meta.SkipOffset, meta.DocFreq);
+        Assert.Equal(BlockPostingsEnum.NoMoreDocs, pe.Advance(count * 3 + 1));
+    }
+
+    [Fact]
+    public void Advance_SequentialSkips_AcrossManyBlocks()
+    {
+        // Simulates BooleanQuery follower advancement pattern:
+        // leader iterates, followers call Advance() repeatedly
+        int count = 5000;
+        var docIds = new int[count];
+        var freqs = new int[count];
+        for (int i = 0; i < count; i++)
+        {
+            docIds[i] = i * 2;
+            freqs[i] = 1;
+        }
+
+        var (docPath, meta) = WritePostings(docIds, freqs);
+
+        using var input = new IndexInput(docPath);
+        var pe = BlockPostingsEnum.Create(input, meta.DocStartOffset, meta.SkipOffset, meta.DocFreq);
+
+        // Simulate follower: advance to every 100th doc ID
+        for (int target = 0; target < count * 2; target += 200)
+        {
+            int doc = pe.Advance(target);
+            Assert.Equal(target, doc);
+        }
+    }
+
     [Fact]
     public void MixedFrequencies_LargeValues()
     {

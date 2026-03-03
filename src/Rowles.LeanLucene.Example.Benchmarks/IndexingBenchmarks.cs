@@ -34,6 +34,7 @@ public class IndexingBenchmarks
     }
 
     [Benchmark(Baseline = true)]
+    [MethodImpl(MethodImplOptions.NoInlining)]
     public int LeanLucene_IndexDocuments()
     {
         var path = Path.Combine(Path.GetTempPath(), $"leanlucene-bench-index-{Guid.NewGuid():N}");
@@ -69,6 +70,7 @@ public class IndexingBenchmarks
     }
 
     [Benchmark]
+    [MethodImpl(MethodImplOptions.NoInlining)]
     public int LuceneNet_IndexDocuments()
     {
         using var directory = new Lucene.Net.Store.RAMDirectory();

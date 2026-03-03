@@ -36,6 +36,7 @@ public class SchemaAndJsonBenchmarks
     }
 
     [Benchmark(Baseline = true)]
+    [MethodImpl(MethodImplOptions.NoInlining)]
     public int LeanLucene_Index_NoSchema()
     {
         var path = Path.Combine(Path.GetTempPath(), $"leanlucene-bench-schema-{Guid.NewGuid():N}");
@@ -69,6 +70,7 @@ public class SchemaAndJsonBenchmarks
     }
 
     [Benchmark]
+    [MethodImpl(MethodImplOptions.NoInlining)]
     public int LeanLucene_Index_WithSchema()
     {
         var path = Path.Combine(Path.GetTempPath(), $"leanlucene-bench-schema-{Guid.NewGuid():N}");
@@ -107,6 +109,7 @@ public class SchemaAndJsonBenchmarks
     }
 
     [Benchmark]
+    [MethodImpl(MethodImplOptions.NoInlining)]
     public int LeanLucene_JsonMapping()
     {
         int fieldCount = 0;

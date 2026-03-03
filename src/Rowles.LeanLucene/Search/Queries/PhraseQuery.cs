@@ -12,18 +12,20 @@ public sealed class PhraseQuery : Query
     public int Slop { get; set; }
 
     /// <summary>Cached qualified term strings ("field\0term") to avoid per-search allocation.</summary>
-    private string[]? _cachedQualifiedTerms;
+    private volatile string[]? _cachedQualifiedTerms;
     public string[] QualifiedTerms
     {
         get
         {
-            if (_cachedQualifiedTerms is null)
+            var cached = _cachedQualifiedTerms;
+            if (cached is null)
             {
-                _cachedQualifiedTerms = new string[Terms.Length];
+                cached = new string[Terms.Length];
                 for (int i = 0; i < Terms.Length; i++)
-                    _cachedQualifiedTerms[i] = string.Concat(Field, "\x00", Terms[i]);
+                    cached[i] = string.Concat(Field, "\x00", Terms[i]);
+                _cachedQualifiedTerms = cached;
             }
-            return _cachedQualifiedTerms;
+            return cached;
         }
     }
 
