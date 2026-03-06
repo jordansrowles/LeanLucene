@@ -5,8 +5,10 @@ namespace Rowles.LeanLucene.Analysis;
 /// </summary>
 public static class StopWords
 {
+    /// <summary>Gets the built-in English stop word list.</summary>
     public static readonly IReadOnlyList<string> English = StopWordFilter.DefaultStopWords;
 
+    /// <summary>Gets the built-in French stop word list.</summary>
     public static readonly IReadOnlyList<string> French =
     [
         "au", "aux", "avec", "ce", "ces", "dans", "de", "des", "du",
@@ -18,6 +20,7 @@ public static class StopWords
         "vous", "c", "d", "j", "l", "m", "n", "s", "t", "y"
     ];
 
+    /// <summary>Gets the built-in German stop word list.</summary>
     public static readonly IReadOnlyList<string> German =
     [
         "aber", "alle", "allem", "allen", "aller", "allerdings", "als",
@@ -45,6 +48,7 @@ public static class StopWords
         "wird", "wo", "zu", "zum", "zur"
     ];
 
+    /// <summary>Gets the built-in Russian stop word list.</summary>
     public static readonly IReadOnlyList<string> Russian =
     [
         "а", "без", "более", "бы", "был", "была", "были", "было",
@@ -62,6 +66,7 @@ public static class StopWords
         "чье", "чья", "эта", "эти", "это", "я"
     ];
 
+    /// <summary>Gets the built-in Chinese stop word list.</summary>
     public static readonly IReadOnlyList<string> Chinese =
     [
         "的", "了", "在", "是", "我", "有", "和", "就", "不", "人",

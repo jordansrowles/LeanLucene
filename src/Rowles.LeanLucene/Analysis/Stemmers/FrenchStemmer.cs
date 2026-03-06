@@ -5,6 +5,7 @@ namespace Rowles.LeanLucene.Analysis.Stemmers;
 /// </summary>
 public sealed class FrenchStemmer : IStemmer
 {
+    /// <inheritdoc/>
     public string Stem(string word)
     {
         if (word.Length <= 3) return word;

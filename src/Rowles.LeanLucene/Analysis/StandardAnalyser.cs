@@ -26,6 +26,11 @@ public sealed class StandardAnalyser : IAnalyser
     private readonly Dictionary<string, string>.AlternateLookup<ReadOnlySpan<char>> _internLookup;
     private readonly int _maxInternCacheSize;
 
+    /// <summary>
+    /// Initialises a new <see cref="StandardAnalyser"/> with the specified intern cache size and stop words.
+    /// </summary>
+    /// <param name="internCacheSize">Maximum number of entries in the internal token string cache. Defaults to 4096.</param>
+    /// <param name="stopWords">Custom stop word list, or <see langword="null"/> to use the built-in English list.</param>
     public StandardAnalyser(int internCacheSize = 4096, IEnumerable<string>? stopWords = null)
     {
         _maxInternCacheSize = internCacheSize;
@@ -33,6 +38,7 @@ public sealed class StandardAnalyser : IAnalyser
         _internLookup = _internCache.GetAlternateLookup<ReadOnlySpan<char>>();
     }
 
+    /// <inheritdoc/>
     public List<Token> Analyse(ReadOnlySpan<char> input)
     {
         _tokeniser.TokeniseOffsets(input, _offsetBuf);
