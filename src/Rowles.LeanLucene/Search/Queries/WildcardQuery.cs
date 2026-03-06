@@ -5,15 +5,22 @@ namespace Rowles.LeanLucene.Search.Queries;
 /// </summary>
 public sealed class WildcardQuery : Query
 {
+    /// <inheritdoc/>
     public override string Field { get; }
+
+    /// <summary>Gets the wildcard pattern where <c>*</c> matches any characters and <c>?</c> matches a single character.</summary>
     public string Pattern { get; }
 
+    /// <summary>Initialises a new <see cref="WildcardQuery"/> for the given field and pattern.</summary>
+    /// <param name="field">The field to search.</param>
+    /// <param name="pattern">The wildcard pattern (<c>*</c> = any chars, <c>?</c> = single char).</param>
     public WildcardQuery(string field, string pattern)
     {
         Field = field;
         Pattern = pattern;
     }
 
+    /// <inheritdoc/>
     public override bool Equals(object? obj) =>
         obj is WildcardQuery other &&
         string.Equals(Field, other.Field, StringComparison.Ordinal) &&
