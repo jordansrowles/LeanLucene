@@ -159,13 +159,15 @@ public sealed partial class IndexSearcher
         var factors = _similarity.PrecomputeFactors(_totalDocCount, docFreq, avgDocLength);
         int docBase = reader.DocBase;
         float boost = query.Boost;
+        reader.TryGetFieldLengths(query.Field, out var fieldLengths);
 
         while (postings.MoveNext())
         {
             int docId = postings.DocId;
             if (!reader.IsLive(docId)) continue;
 
-            int docLength = reader.GetFieldLength(docId, query.Field);
+            int docLength = fieldLengths is not null && (uint)docId < (uint)fieldLengths.Length
+                ? fieldLengths[docId] : 1;
             float score = _similarity.ScorePrecomputed(factors.Factor1, factors.Factor2, postings.Freq, docLength);
             if (boost != 1.0f) score *= boost;
             collector.Collect(docBase + docId, score);
@@ -601,11 +603,13 @@ public sealed partial class IndexSearcher
                 int docFreq = globalDFs.GetValueOrDefault((tq.Field, tq.Term), postings.DocFreq);
                 float avgDocLength = _stats.GetAvgFieldLength(tq.Field);
                 var factors = _similarity.PrecomputeFactors(_totalDocCount, docFreq, avgDocLength);
+                reader.TryGetFieldLengths(tq.Field, out var fieldLengths);
                 while (postings.MoveNext())
                 {
                     int docId = postings.DocId;
                     if (!reader.IsLive(docId)) continue;
-                    int docLength = reader.GetFieldLength(docId, tq.Field);
+                    int docLength = fieldLengths is not null && (uint)docId < (uint)fieldLengths.Length
+                        ? fieldLengths[docId] : 1;
                     float score = _similarity.ScorePrecomputed(factors.Factor1, factors.Factor2, postings.Freq, docLength);
                     results.Add(new ScoreDoc(docId, score));
                 }

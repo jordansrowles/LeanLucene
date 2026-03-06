@@ -163,6 +163,16 @@ public sealed partial class SegmentReader : IDisposable
     }
 
     /// <summary>
+    /// Retrieves the raw field-length array for a given field, allowing callers to
+    /// resolve the array once and index by docId directly in tight loops.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public bool TryGetFieldLengths(string field, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out int[]? lengths)
+    {
+        return _fieldLengthsPerField.TryGetValue(field, out lengths);
+    }
+
+    /// <summary>
     /// Returns an approximate field length using the first available field (for non-field-specific queries).
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]

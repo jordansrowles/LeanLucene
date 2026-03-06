@@ -203,6 +203,10 @@ internal sealed class FSTReader
         if (!queryIsAscii)
             return GetFuzzyMatchesFallback(fieldPrefix, queryTerm, maxEdits, maxExpansions, prefixUtf8, start);
 
+        // Single-edit queries: generate all 1-edit variants and do O(1) hash lookups
+        if (maxEdits == 1)
+            return GetFuzzyMatchesSingleEdit(prefixUtf8, queryUtf8, maxExpansions);
+
         // Phase 1: collect (ordinal, distance) pairs without decoding strings
         var candidates = new List<(int Ordinal, int Distance)>();
         int qLen = queryByteCount; // ASCII: byte count == char count
@@ -314,6 +318,87 @@ internal sealed class FSTReader
         var results = new List<(string, long, int)>(candidates.Count);
         foreach (var (ordinal, distance) in candidates)
             results.Add((DecodeKey(ordinal), _offsets[ordinal], distance));
+
+        return results;
+    }
+
+    /// <summary>
+    /// Optimised path for maxEdits == 1 on ASCII queries. Generates all possible
+    /// single-edit variants (substitution, deletion, insertion with lowercase a-z)
+    /// and performs O(1) hash lookups instead of scanning the entire term dictionary.
+    /// Total lookups: 25L + L + 26(L+1) = 52L + 26 where L is the query length.
+    /// </summary>
+    private List<(string Term, long Offset, int Distance)> GetFuzzyMatchesSingleEdit(
+        ReadOnlySpan<byte> prefixUtf8, ReadOnlySpan<byte> queryUtf8, int maxExpansions)
+    {
+        var results = new List<(string, long, int)>();
+        var seenOffsets = new HashSet<long>();
+        int qLen = queryUtf8.Length;
+        int prefixLen = prefixUtf8.Length;
+
+        // Buffer large enough for prefix + query + 1 byte (insertion case)
+        int maxBufLen = prefixLen + qLen + 1;
+        Span<byte> buffer = maxBufLen <= 256 ? stackalloc byte[maxBufLen] : new byte[maxBufLen];
+        prefixUtf8.CopyTo(buffer);
+
+        // Exact match (distance 0)
+        queryUtf8.CopyTo(buffer[prefixLen..]);
+        if (TryGetPostingsOffset(buffer[..(prefixLen + qLen)], out long exactOffset))
+        {
+            results.Add((Encoding.UTF8.GetString(buffer[..(prefixLen + qLen)]), exactOffset, 0));
+            seenOffsets.Add(exactOffset);
+        }
+
+        // Substitutions: replace each query byte with each of a-z (excluding original)
+        for (int i = 0; i < qLen; i++)
+        {
+            // Reset the term portion each time
+            queryUtf8.CopyTo(buffer[prefixLen..]);
+            byte original = queryUtf8[i];
+            for (byte c = (byte)'a'; c <= (byte)'z'; c++)
+            {
+                if (c == original) continue;
+                buffer[prefixLen + i] = c;
+                if (TryGetPostingsOffset(buffer[..(prefixLen + qLen)], out long offset) && seenOffsets.Add(offset))
+                {
+                    results.Add((Encoding.UTF8.GetString(buffer[..(prefixLen + qLen)]), offset, 1));
+                    if (maxExpansions > 0 && results.Count >= maxExpansions) return results;
+                }
+            }
+        }
+
+        // Deletions: remove each byte position to produce a (qLen-1) term
+        if (qLen > 1)
+        {
+            for (int i = 0; i < qLen; i++)
+            {
+                queryUtf8[..i].CopyTo(buffer[prefixLen..]);
+                queryUtf8[(i + 1)..].CopyTo(buffer[(prefixLen + i)..]);
+                int variantLen = prefixLen + qLen - 1;
+                if (TryGetPostingsOffset(buffer[..variantLen], out long offset) && seenOffsets.Add(offset))
+                {
+                    results.Add((Encoding.UTF8.GetString(buffer[..variantLen]), offset, 1));
+                    if (maxExpansions > 0 && results.Count >= maxExpansions) return results;
+                }
+            }
+        }
+
+        // Insertions: insert each letter at each position to produce a (qLen+1) term
+        for (int i = 0; i <= qLen; i++)
+        {
+            for (byte c = (byte)'a'; c <= (byte)'z'; c++)
+            {
+                queryUtf8[..i].CopyTo(buffer[prefixLen..]);
+                buffer[prefixLen + i] = c;
+                queryUtf8[i..].CopyTo(buffer[(prefixLen + i + 1)..]);
+                int variantLen = prefixLen + qLen + 1;
+                if (TryGetPostingsOffset(buffer[..variantLen], out long offset) && seenOffsets.Add(offset))
+                {
+                    results.Add((Encoding.UTF8.GetString(buffer[..variantLen]), offset, 1));
+                    if (maxExpansions > 0 && results.Count >= maxExpansions) return results;
+                }
+            }
+        }
 
         return results;
     }

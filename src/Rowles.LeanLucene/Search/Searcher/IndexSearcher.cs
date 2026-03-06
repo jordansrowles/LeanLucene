@@ -511,6 +511,7 @@ public sealed partial class IndexSearcher : IDisposable
                 var reader = _readers[i];
                 int docBase = reader.DocBase;
                 bool hasDeletions = reader.HasDeletions;
+                reader.TryGetFieldLengths(query.Field, out var fieldLengths);
 
                 while (postings.MoveNext())
                 {
@@ -518,7 +519,8 @@ public sealed partial class IndexSearcher : IDisposable
                     if (hasDeletions && !reader.IsLive(docId)) continue;
 
                     int tf = postings.Freq;
-                    int docLength = reader.GetFieldLength(docId, query.Field);
+                    int docLength = fieldLengths is not null && (uint)docId < (uint)fieldLengths.Length
+                        ? fieldLengths[docId] : 1;
                     float score = _similarity.ScorePrecomputed(idf, k1BOverAvgDL, tf, docLength);
                     if (boost != 1.0f) score *= boost;
                     collector.Collect(docBase + docId, score);

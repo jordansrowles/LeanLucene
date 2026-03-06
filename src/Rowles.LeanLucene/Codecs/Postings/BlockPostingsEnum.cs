@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Runtime.CompilerServices;
 using System.Runtime.Intrinsics;
 using Rowles.LeanLucene.Store;
@@ -63,7 +64,7 @@ public struct BlockPostingsEnum : IDisposable
         // Read skip entries from the end of the posting list
         docInput.Seek(skipOffset);
         int skipCount = docInput.ReadInt32();
-        var skipEntries = new SkipEntry[skipCount];
+        var skipEntries = ArrayPool<SkipEntry>.Shared.Rent(skipCount);
         for (int i = 0; i < skipCount; i++)
         {
             skipEntries[i] = new SkipEntry
@@ -90,8 +91,8 @@ public struct BlockPostingsEnum : IDisposable
         _skipCount = skipCount;
         _hasPositions = hasPositions;
 
-        _docIdBlock = new int[BlockSize];
-        _freqBlock = new int[BlockSize];
+        _docIdBlock = ArrayPool<int>.Shared.Rent(BlockSize);
+        _freqBlock = ArrayPool<int>.Shared.Rent(BlockSize);
 
         _blockStart = 0;
         _blockCount = 0;
@@ -353,6 +354,11 @@ public struct BlockPostingsEnum : IDisposable
 
     public void Dispose()
     {
-        // BlockPostingsEnum does not own the input streams
+        if (_docIdBlock is not null)
+            ArrayPool<int>.Shared.Return(_docIdBlock);
+        if (_freqBlock is not null)
+            ArrayPool<int>.Shared.Return(_freqBlock);
+        if (_skipEntries is not null)
+            ArrayPool<SkipEntry>.Shared.Return(_skipEntries);
     }
 }

@@ -6,6 +6,7 @@ var benchmarks = new IQuickBenchmark[]
     new AnalysisSanityBenchmark(),
     new IndexingSanityBenchmark(),
     new SearchSanityBenchmark(),
+    new FuzzySearchSanityBenchmark(),
     new DidYouMeanSanityBenchmark(),
     new SpellIndexSanityBenchmark()
 };
