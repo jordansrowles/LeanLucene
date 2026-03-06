@@ -10,6 +10,7 @@ using Rowles.LeanLucene.Analysis;
 /// </summary>
 public sealed class CJKBigramTokeniser : ITokeniser
 {
+    /// <inheritdoc/>
     public List<Token> Tokenise(ReadOnlySpan<char> input)
     {
         var tokens = new List<Token>();

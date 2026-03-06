@@ -5,6 +5,7 @@ namespace Rowles.LeanLucene.Analysis.Filters;
 /// </summary>
 public sealed class LowercaseFilter : ITokenFilter
 {
+    /// <inheritdoc/>
     public void Apply(List<Token> tokens)
     {
         for (int i = 0; i < tokens.Count; i++)
@@ -16,6 +17,10 @@ public sealed class LowercaseFilter : ITokenFilter
         }
     }
 
+    /// <summary>
+    /// Lowercases all characters in the provided character buffer in place.
+    /// </summary>
+    /// <param name="buffer">The character buffer to transform.</param>
     public void Apply(Span<char> buffer)
     {
         for (int i = 0; i < buffer.Length; i++)

@@ -16,6 +16,13 @@ public sealed class LanguageAnalyser : IAnalyser
     private char[] _lowerBuf = new char[64];
     private readonly List<Token> _resultBuffer = new(32);
 
+    /// <summary>
+    /// Initialises a new <see cref="LanguageAnalyser"/> with the specified tokeniser, stop words, and optional stemmer.
+    /// </summary>
+    /// <param name="tokeniser">The tokeniser used to split input text into raw tokens.</param>
+    /// <param name="stopWords">Stop words to remove, or <see langword="null"/> to use the default English list.</param>
+    /// <param name="stemmer">Optional stemmer to reduce tokens to their root form, or <see langword="null"/> to skip stemming.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="tokeniser"/> is <see langword="null"/>.</exception>
     public LanguageAnalyser(ITokeniser tokeniser, IEnumerable<string>? stopWords, IStemmer? stemmer)
     {
         _tokeniser = tokeniser ?? throw new ArgumentNullException(nameof(tokeniser));
@@ -23,6 +30,7 @@ public sealed class LanguageAnalyser : IAnalyser
         _stemmer = stemmer;
     }
 
+    /// <inheritdoc/>
     public List<Token> Analyse(ReadOnlySpan<char> input)
     {
         var rawTokens = _tokeniser.Tokenise(input);

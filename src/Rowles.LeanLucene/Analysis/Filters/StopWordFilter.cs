@@ -19,8 +19,15 @@ public sealed class StopWordFilter : ITokenFilter
 
     private readonly FrozenSet<string> _stopWords;
 
+    /// <summary>
+    /// Initialises a new <see cref="StopWordFilter"/> using the default English stop word list.
+    /// </summary>
     public StopWordFilter() : this(null) { }
 
+    /// <summary>
+    /// Initialises a new <see cref="StopWordFilter"/> with a custom stop word list.
+    /// </summary>
+    /// <param name="customStopWords">A custom set of stop words, or <see langword="null"/> to use <see cref="DefaultStopWords"/>.</param>
     public StopWordFilter(IEnumerable<string>? customStopWords)
     {
         _stopWords = (customStopWords ?? DefaultStopWords).ToFrozenSet(StringComparer.OrdinalIgnoreCase);
@@ -33,6 +40,7 @@ public sealed class StopWordFilter : ITokenFilter
     internal bool IsStopWord(ReadOnlySpan<char> term)
         => _stopWords.GetAlternateLookup<ReadOnlySpan<char>>().Contains(term);
 
+    /// <inheritdoc/>
     public void Apply(List<Token> tokens)
     {
         tokens.RemoveAll(t => _stopWords.Contains(t.Text));
