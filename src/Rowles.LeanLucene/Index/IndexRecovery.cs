@@ -156,7 +156,6 @@ public static class IndexRecovery
     }
 
     /// <summary>Result of crash recovery.</summary>
-    /// <summary>Result of crash recovery.</summary>
     public sealed class RecoveryResult
     {
         /// <summary>Gets the generation number of the recovered commit.</summary>
