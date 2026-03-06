@@ -5,6 +5,11 @@ namespace Rowles.LeanLucene.Index.Segment;
 /// </summary>
 public sealed partial class SegmentReader
 {
+    /// <summary>
+    /// Returns all stored fields for the specified document as a read-only dictionary.
+    /// </summary>
+    /// <param name="docId">The local (segment-relative) document ID.</param>
+    /// <returns>A dictionary mapping field names to their stored values.</returns>
     public IReadOnlyDictionary<string, IReadOnlyList<string>> GetStoredFields(int docId)
     {
         if (_storedReader is null)

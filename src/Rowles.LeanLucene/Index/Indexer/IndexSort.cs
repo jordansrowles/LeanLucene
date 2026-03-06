@@ -9,8 +9,14 @@ namespace Rowles.LeanLucene.Index.Indexer;
 /// </summary>
 public sealed class IndexSort : IEquatable<IndexSort>
 {
+    /// <summary>Gets the sort fields that define the document order within a segment.</summary>
     public IReadOnlyList<SortField> Fields { get; }
 
+    /// <summary>
+    /// Initialises a new <see cref="IndexSort"/> with the specified sort fields.
+    /// </summary>
+    /// <param name="fields">One or more sort fields that define the document ordering. Score sort type is not allowed.</param>
+    /// <exception cref="ArgumentException">Thrown if no fields are provided, or if any field uses <see cref="SortFieldType.Score"/>.</exception>
     public IndexSort(params SortField[] fields)
     {
         if (fields.Length == 0)
@@ -23,6 +29,7 @@ public sealed class IndexSort : IEquatable<IndexSort>
         Fields = fields.ToArray();
     }
 
+    /// <inheritdoc/>
     public bool Equals(IndexSort? other)
     {
         if (other is null || Fields.Count != other.Fields.Count) return false;
@@ -36,8 +43,10 @@ public sealed class IndexSort : IEquatable<IndexSort>
         return true;
     }
 
+    /// <inheritdoc/>
     public override bool Equals(object? obj) => Equals(obj as IndexSort);
 
+    /// <inheritdoc/>
     public override int GetHashCode()
     {
         var hc = new HashCode();
@@ -50,6 +59,7 @@ public sealed class IndexSort : IEquatable<IndexSort>
         return hc.ToHashCode();
     }
 
+    /// <inheritdoc/>
     public override string ToString()
         => string.Join(", ", Fields.Select(f => $"{f.FieldName}:{f.Type}{(f.Descending ? " DESC" : "")}"));
 }

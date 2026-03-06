@@ -14,6 +14,11 @@ public sealed class QueryCache
     private long _hits;
     private long _misses;
 
+    /// <summary>
+    /// Initialises a new <see cref="QueryCache"/> with the specified maximum entry count.
+    /// </summary>
+    /// <param name="maxEntries">The maximum number of entries to hold. Must be at least 1.</param>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown if <paramref name="maxEntries"/> is less than 1.</exception>
     public QueryCache(int maxEntries = 1024)
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(maxEntries, 1);
