@@ -6,6 +6,10 @@ namespace Rowles.LeanLucene.Search;
 /// </summary>
 public static class LevenshteinDistance
 {
+    /// <summary>Computes the Levenshtein edit distance between two character spans.</summary>
+    /// <param name="a">The first string as a span.</param>
+    /// <param name="b">The second string as a span.</param>
+    /// <returns>The minimum number of single-character edits (insertions, deletions, substitutions) to transform <paramref name="a"/> into <paramref name="b"/>.</returns>
     public static int Compute(ReadOnlySpan<char> a, ReadOnlySpan<char> b)
     {
         if (a.IsEmpty) return b.Length;

@@ -17,15 +17,21 @@ public sealed class BlockJoinQuery : Query
     /// </summary>
     public override string Field => ChildQuery.Field;
 
+    /// <summary>Initialises a new <see cref="BlockJoinQuery"/> with the specified child query.</summary>
+    /// <param name="childQuery">The query that matches child documents within the block.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="childQuery"/> is <see langword="null"/>.</exception>
     public BlockJoinQuery(Query childQuery)
     {
         ChildQuery = childQuery ?? throw new ArgumentNullException(nameof(childQuery));
     }
 
+    /// <inheritdoc/>
     public override bool Equals(object? obj) =>
         obj is BlockJoinQuery other && ChildQuery.Equals(other.ChildQuery) && Boost == other.Boost;
 
+    /// <inheritdoc/>
     public override int GetHashCode() => CombineBoost(HashCode.Combine(nameof(BlockJoinQuery), ChildQuery));
 
+    /// <inheritdoc/>
     public override string ToString() => $"BlockJoinQuery({ChildQuery})^{Boost}";
 }
