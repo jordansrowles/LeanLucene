@@ -20,6 +20,11 @@ public sealed unsafe class IndexInput : IDisposable
     private bool _disposed;
     private byte* _ptr;
 
+    /// <summary>
+    /// Opens a file at <paramref name="filePath"/> as a memory-mapped read-only input.
+    /// Acquires a native pointer for the lifetime of this instance.
+    /// </summary>
+    /// <param name="filePath">The full path of the file to open.</param>
     public IndexInput(string filePath)
     {
         var fileInfo = new FileInfo(filePath);
@@ -52,12 +57,17 @@ public sealed unsafe class IndexInput : IDisposable
     /// <summary>Current read position within the file.</summary>
     public long Position => _position;
 
+    /// <summary>Moves the read cursor to the specified absolute byte offset.</summary>
+    /// <param name="position">The byte offset to seek to.</param>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void Seek(long position)
     {
         _position = position;
     }
 
+    /// <summary>Reads and returns the next byte, advancing the position by one.</summary>
+    /// <returns>The next byte in the stream.</returns>
+    /// <exception cref="EndOfStreamException">Thrown if the end of the file has been reached.</exception>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public byte ReadByte()
     {
@@ -68,12 +78,18 @@ public sealed unsafe class IndexInput : IDisposable
         return value;
     }
 
+    /// <summary>Reads the next byte and returns <see langword="true"/> if it is non-zero.</summary>
+    /// <returns><see langword="true"/> if the byte is non-zero; otherwise, <see langword="false"/>.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool ReadBoolean()
     {
         return ReadByte() != 0;
     }
 
+    /// <summary>Reads exactly <paramref name="count"/> bytes and returns them as a new array.</summary>
+    /// <param name="count">The number of bytes to read.</param>
+    /// <returns>A new byte array containing the read bytes.</returns>
+    /// <exception cref="EndOfStreamException">Thrown if fewer than <paramref name="count"/> bytes remain.</exception>
     public byte[] ReadBytes(int count)
     {
         if (_position + count > _length)
@@ -99,6 +115,9 @@ public sealed unsafe class IndexInput : IDisposable
         return span;
     }
 
+    /// <summary>Reads a 32-bit signed integer written in little-endian byte order.</summary>
+    /// <returns>The decoded <see cref="int"/> value.</returns>
+    /// <exception cref="EndOfStreamException">Thrown if fewer than 4 bytes remain.</exception>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public int ReadInt32()
     {
@@ -125,6 +144,9 @@ public sealed unsafe class IndexInput : IDisposable
         _position += byteCount;
     }
 
+    /// <summary>Reads a 64-bit signed integer written in little-endian byte order.</summary>
+    /// <returns>The decoded <see cref="long"/> value.</returns>
+    /// <exception cref="EndOfStreamException">Thrown if fewer than 8 bytes remain.</exception>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public long ReadInt64()
     {
@@ -135,6 +157,9 @@ public sealed unsafe class IndexInput : IDisposable
         return value;
     }
 
+    /// <summary>Reads a 32-bit single-precision floating-point value.</summary>
+    /// <returns>The decoded <see cref="float"/> value.</returns>
+    /// <exception cref="EndOfStreamException">Thrown if fewer than 4 bytes remain.</exception>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public float ReadSingle()
     {
@@ -145,6 +170,9 @@ public sealed unsafe class IndexInput : IDisposable
         return value;
     }
 
+    /// <summary>Reads a 64-bit double-precision floating-point value.</summary>
+    /// <returns>The decoded <see cref="double"/> value.</returns>
+    /// <exception cref="EndOfStreamException">Thrown if fewer than 8 bytes remain.</exception>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public double ReadDouble()
     {
@@ -352,6 +380,7 @@ public sealed unsafe class IndexInput : IDisposable
         NativeMethods.madvise((nint)_ptr, (nuint)_length, 2);
     }
 
+    /// <summary>Releases the memory-mapped file view and underlying file resources.</summary>
     public void Dispose()
     {
         if (_disposed) return;

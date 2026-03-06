@@ -33,18 +33,28 @@ public sealed class PrefixAutomaton : IAutomaton
 {
     private readonly byte[] _prefix;
 
+    /// <summary>
+    /// Initialises a new <see cref="PrefixAutomaton"/> from a string prefix, converted to UTF-8.
+    /// </summary>
+    /// <param name="prefix">The string prefix to match.</param>
     public PrefixAutomaton(string prefix)
     {
         _prefix = Encoding.UTF8.GetBytes(prefix);
     }
 
+    /// <summary>
+    /// Initialises a new <see cref="PrefixAutomaton"/> from a raw UTF-8 byte prefix.
+    /// </summary>
+    /// <param name="prefixUtf8">The UTF-8 byte prefix to match.</param>
     public PrefixAutomaton(ReadOnlySpan<byte> prefixUtf8)
     {
         _prefix = prefixUtf8.ToArray();
     }
 
+    /// <inheritdoc/>
     public int Start => 0;
 
+    /// <inheritdoc/>
     public int Step(int state, byte input)
     {
         if (state < 0) return -1;
@@ -53,8 +63,10 @@ public sealed class PrefixAutomaton : IAutomaton
         return input == _prefix[state] ? state + 1 : -1;
     }
 
+    /// <inheritdoc/>
     public bool IsAccept(int state) => state >= _prefix.Length;
 
+    /// <inheritdoc/>
     public bool CanMatch(int state) => state >= 0;
 }
 
@@ -71,6 +83,11 @@ public sealed class WildcardAutomaton : IAutomaton
     private readonly bool[] _canMatch;
     private readonly int _stateCount;
 
+    /// <summary>
+    /// Initialises a new <see cref="WildcardAutomaton"/> for the given wildcard pattern.
+    /// Constructs the DFA via NFA-to-DFA subset construction at construction time.
+    /// </summary>
+    /// <param name="pattern">The wildcard pattern. Use '*' for any sequence of bytes and '?' for any single byte.</param>
     public WildcardAutomaton(string pattern)
     {
         // Convert pattern to UTF-8 bytes, treating '*' and '?' specially
@@ -248,16 +265,20 @@ public sealed class WildcardAutomaton : IAutomaton
         }
     }
 
+    /// <inheritdoc/>
     public int Start => 0;
 
+    /// <inheritdoc/>
     public int Step(int state, byte input)
     {
         if (state < 0 || state >= _stateCount) return -1;
         return _transitions[state * 256 + input];
     }
 
+    /// <inheritdoc/>
     public bool IsAccept(int state) => state >= 0 && state < _stateCount && _accept[state];
 
+    /// <inheritdoc/>
     public bool CanMatch(int state) => state >= 0 && state < _stateCount && _canMatch[state];
 }
 
@@ -274,9 +295,19 @@ public sealed class LevenshteinAutomaton : IAutomaton
     private readonly bool[] _canMatch;
     private readonly int _stateCount;
 
+    /// <summary>
+    /// Initialises a new <see cref="LevenshteinAutomaton"/> for the given term and maximum edit distance.
+    /// </summary>
+    /// <param name="term">The reference term string.</param>
+    /// <param name="maxEdits">The maximum allowed Levenshtein distance (typically 1 or 2).</param>
     public LevenshteinAutomaton(string term, int maxEdits)
         : this(Encoding.UTF8.GetBytes(term), maxEdits) { }
 
+    /// <summary>
+    /// Initialises a new <see cref="LevenshteinAutomaton"/> from a raw UTF-8 byte representation of the term.
+    /// </summary>
+    /// <param name="termUtf8">The UTF-8 bytes of the reference term.</param>
+    /// <param name="maxEdits">The maximum allowed Levenshtein distance (typically 1 or 2).</param>
     public LevenshteinAutomaton(ReadOnlySpan<byte> termUtf8, int maxEdits)
     {
         byte[] term = termUtf8.ToArray();
@@ -438,16 +469,20 @@ public sealed class LevenshteinAutomaton : IAutomaton
         }
     }
 
+    /// <inheritdoc/>
     public int Start => 0;
 
+    /// <inheritdoc/>
     public int Step(int state, byte input)
     {
         if (state < 0 || state >= _stateCount) return -1;
         return _transitions[state * 256 + input];
     }
 
+    /// <inheritdoc/>
     public bool IsAccept(int state) => state >= 0 && state < _stateCount && _accept[state];
 
+    /// <inheritdoc/>
     public bool CanMatch(int state) => state >= 0 && state < _stateCount && _canMatch[state];
 }
 

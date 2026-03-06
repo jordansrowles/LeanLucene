@@ -43,11 +43,23 @@ public sealed partial class SegmentReader : IDisposable
     private ParentBitSet? _parentBitSet;
     private bool _parentBitSetLoaded;
 
+    /// <summary>Gets or sets the document base offset for this reader within the global document namespace.</summary>
     public int DocBase { get; set; }
 
+    /// <summary>Gets the segment metadata for this reader.</summary>
     public SegmentInfo Info => _info;
+
+    /// <summary>Gets the total number of documents in this segment, including deleted documents.</summary>
     public int MaxDoc => _info.DocCount;
 
+    /// <summary>
+    /// Initialises a new <see cref="SegmentReader"/> for the given segment.
+    /// Opens all required files and validates the segment's on-disk data.
+    /// </summary>
+    /// <param name="directory">The directory containing the segment files.</param>
+    /// <param name="info">The segment metadata.</param>
+    /// <exception cref="FileNotFoundException">Thrown if required segment files are missing.</exception>
+    /// <exception cref="InvalidDataException">Thrown if segment files contain corrupted or incompatible data.</exception>
     public SegmentReader(MMapDirectory directory, SegmentInfo info)
     {
         _directory = directory;
@@ -112,6 +124,11 @@ public sealed partial class SegmentReader : IDisposable
         // to avoid startup regression for simple TermQuery and BooleanQuery operations
     }
 
+    /// <summary>
+    /// Returns <see langword="true"/> if the document with the given ID has not been deleted.
+    /// </summary>
+    /// <param name="docId">The local (segment-relative) document ID to check.</param>
+    /// <returns><see langword="true"/> if the document is live; <see langword="false"/> if deleted.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool IsLive(int docId) => _liveDocs?.IsLive(docId) ?? true;
 
@@ -302,6 +319,7 @@ public sealed partial class SegmentReader : IDisposable
         return found;
     }
 
+    /// <inheritdoc/>
     public void Dispose()
     {
         _posInput.Dispose();

@@ -68,6 +68,13 @@ public sealed partial class IndexWriter : IDisposable
     private readonly CancellationTokenSource _mergeCts = new();
     private readonly Lock _mergeLock = new();
 
+    /// <summary>
+    /// Initialises a new <see cref="IndexWriter"/> for the given directory with the specified configuration.
+    /// Acquires an exclusive write lock on the directory. Only one writer may be open per directory at a time.
+    /// </summary>
+    /// <param name="directory">The directory where index files will be written.</param>
+    /// <param name="config">Writer configuration including analyser, flush thresholds, and deletion policy.</param>
+    /// <exception cref="WriteLockException">Thrown if another <see cref="IndexWriter"/> already holds the write lock for this directory.</exception>
     public IndexWriter(MMapDirectory directory, IndexWriterConfig config)
     {
         _directory = directory;
@@ -103,6 +110,14 @@ public sealed partial class IndexWriter : IDisposable
         LoadLatestCommit();
     }
 
+    /// <summary>
+    /// Indexes a single document. Validates the document against the schema if one is configured.
+    /// May block if <see cref="IndexWriterConfig.MaxQueuedDocs"/> backpressure is enabled.
+    /// Automatically flushes a segment when the RAM or document count threshold is reached.
+    /// </summary>
+    /// <param name="doc">The document to index.</param>
+    /// <exception cref="ObjectDisposedException">Thrown if the writer has been disposed.</exception>
+    /// <exception cref="SchemaValidationException">Thrown if the document violates the configured schema.</exception>
     public void AddDocument(LeanDocument doc)
     {
         ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
@@ -209,6 +224,7 @@ public sealed partial class IndexWriter : IDisposable
     /// documents are children. Children are stored contiguously before their parent
     /// in the segment, enabling block-join queries.
     /// </summary>
+    /// <param name="block">The documents to index as a block. The last element is the parent. Must have at least 2 documents.</param>
     /// <exception cref="ArgumentException">Thrown if the block has fewer than 2 documents.</exception>
     public void AddDocumentBlock(IReadOnlyList<LeanDocument> block)
     {
@@ -279,6 +295,12 @@ public sealed partial class IndexWriter : IDisposable
         }
     }
 
+    /// <summary>
+    /// Flushes all buffered documents and pending deletions to disk, writes a new
+    /// <c>segments_N</c> commit file, and applies the configured deletion policy.
+    /// Schedules a background merge after the flush.
+    /// </summary>
+    /// <exception cref="ObjectDisposedException">Thrown if the writer has been disposed.</exception>
     public void Commit()
     {
         ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
@@ -375,6 +397,10 @@ public sealed partial class IndexWriter : IDisposable
         stats.WriteTo(IndexStats.GetStatsPath(_directory.DirectoryPath, generation));
     }
 
+    /// <summary>
+    /// Releases all resources held by this writer, including the directory write lock.
+    /// Cancels any background merge task and waits up to 10 seconds for it to complete.
+    /// </summary>
     public void Dispose()
     {
         if (Interlocked.CompareExchange(ref _disposed, 1, 0) != 0) return;

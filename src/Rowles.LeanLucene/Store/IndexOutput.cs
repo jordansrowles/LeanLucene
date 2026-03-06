@@ -19,6 +19,10 @@ public sealed class IndexOutput : IDisposable
     /// <summary>Current logical write position (buffered + flushed).</summary>
     public long Position => _stream.Position + _bufferPosition;
 
+    /// <summary>
+    /// Creates a new file at <paramref name="filePath"/> and opens it for buffered sequential writing.
+    /// </summary>
+    /// <param name="filePath">The full path of the file to create.</param>
     public IndexOutput(string filePath)
     {
         _stream = new FileStream(filePath, FileMode.Create, FileAccess.Write, FileShare.None);
@@ -36,6 +40,8 @@ public sealed class IndexOutput : IDisposable
         _stream.Seek(position, SeekOrigin.Begin);
     }
 
+    /// <summary>Writes the bytes from the given span to the output, flushing the internal buffer as needed.</summary>
+    /// <param name="data">The bytes to write.</param>
     public void WriteBytes(ReadOnlySpan<byte> data)
     {
         int offset = 0;
@@ -52,8 +58,12 @@ public sealed class IndexOutput : IDisposable
         }
     }
 
+    /// <summary>Writes all bytes from the given array to the output.</summary>
+    /// <param name="data">The byte array to write.</param>
     public void WriteBytes(byte[] data) => WriteBytes(data.AsSpan());
 
+    /// <summary>Writes a 32-bit signed integer in little-endian byte order.</summary>
+    /// <param name="value">The integer to write.</param>
     public void WriteInt32(int value)
     {
         Span<byte> tmp = stackalloc byte[sizeof(int)];
@@ -61,6 +71,8 @@ public sealed class IndexOutput : IDisposable
         WriteBytes(tmp);
     }
 
+    /// <summary>Writes a 64-bit signed integer in little-endian byte order.</summary>
+    /// <param name="value">The long integer to write.</param>
     public void WriteInt64(long value)
     {
         Span<byte> tmp = stackalloc byte[sizeof(long)];
@@ -68,6 +80,8 @@ public sealed class IndexOutput : IDisposable
         WriteBytes(tmp);
     }
 
+    /// <summary>Writes a 32-bit single-precision floating-point value.</summary>
+    /// <param name="value">The float to write.</param>
     public void WriteSingle(float value)
     {
         Span<byte> tmp = stackalloc byte[sizeof(float)];
@@ -75,8 +89,12 @@ public sealed class IndexOutput : IDisposable
         WriteBytes(tmp);
     }
 
+    /// <summary>Writes a boolean as a single byte (0 or 1).</summary>
+    /// <param name="value">The boolean value to write.</param>
     public void WriteBoolean(bool value) => WriteByte(value ? (byte)1 : (byte)0);
 
+    /// <summary>Writes a single byte to the output, flushing the buffer if it is full.</summary>
+    /// <param name="value">The byte to write.</param>
     public void WriteByte(byte value)
     {
         if (_bufferPosition == BufferSize)
@@ -105,6 +123,7 @@ public sealed class IndexOutput : IDisposable
         WriteBytes(buf[..pos]);
     }
 
+    /// <summary>Flushes the internal write buffer to the underlying file stream.</summary>
     public void Flush() => FlushBuffer();
 
     private void FlushBuffer()
@@ -116,6 +135,7 @@ public sealed class IndexOutput : IDisposable
         }
     }
 
+    /// <summary>Flushes remaining buffered data and releases all resources.</summary>
     public void Dispose()
     {
         if (_disposed) return;

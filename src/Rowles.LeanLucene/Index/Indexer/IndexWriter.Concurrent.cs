@@ -65,6 +65,13 @@ public sealed partial class IndexWriter
         }
     }
 
+    /// <summary>
+    /// Indexes a batch of documents using parallel per-thread writer buffers (DWPT).
+    /// Partitions the input across all available processors and merges results into the
+    /// main buffer under a single lock acquisition per DWPT.
+    /// </summary>
+    /// <param name="documents">The documents to index concurrently.</param>
+    /// <exception cref="ObjectDisposedException">Thrown if the writer has been disposed.</exception>
     public void AddDocumentsConcurrent(IReadOnlyList<Document.LeanDocument> documents)
     {
         ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);

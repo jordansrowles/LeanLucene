@@ -156,11 +156,19 @@ public static class IndexRecovery
     }
 
     /// <summary>Result of crash recovery.</summary>
+    /// <summary>Result of crash recovery.</summary>
     public sealed class RecoveryResult
     {
+        /// <summary>Gets the generation number of the recovered commit.</summary>
         public int Generation { get; init; }
+
+        /// <summary>Gets the segment IDs referenced by the recovered commit.</summary>
         public List<string> SegmentIds { get; init; } = [];
+
+        /// <summary>Gets the file path of the commit file that was successfully loaded.</summary>
         public string CommitFilePath { get; init; } = "";
+
+        /// <summary>Gets a value indicating whether recovery fell back to an older commit generation.</summary>
         public bool WasFallback { get; init; }
     }
 
