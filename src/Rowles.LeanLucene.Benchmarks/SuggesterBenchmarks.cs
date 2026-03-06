@@ -41,6 +41,7 @@ public class SuggesterBenchmarks
     private string _leanIndexPath = string.Empty;
     private LeanMMapDirectory? _leanDirectory;
     private LeanIndexSearcher? _leanSearcher;
+    private SpellIndex? _leanSpellIndex;
 
     // Lucene.NET state
     private RAMDirectory? _luceneSourceDirectory;
@@ -54,6 +55,7 @@ public class SuggesterBenchmarks
         var documents = BenchmarkData.BuildDocuments(DocumentCount);
 
         BuildLeanLuceneIndex(documents);
+        _leanSpellIndex = SpellIndex.Build(_leanSearcher!, "body");
         BuildLuceneNetSpellChecker(documents);
     }
 
@@ -77,6 +79,19 @@ public class SuggesterBenchmarks
         foreach (var (_, misspelled) in _misspelledTerms)
         {
             var suggestions = DidYouMeanSuggester.Suggest(_leanSearcher!, "body", misspelled, maxEdits: 2, topN: 5);
+            total += suggestions.Count;
+        }
+        return total;
+    }
+
+    [Benchmark]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public int LeanLucene_SpellIndex()
+    {
+        int total = 0;
+        foreach (var (_, misspelled) in _misspelledTerms)
+        {
+            var suggestions = _leanSpellIndex!.Suggest(misspelled, maxEdits: 2, topN: 5);
             total += suggestions.Count;
         }
         return total;

@@ -333,7 +333,15 @@ public struct BlockPostingsEnum : IDisposable
         for (int i = 0; i < tailCount; i++)
         {
             int delta = _docInput.ReadVarInt();
-            prevDocId += delta;
+            try
+            {
+                prevDocId = checked(prevDocId + delta);
+            }
+            catch (OverflowException ex)
+            {
+                throw new InvalidDataException(
+                    "Postings data is corrupt: doc ID delta overflow in tail block.", ex);
+            }
             _docIdBlock[i] = prevDocId;
         }
 

@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.IO.MemoryMappedFiles;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
@@ -191,7 +192,8 @@ public sealed unsafe class IndexInput : IDisposable
     public string ReadUtf8String(int charCount)
     {
         byte* start = _ptr + _position;
-        int byteCount = Utf8ByteCount(start, charCount);
+        int remaining = (int)Math.Min(_length - _position, int.MaxValue);
+        int byteCount = Utf8ByteCount(start, charCount, remaining);
         if (_position + byteCount > _length)
             ThrowEndOfStream();
 
@@ -210,7 +212,8 @@ public sealed unsafe class IndexInput : IDisposable
     public int CompareUtf8BytesAndAdvance(int charCount, ReadOnlySpan<byte> termUtf8)
     {
         byte* start = _ptr + _position;
-        int byteCount = Utf8ByteCount(start, charCount);
+        int remaining = (int)Math.Min(_length - _position, int.MaxValue);
+        int byteCount = Utf8ByteCount(start, charCount, remaining);
         if (_position + byteCount > _length)
             ThrowEndOfStream();
 
@@ -227,7 +230,8 @@ public sealed unsafe class IndexInput : IDisposable
     public int CompareCharsAndAdvance(int charCount, ReadOnlySpan<char> term)
     {
         byte* start = _ptr + _position;
-        int byteCount = Utf8ByteCount(start, charCount);
+        int remaining = (int)Math.Min(_length - _position, int.MaxValue);
+        int byteCount = Utf8ByteCount(start, charCount, remaining);
         if (_position + byteCount > _length)
             ThrowEndOfStream();
 
@@ -237,32 +241,54 @@ public sealed unsafe class IndexInput : IDisposable
         return buf.SequenceCompareTo(term);
     }
 
-    /// <summary>Counts the number of UTF-8 bytes needed to encode <paramref name="charCount"/> characters.</summary>
+    /// <summary>
+    /// Counts the number of UTF-8 bytes needed to encode <paramref name="charCount"/> characters.
+    /// <paramref name="maxBytes"/> limits how far we read to prevent out-of-bounds access on
+    /// truncated or malformed data.
+    /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static int Utf8ByteCount(byte* p, int charCount)
+    private static int Utf8ByteCount(byte* p, int charCount, int maxBytes)
     {
-        // Fast path: check if the first charCount bytes are all ASCII
-        // For ASCII-only text, byte count == char count
-        bool allAscii = true;
-        for (int i = 0; i < charCount; i++)
+        // Fast path: check if the first charCount bytes are all ASCII.
+        // Guard against reading beyond the mapped region.
+        if (charCount <= maxBytes)
         {
-            if (p[i] >= 0x80) { allAscii = false; break; }
+            bool allAscii = true;
+            for (int i = 0; i < charCount; i++)
+            {
+                if (p[i] >= 0x80) { allAscii = false; break; }
+            }
+            if (allAscii) return charCount;
         }
-        if (allAscii) return charCount;
 
-        // Slow path: variable-width UTF-8
+        // Slow path: variable-width UTF-8 with bounds enforcement.
         int bytes = 0;
         int chars = 0;
         while (chars < charCount)
         {
+            if (bytes >= maxBytes)
+                ThrowCorruptUtf8();
+
             byte b = p[bytes];
-            if (b < 0x80) { bytes += 1; chars += 1; }
-            else if ((b & 0xE0) == 0xC0) { bytes += 2; chars += 1; }
-            else if ((b & 0xF0) == 0xE0) { bytes += 3; chars += 1; }
-            else { bytes += 4; chars += 2; } // 4-byte UTF-8 = surrogate pair (2 UTF-16 chars)
+            int seqLen;
+            int charLen;
+            if (b < 0x80) { seqLen = 1; charLen = 1; }
+            else if ((b & 0xE0) == 0xC0) { seqLen = 2; charLen = 1; }
+            else if ((b & 0xF0) == 0xE0) { seqLen = 3; charLen = 1; }
+            else { seqLen = 4; charLen = 2; }
+
+            if (bytes + seqLen > maxBytes)
+                ThrowCorruptUtf8();
+
+            bytes += seqLen;
+            chars += charLen;
         }
         return bytes;
     }
+
+    [DoesNotReturn]
+    private static void ThrowCorruptUtf8()
+        => throw new InvalidDataException("Truncated or malformed UTF-8 data in index file.");
 
     /// <summary>
     /// Reads a variable-length encoded non-negative integer (LEB128).

@@ -3,4 +3,5 @@
   <Project Path="src/Rowles.LeanLucene.Tests/Rowles.LeanLucene.Tests.csproj" />
   <Project Path="src/Rowles.LeanLucene/Rowles.LeanLucene.csproj" />
   <Project Path="src/Rowles.LeanLucene.Example.JsonApi/Rowles.LeanLucene.Example.JsonApi.csproj" />
+  <Project Path="src/Rowles.LeanLucene.Benchmarks.Quick/Rowles.LeanLucene.Benchmarks.Quick.csproj" />
 </Solution>

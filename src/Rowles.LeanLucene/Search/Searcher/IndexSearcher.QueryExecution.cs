@@ -68,7 +68,8 @@ public sealed partial class IndexSearcher
         else
         {
             var lockObj = new Lock();
-            Parallel.ForEach(_readers, new ParallelOptions { MaxDegreeOfParallelism = Environment.ProcessorCount }, reader =>
+            int maxDop = _config.MaxConcurrency > 0 ? _config.MaxConcurrency : Environment.ProcessorCount;
+            Parallel.ForEach(_readers, new ParallelOptions { MaxDegreeOfParallelism = maxDop }, reader =>
             {
                 var localCollector = new TopNCollector(topN);
                 ExecuteBooleanQuery(bq, reader, globalDFs, ref localCollector);

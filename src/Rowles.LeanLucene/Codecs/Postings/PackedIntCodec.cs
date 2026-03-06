@@ -224,8 +224,18 @@ public static class PackedIntCodec
         Unpack(input, numBits, output);
 
         // Prefix-sum integration to restore absolute values.
-        output[0] += offset;
-        for (int i = 1; i < BlockSize; i++)
-            output[i] += output[i - 1];
+        // Use checked arithmetic to detect corrupt data that would silently
+        // wrap a doc ID into negative territory and bypass LiveDocs filtering.
+        try
+        {
+            output[0] = checked(output[0] + offset);
+            for (int i = 1; i < BlockSize; i++)
+                output[i] = checked(output[i] + output[i - 1]);
+        }
+        catch (OverflowException ex)
+        {
+            throw new InvalidDataException(
+                "Postings data is corrupt: doc ID delta overflow during prefix-sum integration.", ex);
+        }
     }
 }
