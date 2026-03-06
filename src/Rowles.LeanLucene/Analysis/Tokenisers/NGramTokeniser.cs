@@ -11,13 +11,28 @@ using Rowles.LeanLucene.Analysis;
 /// </summary>
 public sealed class NGramTokeniser : ITokeniser
 {
+    /// <summary>
+    /// Gets the minimum n-gram length (inclusive).
+    /// </summary>
     public int MinGram { get; }
+
+    /// <summary>
+    /// Gets the maximum n-gram length (inclusive).
+    /// </summary>
     public int MaxGram { get; }
     
     // Intern cache to reduce string allocations for repeated n-grams
     private readonly Dictionary<int, string> _internCache = new();
     private const int MaxInternCacheSize = 2048;
 
+    /// <summary>
+    /// Initialises a new <see cref="NGramTokeniser"/> with the specified gram size range.
+    /// </summary>
+    /// <param name="minGram">The minimum gram length (must be ≥ 1).</param>
+    /// <param name="maxGram">The maximum gram length (must be ≥ <paramref name="minGram"/>).</param>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// Thrown when <paramref name="minGram"/> is less than 1, or <paramref name="maxGram"/> is less than <paramref name="minGram"/>.
+    /// </exception>
     public NGramTokeniser(int minGram, int maxGram)
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(minGram, 1);
@@ -26,6 +41,7 @@ public sealed class NGramTokeniser : ITokeniser
         MaxGram = maxGram;
     }
 
+    /// <inheritdoc/>
     public List<Token> Tokenise(ReadOnlySpan<char> input)
     {
         var tokens = new List<Token>();

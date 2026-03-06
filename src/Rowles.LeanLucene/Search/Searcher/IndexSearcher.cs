@@ -40,11 +40,21 @@ public sealed partial class IndexSearcher : IDisposable
     public Diagnostics.IndexSizeReport GetIndexSize()
         => Diagnostics.IndexSizeCalculator.Calculate(_directory.DirectoryPath);
 
+    /// <summary>
+    /// Initialises a new <see cref="IndexSearcher"/> by loading the latest committed segments from the given directory.
+    /// </summary>
+    /// <param name="directory">The index directory to open.</param>
+    /// <param name="similarity">The scoring model to use. Defaults to BM25 if null.</param>
     public IndexSearcher(MMapDirectory directory, ISimilarity? similarity = null)
         : this(directory, new IndexSearcherConfig { Similarity = similarity ?? Bm25Similarity.Instance })
     {
     }
 
+    /// <summary>
+    /// Initialises a new <see cref="IndexSearcher"/> by loading the latest committed segments from the given directory.
+    /// </summary>
+    /// <param name="directory">The index directory to open.</param>
+    /// <param name="config">Searcher configuration including similarity model, parallelism, and caching options.</param>
     public IndexSearcher(MMapDirectory directory, IndexSearcherConfig config)
     {
         _directory = directory;
@@ -73,11 +83,23 @@ public sealed partial class IndexSearcher : IDisposable
             _queryCache = new QueryCache(config.QueryCacheMaxEntries);
     }
 
+    /// <summary>
+    /// Initialises a new <see cref="IndexSearcher"/> over the given pre-built segment list (NRT or snapshot scenario).
+    /// </summary>
+    /// <param name="directory">The index directory containing segment files.</param>
+    /// <param name="segments">The explicit list of segment infos to search.</param>
+    /// <param name="similarity">The scoring model to use. Defaults to BM25 if null.</param>
     public IndexSearcher(MMapDirectory directory, IReadOnlyList<SegmentInfo> segments, ISimilarity? similarity = null)
         : this(directory, segments, new IndexSearcherConfig { Similarity = similarity ?? Bm25Similarity.Instance })
     {
     }
 
+    /// <summary>
+    /// Initialises a new <see cref="IndexSearcher"/> over the given pre-built segment list with the specified configuration.
+    /// </summary>
+    /// <param name="directory">The index directory containing segment files.</param>
+    /// <param name="segments">The explicit list of segment infos to search.</param>
+    /// <param name="config">Searcher configuration including similarity model, parallelism, and caching options.</param>
     public IndexSearcher(MMapDirectory directory, IReadOnlyList<SegmentInfo> segments, IndexSearcherConfig config)
     {
         _directory = directory;
@@ -109,6 +131,13 @@ public sealed partial class IndexSearcher : IDisposable
         return bases;
     }
 
+    /// <summary>
+    /// Executes a query and returns the top-<paramref name="topN"/> scoring documents.
+    /// Checks the query cache first, then falls back to the full search pipeline.
+    /// </summary>
+    /// <param name="query">The query to execute.</param>
+    /// <param name="topN">The maximum number of results to return.</param>
+    /// <returns>A <see cref="TopDocs"/> containing the top-scoring documents and total hit count.</returns>
     public TopDocs Search(Query query, int topN)
     {
         if (topN <= 0 || _readers.Count == 0)
@@ -296,6 +325,7 @@ public sealed partial class IndexSearcher : IDisposable
         return ids;
     }
 
+    /// <summary>Disposes all underlying segment readers.</summary>
     public void Dispose()
     {
         foreach (var reader in _readers)

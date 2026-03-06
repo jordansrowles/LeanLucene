@@ -20,6 +20,12 @@ public sealed class RrfQuery : Query
     /// <inheritdoc/>
     public override string Field => _queries.Count > 0 ? _queries[0].Field : string.Empty;
 
+    /// <summary>Initialises a new <see cref="RrfQuery"/> with the given rank constant.</summary>
+    /// <param name="k">
+    /// The ranking constant. Higher values reduce the impact of top-ranked results.
+    /// Must be greater than zero. Default: 60.
+    /// </param>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="k"/> is zero or negative.</exception>
     public RrfQuery(int k = 60)
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(k);

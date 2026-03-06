@@ -6,8 +6,15 @@ namespace Rowles.LeanLucene.Store;
 /// </summary>
 public sealed class MMapDirectory : LeanDirectory
 {
+    /// <inheritdoc/>
     public override string DirectoryPath { get; }
 
+    /// <summary>
+    /// Initialises a new <see cref="MMapDirectory"/> backed by the given file system path.
+    /// Creates the directory if it does not already exist.
+    /// </summary>
+    /// <param name="path">The file system path for the index directory. Must not be null.</param>
+    /// <exception cref="ArgumentNullException">Thrown if <paramref name="path"/> is null.</exception>
     public MMapDirectory(string path)
     {
         DirectoryPath = path ?? throw new ArgumentNullException(nameof(path));
@@ -16,30 +23,35 @@ public sealed class MMapDirectory : LeanDirectory
             Directory.CreateDirectory(path);
     }
 
+    /// <inheritdoc/>
     public override IndexOutput CreateOutput(string fileName)
     {
         var filePath = Path.Combine(DirectoryPath, ValidateFileName(fileName));
         return new IndexOutput(filePath);
     }
 
+    /// <inheritdoc/>
     public override IndexInput OpenInput(string fileName)
     {
         var filePath = Path.Combine(DirectoryPath, ValidateFileName(fileName));
         return new IndexInput(filePath);
     }
 
+    /// <inheritdoc/>
     public override void DeleteFile(string fileName)
     {
         var filePath = Path.Combine(DirectoryPath, ValidateFileName(fileName));
         File.Delete(filePath);
     }
 
+    /// <inheritdoc/>
     public override bool FileExists(string fileName)
     {
         var filePath = Path.Combine(DirectoryPath, ValidateFileName(fileName));
         return File.Exists(filePath);
     }
 
+    /// <inheritdoc/>
     public override string[] ListAll()
     {
         return Directory.GetFiles(DirectoryPath)

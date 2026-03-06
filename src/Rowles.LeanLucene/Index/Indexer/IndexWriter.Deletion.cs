@@ -7,6 +7,11 @@ namespace Rowles.LeanLucene.Index.Indexer;
 
 public sealed partial class IndexWriter
 {
+    /// <summary>
+    /// Queues a term-based deletion. Documents matching <paramref name="query"/> are deleted
+    /// on the next <see cref="Commit"/> call.
+    /// </summary>
+    /// <param name="query">The term query identifying documents to delete.</param>
     public void DeleteDocuments(TermQuery query)
     {
         lock (_writeLock)

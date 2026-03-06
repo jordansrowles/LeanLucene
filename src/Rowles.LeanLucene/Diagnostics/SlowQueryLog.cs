@@ -60,6 +60,7 @@ public sealed class SlowQueryLog : IDisposable
         }
     }
 
+    /// <inheritdoc/>
     public void Dispose()
     {
         if (_ownsWriter) _writer.Dispose();

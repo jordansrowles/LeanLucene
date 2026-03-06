@@ -352,6 +352,7 @@ public struct BlockPostingsEnum : IDisposable
         _blockCount = tailCount;
     }
 
+    /// <summary>Returns all rented buffers back to <see cref="System.Buffers.ArrayPool{T}"/>.</summary>
     public void Dispose()
     {
         if (_docIdBlock is not null)

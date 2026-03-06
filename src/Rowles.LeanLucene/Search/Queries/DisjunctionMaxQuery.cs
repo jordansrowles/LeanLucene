@@ -14,17 +14,27 @@ public sealed class DisjunctionMaxQuery : Query
     /// </summary>
     public float TieBreakerMultiplier { get; }
 
+    /// <summary>Gets the list of sub-queries whose scores are combined.</summary>
     public IReadOnlyList<Query> Disjuncts => _disjuncts;
 
     /// <inheritdoc/>
     /// <remarks>Returns the field of the first disjunct, or empty string if none added yet.</remarks>
     public override string Field => _disjuncts.Count > 0 ? _disjuncts[0].Field : string.Empty;
 
+    /// <summary>Initialises a new <see cref="DisjunctionMaxQuery"/> with the given tie-breaker multiplier.</summary>
+    /// <param name="tieBreakerMultiplier">
+    /// Contribution factor for non-maximum matching clauses.
+    /// Set to 0 to use only the maximum score; higher values add a fraction of remaining scores.
+    /// </param>
     public DisjunctionMaxQuery(float tieBreakerMultiplier = 0.0f)
     {
         TieBreakerMultiplier = tieBreakerMultiplier;
     }
 
+    /// <summary>Adds a disjunct sub-query and returns <c>this</c> for chaining.</summary>
+    /// <param name="query">The sub-query to add as a disjunct.</param>
+    /// <returns>This <see cref="DisjunctionMaxQuery"/> instance.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="query"/> is <see langword="null"/>.</exception>
     public DisjunctionMaxQuery Add(Query query)
     {
         ArgumentNullException.ThrowIfNull(query);

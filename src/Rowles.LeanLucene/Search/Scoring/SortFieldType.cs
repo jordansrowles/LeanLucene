@@ -1,5 +1,6 @@
 namespace Rowles.LeanLucene.Search.Scoring;
 
+/// <summary>Specifies the data type and sort behaviour for a field-based sort criterion.</summary>
 public enum SortFieldType
 {
     /// <summary>Sort by BM25 relevance score (descending by default).</summary>

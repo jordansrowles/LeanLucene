@@ -26,6 +26,12 @@ public sealed class FieldMapping
     /// <summary>Whether the field is required on every document. Default: false.</summary>
     public bool IsRequired { get; init; }
 
+    /// <summary>
+    /// Initialises a new <see cref="FieldMapping"/> for the specified field name and type.
+    /// </summary>
+    /// <param name="name">The field name this mapping applies to. Must not be null or empty.</param>
+    /// <param name="fieldType">The expected field type for validation.</param>
+    /// <exception cref="ArgumentException">Thrown if <paramref name="name"/> is null or empty.</exception>
     public FieldMapping(string name, FieldType fieldType)
     {
         ArgumentException.ThrowIfNullOrEmpty(name);

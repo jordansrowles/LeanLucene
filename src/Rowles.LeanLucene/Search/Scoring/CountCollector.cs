@@ -6,7 +6,9 @@ namespace Rowles.LeanLucene.Search.Scoring;
 /// </summary>
 public sealed class CountCollector : ICollector
 {
+    /// <inheritdoc/>
     public int TotalHits { get; private set; }
 
+    /// <inheritdoc/>
     public void Collect(int docId, float score) => TotalHits++;
 }

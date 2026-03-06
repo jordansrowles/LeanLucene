@@ -5,12 +5,18 @@ public sealed class KeepLastNCommitsPolicy : IIndexDeletionPolicy
 {
     private readonly int _maxCommits;
 
+    /// <summary>
+    /// Initialises a new policy that retains the last <paramref name="maxCommits"/> commit generations.
+    /// </summary>
+    /// <param name="maxCommits">The number of recent commit generations to keep. Must be at least 1.</param>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown if <paramref name="maxCommits"/> is less than 1.</exception>
     public KeepLastNCommitsPolicy(int maxCommits)
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(maxCommits, 1);
         _maxCommits = maxCommits;
     }
 
+    /// <inheritdoc/>
     public void OnCommit(string directoryPath, int currentGeneration)
     {
         int threshold = currentGeneration - _maxCommits;

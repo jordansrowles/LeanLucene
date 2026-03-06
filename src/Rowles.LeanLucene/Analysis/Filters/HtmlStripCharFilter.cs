@@ -10,6 +10,7 @@ public sealed class HtmlStripCharFilter : ICharFilter
     private static readonly Regex TagPattern = new(@"<[^>]+>", RegexOptions.Compiled);
     private static readonly Regex EntityPattern = new(@"&\w+;", RegexOptions.Compiled);
 
+    /// <inheritdoc/>
     public string Filter(ReadOnlySpan<char> input)
     {
         var text = input.ToString();
