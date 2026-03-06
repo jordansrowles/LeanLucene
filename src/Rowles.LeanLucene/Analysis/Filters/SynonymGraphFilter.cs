@@ -12,11 +12,17 @@ public sealed class SynonymGraphFilter : ITokenFilter
 {
     private readonly SynonymMap _map;
 
+    /// <summary>
+    /// Initialises a new <see cref="SynonymGraphFilter"/> with the specified synonym map.
+    /// </summary>
+    /// <param name="map">The synonym map used for multi-token expansion lookups.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="map"/> is <see langword="null"/>.</exception>
     public SynonymGraphFilter(SynonymMap map)
     {
         _map = map ?? throw new ArgumentNullException(nameof(map));
     }
 
+    /// <inheritdoc/>
     public void Apply(List<Token> tokens)
     {
         var result = new List<Token>(tokens.Count + 4);

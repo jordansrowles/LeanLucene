@@ -45,11 +45,18 @@ public unsafe struct PostingsEnum : IDisposable
     private long[]? _payloadByteOffsets;
     private int[]? _payloadLengths;
 
+    /// <summary>Gets the total number of documents in this postings list.</summary>
     public int DocFreq => _lazyMode ? _blockEnum.DocFreqCount : _count;
+
+    /// <summary>Gets the current document ID, or -1 if the cursor has not been advanced or is exhausted.</summary>
     public int DocId => _lazyMode ? (_blockEnum.IsExhausted ? -1 : _blockEnum.DocId)
         : (_index >= 0 && _index < _count ? _docIds![_index] : -1);
+
+    /// <summary>Gets the term frequency in the current document. Returns 1 if frequency data is unavailable.</summary>
     public int Freq => _lazyMode ? (_blockEnum.IsExhausted ? 1 : _blockEnum.Freq)
         : (_index >= 0 && _index < _count && _freqs is not null ? _freqs[_index] : 1);
+
+    /// <summary>Gets a value indicating whether the cursor has passed the last document.</summary>
     public bool IsExhausted => _lazyMode ? _blockEnum.IsExhausted : _count == 0;
 
     private PostingsEnum(int[]? docIds, int[]? freqs, int count,
@@ -431,6 +438,8 @@ public unsafe struct PostingsEnum : IDisposable
         return new ReadOnlySpan<byte>(_posBasePtr + _payloadByteOffsets[positionIndex], len);
     }
 
+    /// <summary>Advances the cursor to the next document. Returns <see langword="true"/> if a document was found.</summary>
+    /// <returns><see langword="true"/> if there is a next document; <see langword="false"/> if the list is exhausted.</returns>
     public bool MoveNext()
     {
         if (_lazyMode)
@@ -441,6 +450,7 @@ public unsafe struct PostingsEnum : IDisposable
         return false;
     }
 
+    /// <summary>Resets the cursor to before the first document, allowing the list to be re-iterated.</summary>
     public void Reset() => _index = -1;
 
     /// <summary>
@@ -483,6 +493,7 @@ public unsafe struct PostingsEnum : IDisposable
         return false;
     }
 
+    /// <summary>Returns all rented buffers back to <see cref="System.Buffers.ArrayPool{T}"/>.</summary>
     public void Dispose()
     {
         if (_disposed) return;
@@ -541,6 +552,7 @@ public unsafe struct PostingsEnum : IDisposable
         }
     }
 
+    /// <summary>A pre-built empty postings enum that is immediately exhausted.</summary>
     public static PostingsEnum Empty => new(null, null, 0);
 
     /// <summary>

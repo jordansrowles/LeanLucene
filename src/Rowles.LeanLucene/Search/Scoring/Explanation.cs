@@ -15,6 +15,7 @@ public sealed class Explanation
     /// <summary>Child explanations that compose this score.</summary>
     public Explanation[] Details { get; init; } = [];
 
+    /// <inheritdoc/>
     public override string ToString() => Format(indent: 0);
 
     private string Format(int indent)

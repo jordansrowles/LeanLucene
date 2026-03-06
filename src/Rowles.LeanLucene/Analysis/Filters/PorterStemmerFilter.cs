@@ -7,6 +7,7 @@ namespace Rowles.LeanLucene.Analysis.Filters;
 /// </summary>
 public sealed class PorterStemmerFilter : ITokenFilter
 {
+    /// <inheritdoc/>
     public void Apply(List<Token> tokens)
     {
         for (int i = 0; i < tokens.Count; i++)

@@ -3,6 +3,7 @@ namespace Rowles.LeanLucene.Index.Indexer;
 /// <summary>Keeps only the latest commit, deleting all older segments_N and stats_N files.</summary>
 public sealed class KeepLatestCommitPolicy : IIndexDeletionPolicy
 {
+    /// <inheritdoc/>
     public void OnCommit(string directoryPath, int currentGeneration)
     {
         foreach (var file in Directory.GetFiles(directoryPath, "segments_*"))

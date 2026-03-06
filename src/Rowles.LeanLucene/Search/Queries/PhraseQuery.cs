@@ -5,7 +5,10 @@ namespace Rowles.LeanLucene.Search.Queries;
 /// </summary>
 public sealed class PhraseQuery : Query
 {
+    /// <inheritdoc/>
     public override string Field { get; }
+
+    /// <summary>Gets the ordered terms that form the phrase.</summary>
     public string[] Terms { get; }
 
     /// <summary>Maximum number of positional gaps allowed between terms. 0 = exact phrase.</summary>
@@ -13,6 +16,8 @@ public sealed class PhraseQuery : Query
 
     /// <summary>Cached qualified term strings ("field\0term") to avoid per-search allocation.</summary>
     private volatile string[]? _cachedQualifiedTerms;
+
+    /// <summary>Gets the qualified term strings (<c>"field\0term"</c>) for each phrase term, lazily computed.</summary>
     public string[] QualifiedTerms
     {
         get
@@ -29,12 +34,19 @@ public sealed class PhraseQuery : Query
         }
     }
 
+    /// <summary>Initialises a new <see cref="PhraseQuery"/> with the specified field and terms.</summary>
+    /// <param name="field">The field to search.</param>
+    /// <param name="terms">The ordered terms that form the phrase.</param>
     public PhraseQuery(string field, params string[] terms)
     {
         Field = field;
         Terms = terms;
     }
 
+    /// <summary>Initialises a new <see cref="PhraseQuery"/> with the specified field, slop, and terms.</summary>
+    /// <param name="field">The field to search.</param>
+    /// <param name="slop">Maximum allowed positional gaps between terms.</param>
+    /// <param name="terms">The ordered terms that form the phrase.</param>
     public PhraseQuery(string field, int slop, params string[] terms)
     {
         Field = field;
@@ -42,6 +54,7 @@ public sealed class PhraseQuery : Query
         Terms = terms;
     }
 
+    /// <inheritdoc/>
     public override bool Equals(object? obj) =>
         obj is PhraseQuery other &&
         string.Equals(Field, other.Field, StringComparison.Ordinal) &&

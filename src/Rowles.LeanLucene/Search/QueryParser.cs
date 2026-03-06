@@ -12,12 +12,21 @@ public sealed class QueryParser
     private readonly string _defaultField;
     private readonly IAnalyser _analyser;
 
+    /// <summary>Initialises a new <see cref="QueryParser"/> with the given default field and analyser.</summary>
+    /// <param name="defaultField">The field used when no explicit <c>field:</c> prefix is present in the query string.</param>
+    /// <param name="analyser">The analyser used to tokenise terms and phrases at query time.</param>
     public QueryParser(string defaultField, IAnalyser analyser)
     {
         _defaultField = defaultField;
         _analyser = analyser;
     }
 
+    /// <summary>Parses the query string into a <see cref="Query"/> object tree.</summary>
+    /// <param name="queryString">The query string to parse.</param>
+    /// <returns>
+    /// A <see cref="Query"/> representing the parsed expression, or an empty
+    /// <see cref="BooleanQuery"/> when <paramref name="queryString"/> is null or whitespace.
+    /// </returns>
     public Query Parse(string queryString)
     {
         if (string.IsNullOrWhiteSpace(queryString))

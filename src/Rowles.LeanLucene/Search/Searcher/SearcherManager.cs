@@ -19,6 +19,12 @@ public sealed class SearcherManager : IDisposable
     private volatile SearcherRef _current;
     private int _disposed;
 
+    /// <summary>
+    /// Initialises a new <see cref="SearcherManager"/> for the specified directory, opening an initial
+    /// <see cref="IndexSearcher"/> and starting the background refresh loop.
+    /// </summary>
+    /// <param name="directory">The index directory to manage.</param>
+    /// <param name="config">Optional configuration controlling the refresh interval and searcher settings.</param>
     public SearcherManager(MMapDirectory directory, SearcherManagerConfig? config = null)
     {
         _directory = directory;
@@ -90,6 +96,7 @@ public sealed class SearcherManager : IDisposable
         return Task.Run(MaybeRefresh, ct);
     }
 
+    /// <summary>Stops the background refresh loop and disposes the current searcher.</summary>
     public void Dispose()
     {
         if (Interlocked.CompareExchange(ref _disposed, 1, 0) != 0) return;

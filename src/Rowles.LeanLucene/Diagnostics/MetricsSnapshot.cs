@@ -5,26 +5,49 @@ namespace Rowles.LeanLucene.Diagnostics;
 /// </summary>
 public sealed class MetricsSnapshot
 {
+    /// <summary>Gets an empty snapshot with all counters at zero.</summary>
     public static readonly MetricsSnapshot Empty = new();
 
-    // Search
+    /// <summary>Gets the total number of searches executed.</summary>
     public long SearchCount { get; init; }
+
+    /// <summary>Gets the cumulative search latency in milliseconds.</summary>
     public long SearchTotalMs { get; init; }
+
+    /// <summary>Gets the maximum observed search latency in milliseconds.</summary>
     public long SearchMaxMs { get; init; }
+
+    /// <summary>Gets the average search latency in milliseconds.</summary>
     public double SearchAvgMs { get; init; }
 
-    // Cache
+    /// <summary>Gets the total number of query cache hits.</summary>
     public long CacheHits { get; init; }
+
+    /// <summary>Gets the total number of query cache misses.</summary>
     public long CacheMisses { get; init; }
+
+    /// <summary>Gets the fraction of cache lookups that were hits (0–1).</summary>
     public double CacheHitRate { get; init; }
 
-    // Writer
+    /// <summary>Gets the total number of segment flush operations.</summary>
     public long FlushCount { get; init; }
+
+    /// <summary>Gets the cumulative time spent flushing segments in milliseconds.</summary>
     public long FlushTotalMs { get; init; }
+
+    /// <summary>Gets the total number of segment merge operations.</summary>
     public long MergeCount { get; init; }
+
+    /// <summary>Gets the total number of segments merged across all merge operations.</summary>
     public long MergeSegments { get; init; }
+
+    /// <summary>Gets the cumulative time spent merging segments in milliseconds.</summary>
     public long MergeTotalMs { get; init; }
+
+    /// <summary>Gets the total number of index commit operations.</summary>
     public long CommitCount { get; init; }
+
+    /// <summary>Gets the cumulative time spent committing in milliseconds.</summary>
     public long CommitTotalMs { get; init; }
 
     /// <summary>

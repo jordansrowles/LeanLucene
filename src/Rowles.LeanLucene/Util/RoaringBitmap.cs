@@ -23,6 +23,7 @@ public sealed class RoaringBitmap : IEnumerable<int>
     private int _size;
     private int _cardinality;
 
+    /// <summary>Initialises a new, empty <see cref="RoaringBitmap"/>.</summary>
     public RoaringBitmap()
     {
         _keys = new ushort[4];
@@ -31,9 +32,14 @@ public sealed class RoaringBitmap : IEnumerable<int>
         _cardinality = 0;
     }
 
+    /// <summary>Gets the total number of set bits (document IDs) in this bitmap.</summary>
     public int Cardinality => _cardinality;
+
+    /// <summary>Gets a value indicating whether this bitmap contains no set bits.</summary>
     public bool IsEmpty => _cardinality == 0;
 
+    /// <summary>Adds the specified document ID to the bitmap. Has no effect if already present.</summary>
+    /// <param name="docId">The document ID to set.</param>
     public void Add(int docId)
     {
         ushort hi = (ushort)(docId >>> 16);
@@ -54,12 +60,18 @@ public sealed class RoaringBitmap : IEnumerable<int>
         }
     }
 
+    /// <summary>Adds all document IDs in the range [<paramref name="start"/>, <paramref name="end"/>) to the bitmap.</summary>
+    /// <param name="start">The inclusive start of the range.</param>
+    /// <param name="end">The exclusive end of the range.</param>
     public void AddRange(int start, int end)
     {
         for (int docId = start; docId < end; docId++)
             Add(docId);
     }
 
+    /// <summary>Returns <see langword="true"/> if the specified document ID is set in this bitmap.</summary>
+    /// <param name="docId">The document ID to test.</param>
+    /// <returns><see langword="true"/> if the bit is set; otherwise, <see langword="false"/>.</returns>
     public bool Contains(int docId)
     {
         ushort hi = (ushort)(docId >>> 16);
@@ -68,6 +80,9 @@ public sealed class RoaringBitmap : IEnumerable<int>
         return idx >= 0 && _containers[idx].Contains(lo);
     }
 
+    /// <summary>Removes the specified document ID from the bitmap.</summary>
+    /// <param name="docId">The document ID to clear.</param>
+    /// <returns><see langword="true"/> if the bit was set and has been cleared; otherwise, <see langword="false"/>.</returns>
     public bool Remove(int docId)
     {
         ushort hi = (ushort)(docId >>> 16);
@@ -112,6 +127,7 @@ public sealed class RoaringBitmap : IEnumerable<int>
         }
     }
 
+    /// <inheritdoc/>
     public IEnumerator<int> GetEnumerator()
     {
         for (int i = 0; i < _size; i++)
@@ -500,6 +516,12 @@ public sealed class RoaringBitmap : IEnumerable<int>
         }
     }
 
+    /// <summary>
+    /// Deserialises a <see cref="RoaringBitmap"/> from a <see cref="BinaryReader"/>.
+    /// See <see cref="Serialise(BinaryWriter)"/> for the binary format.
+    /// </summary>
+    /// <param name="reader">The reader to deserialise from.</param>
+    /// <returns>The deserialised bitmap.</returns>
     public static RoaringBitmap Deserialise(BinaryReader reader)
     {
         int chunkCount = reader.ReadInt32();
@@ -554,7 +576,8 @@ public sealed class RoaringBitmap : IEnumerable<int>
         return bitmap;
     }
 
-    /// <summary>Serialises to file path.</summary>
+    /// <summary>Serialises this bitmap to the specified file path.</summary>
+    /// <param name="filePath">The file path to write to.</param>
     public void Serialise(string filePath)
     {
         using var stream = File.Create(filePath);
@@ -562,7 +585,9 @@ public sealed class RoaringBitmap : IEnumerable<int>
         Serialise(writer);
     }
 
-    /// <summary>Deserialises from file path.</summary>
+    /// <summary>Deserialises a <see cref="RoaringBitmap"/> from the specified file path.</summary>
+    /// <param name="filePath">The file path to read from.</param>
+    /// <returns>The deserialised bitmap.</returns>
     public static RoaringBitmap Deserialise(string filePath)
     {
         using var stream = File.OpenRead(filePath);

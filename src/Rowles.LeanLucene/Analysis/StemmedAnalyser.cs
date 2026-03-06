@@ -9,6 +9,7 @@ public sealed class StemmedAnalyser : IAnalyser
     private readonly StandardAnalyser _inner = new();
     private readonly PorterStemmerFilter _stemmer = new();
 
+    /// <inheritdoc/>
     public List<Token> Analyse(ReadOnlySpan<char> input)
     {
         var tokens = _inner.Analyse(input);

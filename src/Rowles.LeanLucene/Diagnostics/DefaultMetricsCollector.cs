@@ -22,6 +22,7 @@ public sealed class DefaultMetricsCollector : IMetricsCollector
     private readonly long[] _latencyBuckets = new long[8];
     private static readonly int[] BucketThresholdsMs = [1, 5, 10, 50, 100, 500, 1000];
 
+    /// <inheritdoc/>
     public void RecordSearchLatency(TimeSpan elapsed)
     {
         long ms = (long)elapsed.TotalMilliseconds;
@@ -38,15 +39,20 @@ public sealed class DefaultMetricsCollector : IMetricsCollector
         Interlocked.Increment(ref _latencyBuckets[bucket]);
     }
 
+    /// <inheritdoc/>
     public void RecordCacheHit() => Interlocked.Increment(ref _cacheHits);
+
+    /// <inheritdoc/>
     public void RecordCacheMiss() => Interlocked.Increment(ref _cacheMisses);
 
+    /// <inheritdoc/>
     public void RecordFlush(TimeSpan elapsed)
     {
         Interlocked.Increment(ref _flushCount);
         Interlocked.Add(ref _flushTotalMs, (long)elapsed.TotalMilliseconds);
     }
 
+    /// <inheritdoc/>
     public void RecordMerge(TimeSpan elapsed, int segmentsMerged)
     {
         Interlocked.Increment(ref _mergeCount);
@@ -54,12 +60,14 @@ public sealed class DefaultMetricsCollector : IMetricsCollector
         Interlocked.Add(ref _mergeTotalMs, (long)elapsed.TotalMilliseconds);
     }
 
+    /// <inheritdoc/>
     public void RecordCommit(TimeSpan elapsed)
     {
         Interlocked.Increment(ref _commitCount);
         Interlocked.Add(ref _commitTotalMs, (long)elapsed.TotalMilliseconds);
     }
 
+    /// <inheritdoc/>
     public MetricsSnapshot GetSnapshot()
     {
         long searchCount = Interlocked.Read(ref _searchCount);

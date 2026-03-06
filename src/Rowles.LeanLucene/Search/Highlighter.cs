@@ -11,6 +11,7 @@ public sealed class Highlighter
     private readonly string _postTag;
     private readonly IAnalyser _analyser;
 
+    /// <summary>Initialises a new <see cref="Highlighter"/> with the given tags and analyser.</summary>
     /// <param name="preTag">Opening highlight tag, e.g. "&lt;b&gt;" or "&lt;em&gt;".</param>
     /// <param name="postTag">Closing highlight tag, e.g. "&lt;/b&gt;" or "&lt;/em&gt;".</param>
     /// <param name="analyser">Analyser to tokenise the input text (should match the index-time analyser).</param>
@@ -28,6 +29,7 @@ public sealed class Highlighter
     /// <param name="text">The stored field text to highlight.</param>
     /// <param name="queryTerms">Lowercased terms to highlight.</param>
     /// <param name="maxSnippetLength">Maximum character length of the returned snippet.</param>
+    /// <returns>A snippet of <paramref name="text"/> with matching terms wrapped in highlight tags, with ellipsis when truncated.</returns>
     public string GetBestFragment(string text, IReadOnlySet<string> queryTerms, int maxSnippetLength = 200)
     {
         if (string.IsNullOrEmpty(text) || queryTerms.Count == 0)
@@ -100,6 +102,8 @@ public sealed class Highlighter
     }
 
     /// <summary>Extracts query terms from a TermQuery for use with GetBestFragment.</summary>
+    /// <param name="query">The query from which to collect searchable terms.</param>
+    /// <returns>A case-insensitive set of term strings suitable for use with <see cref="GetBestFragment"/>.</returns>
     public static HashSet<string> ExtractTerms(Query query)
     {
         var terms = new HashSet<string>(StringComparer.OrdinalIgnoreCase);

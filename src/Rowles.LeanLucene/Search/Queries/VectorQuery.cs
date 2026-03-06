@@ -8,10 +8,19 @@ namespace Rowles.LeanLucene.Search.Queries;
 /// </summary>
 public sealed class VectorQuery : Query
 {
+    /// <inheritdoc/>
     public override string Field { get; }
+
+    /// <summary>Gets the query vector used to find approximate nearest neighbours.</summary>
     public float[] QueryVector { get; }
+
+    /// <summary>Gets the maximum number of nearest-neighbour results to return.</summary>
     public int TopK { get; }
 
+    /// <summary>Initialises a new <see cref="VectorQuery"/> for the given field and query vector.</summary>
+    /// <param name="field">The vector field to search.</param>
+    /// <param name="queryVector">The query vector for similarity comparison.</param>
+    /// <param name="topK">Maximum number of nearest neighbours to return. Default: 10.</param>
     public VectorQuery(string field, float[] queryVector, int topK = 10)
     {
         Field = field;
@@ -19,6 +28,7 @@ public sealed class VectorQuery : Query
         TopK = topK;
     }
 
+    /// <inheritdoc/>
     public override bool Equals(object? obj) =>
         obj is VectorQuery other &&
         string.Equals(Field, other.Field, StringComparison.Ordinal) &&

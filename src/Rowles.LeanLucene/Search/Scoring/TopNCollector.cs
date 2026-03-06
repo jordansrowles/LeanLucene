@@ -12,9 +12,14 @@ public struct TopNCollector
     private int _size;
     private float _minScore;
 
+    /// <summary>Gets the total number of documents passed to <see cref="Collect"/>.</summary>
     public int TotalHits { get; private set; }
+
+    /// <summary>Gets the maximum number of documents this collector can retain.</summary>
     public int Capacity => _heap.Length;
 
+    /// <summary>Initialises a new <see cref="TopNCollector"/> with the specified capacity.</summary>
+    /// <param name="maxSize">Maximum number of top-scoring documents to retain.</param>
     public TopNCollector(int maxSize)
     {
         _heap = new ScoreDoc[maxSize];
@@ -40,6 +45,9 @@ public struct TopNCollector
         TotalHits = 0;
     }
 
+    /// <summary>Collects a matching document and its score, keeping only the top-N by score.</summary>
+    /// <param name="docId">The internal document identifier.</param>
+    /// <param name="score">The relevance score for this document.</param>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void Collect(int docId, float score)
     {
@@ -64,6 +72,8 @@ public struct TopNCollector
         }
     }
 
+    /// <summary>Materialises the collected results as a <see cref="TopDocs"/> sorted by score descending.</summary>
+    /// <returns>A <see cref="TopDocs"/> containing the top-N scored documents.</returns>
     public TopDocs ToTopDocs()
     {
         if (_size == 0)

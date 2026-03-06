@@ -8,6 +8,7 @@ using Rowles.LeanLucene.Analysis;
 /// </summary>
 public sealed class Tokeniser : ITokeniser
 {
+    /// <inheritdoc/>
     public List<Token> Tokenise(ReadOnlySpan<char> input)
     {
         var tokens = new List<Token>();
@@ -37,8 +38,10 @@ public sealed class Tokeniser : ITokeniser
 
     /// <summary>
     /// Emits token offsets without allocating any strings.
-    /// Used by StandardAnalyser to defer string materialisation until after filtering.
+    /// Used by <see cref="StandardAnalyser"/> to defer string materialisation until after filtering.
     /// </summary>
+    /// <param name="input">The text to tokenise.</param>
+    /// <param name="offsets">The list to populate with <c>(Start, End)</c> character offset pairs. Cleared before use.</param>
     public void TokeniseOffsets(ReadOnlySpan<char> input, List<(int Start, int End)> offsets)
     {
         offsets.Clear();
