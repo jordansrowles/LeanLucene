@@ -1,16 +1,24 @@
-using Rowles.LeanLucene.Index.Segment;
+using System.Collections.Concurrent;
+using System.Runtime.CompilerServices;
 
 namespace Rowles.LeanLucene.Search.Suggestions;
 
 /// <summary>
-/// "Did you mean?" spelling correction using the per-segment term dictionary.
-/// Scans terms via FSTReader's byte-level Levenshtein with ASCII fast-path,
-/// then scores by docFreq / (1 + editDistance).
+/// "Did you mean?" spelling correction. Delegates to <see cref="SpellIndex"/>
+/// which uses a pre-built character-trigram inverted index for fast candidate
+/// filtering, then scores by docFreq / (1 + editDistance).
+/// The <see cref="SpellIndex"/> is cached per searcher/field pair and released
+/// when the <see cref="Searcher.IndexSearcher"/> is collected.
 /// </summary>
 public static class DidYouMeanSuggester
 {
+    private static readonly ConditionalWeakTable<Searcher.IndexSearcher, ConcurrentDictionary<string, SpellIndex>> _cache = new();
+
     /// <summary>
     /// Suggests corrections for <paramref name="queryTerm"/> in the given <paramref name="field"/>.
+    /// The underlying <see cref="SpellIndex"/> is built once per searcher/field pair and cached
+    /// for subsequent calls. For explicit control over the index lifecycle, use
+    /// <see cref="Suggest(SpellIndex, string, int, int)"/> with a manually built index.
     /// </summary>
     public static List<Suggestion> Suggest(
         Searcher.IndexSearcher searcher,
@@ -24,56 +32,26 @@ public static class DidYouMeanSuggester
         ArgumentException.ThrowIfNullOrEmpty(queryTerm);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(topN);
 
-        var fieldPrefix = string.Concat(field, "\x00");
+        var fieldCache = _cache.GetOrCreateValue(searcher);
+        var index = fieldCache.GetOrAdd(field, f => SpellIndex.Build(searcher, f));
+        return index.Suggest(queryTerm, maxEdits, topN);
+    }
 
-        // Collect raw candidates with offsets for batch docFreq reads
-        var rawCandidates = new List<(string BareTerm, long Offset, int Distance, SegmentReader Reader)>();
+    /// <summary>
+    /// Suggests corrections using a pre-built <see cref="SpellIndex"/>.
+    /// Use this overload when issuing multiple suggestions against the same index
+    /// to avoid rebuilding the trigram index on every call.
+    /// </summary>
+    public static List<Suggestion> Suggest(
+        SpellIndex index,
+        string queryTerm,
+        int maxEdits = 2,
+        int topN = 5)
+    {
+        ArgumentNullException.ThrowIfNull(index);
+        ArgumentException.ThrowIfNullOrEmpty(queryTerm);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(topN);
 
-        foreach (var reader in searcher.GetSegmentReaders())
-        {
-            var matches = reader.GetFuzzyMatches(fieldPrefix, queryTerm.AsSpan(), maxEdits);
-            foreach (var (qualifiedTerm, offset, distance) in matches)
-            {
-                var bareTerm = qualifiedTerm[(field.Length + 1)..];
-                if (string.Equals(bareTerm, queryTerm, StringComparison.Ordinal))
-                    continue;
-                rawCandidates.Add((bareTerm, offset, distance, reader));
-            }
-        }
-
-        if (rawCandidates.Count == 0)
-            return [];
-
-        // Sort by (reader, offset) for sequential I/O reads
-        rawCandidates.Sort(static (a, b) =>
-        {
-            int cmp = a.Reader.GetHashCode().CompareTo(b.Reader.GetHashCode());
-            return cmp != 0 ? cmp : a.Offset.CompareTo(b.Offset);
-        });
-
-        // Batch-read docFreq using direct offset reads (no dictionary lookup)
-        var candidates = new Dictionary<string, (int EditDistance, int DocFreq)>(StringComparer.Ordinal);
-        foreach (var (bareTerm, offset, distance, reader) in rawCandidates)
-        {
-            int df = reader.ReadDocFreqAtOffset(offset);
-            if (candidates.TryGetValue(bareTerm, out var existing))
-                candidates[bareTerm] = (Math.Min(existing.EditDistance, distance), existing.DocFreq + df);
-            else
-                candidates[bareTerm] = (distance, df);
-        }
-
-        // Score and rank
-        var suggestions = new List<Suggestion>(Math.Min(candidates.Count, topN * 2));
-        foreach (var (bareTerm, (dist, df)) in candidates)
-        {
-            float score = df / (1f + dist);
-            suggestions.Add(new Suggestion(bareTerm, dist, df, score));
-        }
-
-        suggestions.Sort(static (a, b) => b.Score.CompareTo(a.Score));
-        if (suggestions.Count > topN)
-            suggestions.RemoveRange(topN, suggestions.Count - topN);
-
-        return suggestions;
+        return index.Suggest(queryTerm, maxEdits, topN);
     }
 }

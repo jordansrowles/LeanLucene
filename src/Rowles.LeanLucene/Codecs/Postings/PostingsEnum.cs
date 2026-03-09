@@ -45,6 +45,130 @@ public unsafe struct PostingsEnum : IDisposable
     private long[]? _payloadByteOffsets;
     private int[]? _payloadLengths;
 
+    // Thread-static recycled buffer pools for position metadata arrays.
+    // A 4-slot pool allows reuse when phrase queries create multiple PostingsEnums
+    // on the same thread before any are disposed (typical 3-word phrase = 3 PEs).
+    private const int PoolCapacity = 4;
+    [ThreadStatic] private static long[]?[]? t_posOffsetsPool;
+    [ThreadStatic] private static int[]?[]? t_posCountsPool;
+    [ThreadStatic] private static int[]?[]? t_lazyPosPool;
+
+    // Do not recycle arrays larger than 1M entries (8 MB for long[], 4 MB for int[]).
+    private const int MaxRecycledLength = 1_048_576;
+    private const int MaxPositionPreloadDocs = 65_536;
+
+    private static long[] RentPosOffsets(int minLength)
+    {
+        var pool = t_posOffsetsPool;
+        if (pool is not null)
+        {
+            for (int i = 0; i < PoolCapacity; i++)
+            {
+                var buf = pool[i];
+                if (buf is not null && buf.Length >= minLength)
+                {
+                    pool[i] = null;
+                    return buf;
+                }
+            }
+        }
+        return ArrayPool<long>.Shared.Rent(minLength);
+    }
+
+    private static int[] RentPosCounts(int minLength)
+    {
+        var pool = t_posCountsPool;
+        if (pool is not null)
+        {
+            for (int i = 0; i < PoolCapacity; i++)
+            {
+                var buf = pool[i];
+                if (buf is not null && buf.Length >= minLength)
+                {
+                    pool[i] = null;
+                    return buf;
+                }
+            }
+        }
+        return ArrayPool<int>.Shared.Rent(minLength);
+    }
+
+    private static int[] RentLazyPosBuffer(int minLength)
+    {
+        var pool = t_lazyPosPool;
+        if (pool is not null)
+        {
+            for (int i = 0; i < PoolCapacity; i++)
+            {
+                var buf = pool[i];
+                if (buf is not null && buf.Length >= minLength)
+                {
+                    pool[i] = null;
+                    return buf;
+                }
+            }
+        }
+        return ArrayPool<int>.Shared.Rent(minLength);
+    }
+
+    private static void ReturnPosOffsets(long[] buffer)
+    {
+        if (buffer.Length > MaxRecycledLength)
+        {
+            ArrayPool<long>.Shared.Return(buffer);
+            return;
+        }
+        var pool = t_posOffsetsPool ??= new long[PoolCapacity][];
+        for (int i = 0; i < PoolCapacity; i++)
+        {
+            if (pool[i] is null) { pool[i] = buffer; return; }
+        }
+        // Pool full: evict smallest, keep the larger buffer for future reuse
+        int smallest = 0;
+        for (int i = 1; i < PoolCapacity; i++)
+            if (pool[i]!.Length < pool[smallest]!.Length) smallest = i;
+        ArrayPool<long>.Shared.Return(pool[smallest]!);
+        pool[smallest] = buffer;
+    }
+
+    private static void ReturnPosCounts(int[] buffer)
+    {
+        if (buffer.Length > MaxRecycledLength)
+        {
+            ArrayPool<int>.Shared.Return(buffer);
+            return;
+        }
+        var pool = t_posCountsPool ??= new int[PoolCapacity][];
+        for (int i = 0; i < PoolCapacity; i++)
+        {
+            if (pool[i] is null) { pool[i] = buffer; return; }
+        }
+        int smallest = 0;
+        for (int i = 1; i < PoolCapacity; i++)
+            if (pool[i]!.Length < pool[smallest]!.Length) smallest = i;
+        ArrayPool<int>.Shared.Return(pool[smallest]!);
+        pool[smallest] = buffer;
+    }
+
+    private static void ReturnLazyPosBuffer(int[] buffer)
+    {
+        if (buffer.Length > MaxRecycledLength)
+        {
+            ArrayPool<int>.Shared.Return(buffer);
+            return;
+        }
+        var pool = t_lazyPosPool ??= new int[PoolCapacity][];
+        for (int i = 0; i < PoolCapacity; i++)
+        {
+            if (pool[i] is null) { pool[i] = buffer; return; }
+        }
+        int smallest = 0;
+        for (int i = 1; i < PoolCapacity; i++)
+            if (pool[i]!.Length < pool[smallest]!.Length) smallest = i;
+        ArrayPool<int>.Shared.Return(pool[smallest]!);
+        pool[smallest] = buffer;
+    }
+
     /// <summary>Gets the total number of documents in this postings list.</summary>
     public int DocFreq => _lazyMode ? _blockEnum.DocFreqCount : _count;
 
@@ -128,6 +252,32 @@ public unsafe struct PostingsEnum : IDisposable
         _lastDecodedPosCount = 0;
         _sourceInput = null;
         _hasPayloads = false;
+        _payloadByteOffsets = null;
+        _payloadLengths = null;
+    }
+
+    /// <summary>Lazy mode with positions: wraps a BlockPostingsEnum and preloaded position metadata.</summary>
+    private PostingsEnum(BlockPostingsEnum blockEnum,
+        long[]? positionByteOffsets, int[]? positionCounts,
+        byte* posBasePtr, IndexInput? sourceInput, bool hasPayloads)
+    {
+        _blockEnum = blockEnum;
+        _lazyMode = true;
+        _docIds = null;
+        _freqs = null;
+        _count = 0;
+        _index = -1;
+        _disposed = false;
+        _positionData = null;
+        _positionStarts = null;
+        _positionByteOffsets = positionByteOffsets;
+        _positionCounts = positionCounts;
+        _posBasePtr = posBasePtr;
+        _lazyPosBuffer = null;
+        _lastDecodedPosIndex = -1;
+        _lastDecodedPosCount = 0;
+        _sourceInput = sourceInput;
+        _hasPayloads = hasPayloads;
         _payloadByteOffsets = null;
         _payloadLengths = null;
     }
@@ -231,8 +381,8 @@ public unsafe struct PostingsEnum : IDisposable
             return new PostingsEnum(docIds, freqs, count);
 
         // Record per-doc byte offsets for lazy position decoding
-        var positionByteOffsets = ArrayPool<long>.Shared.Rent(count);
-        var positionCounts = ArrayPool<int>.Shared.Rent(count);
+        var positionByteOffsets = RentPosOffsets(count);
+        var positionCounts = RentPosCounts(count);
 
         for (int i = 0; i < count; i++)
         {
@@ -269,6 +419,38 @@ public unsafe struct PostingsEnum : IDisposable
 
         long docStartOffset = input.Position;
 
+        // Lazy doc traversal for large postings: avoid renting docIds/freqs arrays.
+        // BlockPostingsEnum stays alive for on-demand doc iteration whilst position
+        // metadata is preloaded for GetCurrentPositions random access.
+        if (docFreq > MaxPositionPreloadDocs && hasPositions)
+        {
+            var blockEnumLazy = BlockPostingsEnum.Create(input, docStartOffset, skipOffset, docFreq);
+            // input is now positioned after skip entries, directly before position data
+
+            var posOffsets = RentPosOffsets(docFreq);
+            var posCounts = RentPosCounts(docFreq);
+
+            for (int i = 0; i < docFreq; i++)
+            {
+                int posCount = input.ReadVarInt();
+                posCounts[i] = posCount;
+                posOffsets[i] = input.Position;
+                for (int j = 0; j < posCount; j++)
+                {
+                    input.ReadVarInt();
+                    if (hasPayloads)
+                    {
+                        int payloadLen = input.ReadVarInt();
+                        if (payloadLen > 0)
+                            input.Seek(input.Position + payloadLen);
+                    }
+                }
+            }
+
+            return new PostingsEnum(blockEnumLazy, posOffsets, posCounts,
+                input.BasePointer, input, hasPayloads);
+        }
+
         // Decode doc IDs + freqs via BlockPostingsEnum
         var blockEnum = BlockPostingsEnum.Create(input, docStartOffset, skipOffset, docFreq);
         var docIds = ArrayPool<int>.Shared.Rent(docFreq);
@@ -292,8 +474,8 @@ public unsafe struct PostingsEnum : IDisposable
         input.Seek(input.Position + (long)skipCount * 15);
 
         // Read positions with lazy byte offsets (same VarInt format as v2)
-        var positionByteOffsets = ArrayPool<long>.Shared.Rent(docFreq);
-        var positionCounts = ArrayPool<int>.Shared.Rent(docFreq);
+        var positionByteOffsets = RentPosOffsets(docFreq);
+        var positionCounts = RentPosCounts(docFreq);
 
         for (int i = 0; i < docFreq; i++)
         {
@@ -323,7 +505,9 @@ public unsafe struct PostingsEnum : IDisposable
     /// </summary>
     public ReadOnlySpan<int> GetCurrentPositions()
     {
-        if (_disposed || _index < 0 || _index >= _count)
+        if (_disposed || _index < 0)
+            return ReadOnlySpan<int>.Empty;
+        if (_lazyMode ? _blockEnum.IsExhausted : _index >= _count)
             return ReadOnlySpan<int>.Empty;
 
         // Eager path (pre-decoded positions)
@@ -349,8 +533,8 @@ public unsafe struct PostingsEnum : IDisposable
             if (_lazyPosBuffer is null || _lazyPosBuffer.Length < posCount)
             {
                 if (_lazyPosBuffer is not null)
-                    ArrayPool<int>.Shared.Return(_lazyPosBuffer);
-                _lazyPosBuffer = ArrayPool<int>.Shared.Rent(posCount);
+                    ReturnLazyPosBuffer(_lazyPosBuffer);
+                _lazyPosBuffer = RentLazyPosBuffer(posCount);
             }
 
             // Prepare payload offset/length buffers for v2
@@ -443,7 +627,13 @@ public unsafe struct PostingsEnum : IDisposable
     public bool MoveNext()
     {
         if (_lazyMode)
-            return _blockEnum.NextDoc() != BlockPostingsEnum.NoMoreDocs;
+        {
+            if (_blockEnum.NextDoc() == BlockPostingsEnum.NoMoreDocs)
+                return false;
+            if (_positionByteOffsets is not null)
+                _index = _blockEnum.CurrentGlobalIndex;
+            return true;
+        }
         if (++_index < _count)
             return true;
         _index = _count;
@@ -461,7 +651,13 @@ public unsafe struct PostingsEnum : IDisposable
     public bool Advance(int targetDocId)
     {
         if (_lazyMode)
-            return _blockEnum.Advance(targetDocId) != BlockPostingsEnum.NoMoreDocs;
+        {
+            if (_blockEnum.Advance(targetDocId) == BlockPostingsEnum.NoMoreDocs)
+                return false;
+            if (_positionByteOffsets is not null)
+                _index = _blockEnum.CurrentGlobalIndex;
+            return true;
+        }
 
         if (_docIds is null || _count == 0) return false;
 
@@ -494,14 +690,28 @@ public unsafe struct PostingsEnum : IDisposable
     }
 
     /// <summary>Returns all rented buffers back to <see cref="System.Buffers.ArrayPool{T}"/>.</summary>
-    public void Dispose()
-    {
+    public void Dispose()    {
         if (_disposed) return;
         _disposed = true;
 
         if (_lazyMode)
         {
             _blockEnum.Dispose();
+            if (_positionByteOffsets is not null)
+            {
+                ReturnPosOffsets(_positionByteOffsets);
+                _positionByteOffsets = null;
+            }
+            if (_positionCounts is not null)
+            {
+                ReturnPosCounts(_positionCounts);
+                _positionCounts = null;
+            }
+            if (_lazyPosBuffer is not null)
+            {
+                ReturnLazyPosBuffer(_lazyPosBuffer);
+                _lazyPosBuffer = null;
+            }
             return;
         }
 
@@ -527,17 +737,17 @@ public unsafe struct PostingsEnum : IDisposable
         }
         if (_positionByteOffsets is not null)
         {
-            ArrayPool<long>.Shared.Return(_positionByteOffsets);
+            ReturnPosOffsets(_positionByteOffsets);
             _positionByteOffsets = null;
         }
         if (_positionCounts is not null)
         {
-            ArrayPool<int>.Shared.Return(_positionCounts);
+            ReturnPosCounts(_positionCounts);
             _positionCounts = null;
         }
         if (_lazyPosBuffer is not null)
         {
-            ArrayPool<int>.Shared.Return(_lazyPosBuffer);
+            ReturnLazyPosBuffer(_lazyPosBuffer);
             _lazyPosBuffer = null;
         }
         if (_payloadByteOffsets is not null)

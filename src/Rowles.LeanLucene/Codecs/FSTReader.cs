@@ -222,6 +222,21 @@ internal sealed class FSTReader
         for (int j = 0; j <= qLen; j++)
             dpStack[0][j] = j;
 
+        // Build byte histogram of the query for character overlap pre-check.
+        // Only effective for large dictionaries; at small scale the DP prefix-sharing
+        // already prunes efficiently and the per-term histogram overhead is a net loss.
+        bool useOverlapFilter = _termCount >= 50_000;
+        Span<int> qHist = stackalloc int[256];
+        Span<int> bareHist = stackalloc int[256];
+        Span<byte> touchedByteKeys = stackalloc byte[256];
+        if (useOverlapFilter)
+        {
+            qHist.Clear();
+            for (int j = 0; j < qLen; j++)
+                qHist[queryUtf8[j]]++;
+            bareHist.Clear();
+        }
+
         // Track the dpStack source term separately from prevBare.
         // Length-filtered and dead terms may not fully compute dpStack rows,
         // so LCP must be computed against the term that last modified the stack.
@@ -241,6 +256,28 @@ internal sealed class FSTReader
             // Length filter: edit distance is at least |len difference|
             if (Math.Abs(bareLen - qLen) > maxEdits)
                 continue;
+
+            // Character multiset overlap pre-check: skip terms that cannot
+            // possibly be within maxEdits, avoiding the expensive DP loop
+            if (useOverlapFilter)
+            {
+                int overlap = 0;
+                int touchedByteCount = 0;
+                for (int j = 0; j < bareLen; j++)
+                {
+                    byte b = bare[j];
+                    if (bareHist[b] == 0)
+                        touchedByteKeys[touchedByteCount++] = b;
+                    bareHist[b]++;
+                    if (bareHist[b] <= qHist[b])
+                        overlap++;
+                }
+                for (int j = 0; j < touchedByteCount; j++)
+                    bareHist[touchedByteKeys[j]] = 0;
+                int minOverlapNeeded = Math.Min(qLen, bareLen) - maxEdits;
+                if (overlap < minOverlapNeeded)
+                    continue;
+            }
 
             // Find LCP with the last term that modified dpStack
             int lcp = 0;
@@ -300,12 +337,12 @@ internal sealed class FSTReader
             dpBareLen = bareLen;
             dpValidDepth = lastComputedDepth;
 
-            if (!dead)
-            {
-                int finalDist = dpStack[bareLen][qLen];
-                if (finalDist <= maxEdits)
-                    candidates.Add((idx, finalDist));
-            }
+            if (dead)
+                continue;
+
+            int finalDist = dpStack[bareLen][qLen];
+            if (finalDist <= maxEdits)
+                candidates.Add((idx, finalDist));
         }
 
         // Phase 2: truncate to maxExpansions closest matches, then decode strings
@@ -634,6 +671,21 @@ internal sealed class FSTReader
     private int LowerBound(ReadOnlySpan<byte> key)
     {
         int lo = 0, hi = _termCount;
+        while (lo < hi)
+        {
+            int mid = lo + (hi - lo) / 2;
+            if (GetKeySpan(mid).SequenceCompareTo(key) < 0)
+                lo = mid + 1;
+            else
+                hi = mid;
+        }
+        return lo;
+    }
+
+    /// <summary>Returns the first ordinal >= lo where term >= key.</summary>
+    private int LowerBound(ReadOnlySpan<byte> key, int lo)
+    {
+        int hi = _termCount;
         while (lo < hi)
         {
             int mid = lo + (hi - lo) / 2;

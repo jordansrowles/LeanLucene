@@ -106,6 +106,8 @@ public sealed class SpellIndex
 
         // Rent from the pool instead of allocating per query.
         int[] overlapCounts = ArrayPool<int>.Shared.Rent(_terms.Length);
+        int[] touchedOrdinals = ArrayPool<int>.Shared.Rent(_terms.Length);
+        int touchedCount = 0;
         try
         {
             overlapCounts.AsSpan(0, _terms.Length).Clear();
@@ -139,7 +141,11 @@ public sealed class SpellIndex
                 if (lookup.TryGetValue(tri, out int[]? ordinals))
                 {
                     foreach (int ord in ordinals)
+                    {
+                        if (overlapCounts[ord] == 0)
+                            touchedOrdinals[touchedCount++] = ord;
                         overlapCounts[ord]++;
+                    }
                 }
             }
 
@@ -148,28 +154,51 @@ public sealed class SpellIndex
             var results = new List<Suggestion>(Math.Min(topN * 2, 16));
             int queryLen = queryTerm.Length;
 
-            for (int i = 0; i < _terms.Length; i++)
+            if (distinctCount > 0)
             {
-                // When we have trigram candidates, only consider those passing threshold.
-                // When no trigrams were generated (very short query), consider all terms
-                // that pass the length filter.
-                if (distinctCount > 0 && overlapCounts[i] < minOverlap)
-                    continue;
+                // Iterate only terms touched by at least one query trigram
+                for (int t = 0; t < touchedCount; t++)
+                {
+                    int i = touchedOrdinals[t];
+                    if (overlapCounts[i] < minOverlap)
+                        continue;
 
-                var candidate = _terms[i];
+                    var candidate = _terms[i];
 
-                if (string.Equals(candidate, queryTerm, StringComparison.Ordinal))
-                    continue;
+                    if (string.Equals(candidate, queryTerm, StringComparison.Ordinal))
+                        continue;
 
-                if (Math.Abs(candidate.Length - queryLen) > maxEdits)
-                    continue;
+                    if (Math.Abs(candidate.Length - queryLen) > maxEdits)
+                        continue;
 
-                int distance = LevenshteinDistance.ComputeBounded(querySpan, candidate.AsSpan(), maxEdits);
-                if (distance > maxEdits)
-                    continue;
+                    int distance = LevenshteinDistance.ComputeBounded(querySpan, candidate.AsSpan(), maxEdits);
+                    if (distance > maxEdits)
+                        continue;
 
-                float score = _docFreqs[i] / (1f + distance);
-                results.Add(new Suggestion(candidate, distance, _docFreqs[i], score));
+                    float score = _docFreqs[i] / (1f + distance);
+                    results.Add(new Suggestion(candidate, distance, _docFreqs[i], score));
+                }
+            }
+            else
+            {
+                // No trigrams (short query): fall back to full scan with length filter
+                for (int i = 0; i < _terms.Length; i++)
+                {
+                    var candidate = _terms[i];
+
+                    if (string.Equals(candidate, queryTerm, StringComparison.Ordinal))
+                        continue;
+
+                    if (Math.Abs(candidate.Length - queryLen) > maxEdits)
+                        continue;
+
+                    int distance = LevenshteinDistance.ComputeBounded(querySpan, candidate.AsSpan(), maxEdits);
+                    if (distance > maxEdits)
+                        continue;
+
+                    float score = _docFreqs[i] / (1f + distance);
+                    results.Add(new Suggestion(candidate, distance, _docFreqs[i], score));
+                }
             }
 
             results.Sort(static (a, b) => b.Score.CompareTo(a.Score));
@@ -181,6 +210,7 @@ public sealed class SpellIndex
         finally
         {
             ArrayPool<int>.Shared.Return(overlapCounts);
+            ArrayPool<int>.Shared.Return(touchedOrdinals);
         }
     }
 

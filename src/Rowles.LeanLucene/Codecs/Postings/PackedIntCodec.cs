@@ -223,19 +223,47 @@ public static class PackedIntCodec
     {
         Unpack(input, numBits, output);
 
-        // Prefix-sum integration to restore absolute values.
-        // Use checked arithmetic to detect corrupt data that would silently
-        // wrap a doc ID into negative territory and bypass LiveDocs filtering.
-        try
+        // Prefix-sum integration to restore absolute values from deltas.
+        if (Vector128.IsHardwareAccelerated)
         {
-            output[0] = checked(output[0] + offset);
-            for (int i = 1; i < BlockSize; i++)
-                output[i] = checked(output[i] + output[i - 1]);
+            // SIMD path: Hillis-Steele 4-wide prefix sum with inter-block carry.
+            // Two shuffle-and-add steps produce [a, a+b, a+b+c, a+b+c+d] per vector,
+            // then the carry from the previous block is broadcast-added.
+            ref int outRef = ref MemoryMarshal.GetReference(output);
+            int carry = offset;
+
+            for (int i = 0; i < BlockSize; i += Vector128<int>.Count)
+            {
+                var v = Vector128.LoadUnsafe(ref outRef, (nuint)i);
+
+                v += Vector128.Shuffle(v, Vector128.Create(4, 0, 1, 2));
+                v += Vector128.Shuffle(v, Vector128.Create(4, 4, 0, 1));
+
+                v += Vector128.Create(carry);
+                Vector128.StoreUnsafe(v, ref outRef, (nuint)i);
+                carry = v.GetElement(3);
+            }
+
+            // Lightweight overflow guard: since all deltas are non-negative,
+            // the final sum must be >= offset. A wrap indicates corrupt postings.
+            if (output[BlockSize - 1] < offset)
+                throw new InvalidDataException(
+                    "Postings data is corrupt: doc ID delta overflow during prefix-sum integration.");
         }
-        catch (OverflowException ex)
+        else
         {
-            throw new InvalidDataException(
-                "Postings data is corrupt: doc ID delta overflow during prefix-sum integration.", ex);
+            // Scalar fallback with checked arithmetic for platforms without SIMD.
+            try
+            {
+                output[0] = checked(output[0] + offset);
+                for (int i = 1; i < BlockSize; i++)
+                    output[i] = checked(output[i] + output[i - 1]);
+            }
+            catch (OverflowException ex)
+            {
+                throw new InvalidDataException(
+                    "Postings data is corrupt: doc ID delta overflow during prefix-sum integration.", ex);
+            }
         }
     }
 }

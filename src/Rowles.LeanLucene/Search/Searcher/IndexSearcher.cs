@@ -356,8 +356,10 @@ public sealed partial class IndexSearcher : IDisposable
             var pbs = reader.GetParentBitSet();
             if (pbs is null) continue;
 
-            // BitArray for O(1) parent dedup — O(MaxDoc/8) vs O(N×32) for HashSet
-            var seenParents = new System.Collections.BitArray(reader.MaxDoc);
+            // Block join children are contiguous before their parent, so parents
+            // are encountered in non-decreasing docId order. A simple lastParent
+            // check replaces the BitArray(MaxDoc) dedup at zero allocation cost.
+            int lastParent = -1;
 
             if (bjq.ChildQuery is TermQuery tq)
             {
@@ -367,9 +369,9 @@ public sealed partial class IndexSearcher : IDisposable
                 while (pe.MoveNext())
                 {
                     int parentLocal = pbs.NextParent(pe.DocId);
-                    if (parentLocal >= 0 && !seenParents[parentLocal])
+                    if (parentLocal >= 0 && parentLocal != lastParent)
                     {
-                        seenParents[parentLocal] = true;
+                        lastParent = parentLocal;
                         collector.Collect(docBase + parentLocal, boost);
                     }
                 }
@@ -385,9 +387,9 @@ public sealed partial class IndexSearcher : IDisposable
                 {
                     if (!childBits[docId]) continue;
                     int parentLocal = pbs.NextParent(docId);
-                    if (parentLocal >= 0 && !seenParents[parentLocal])
+                    if (parentLocal >= 0 && parentLocal != lastParent)
                     {
-                        seenParents[parentLocal] = true;
+                        lastParent = parentLocal;
                         collector.Collect(docBase + parentLocal, boost);
                     }
                 }
@@ -414,25 +416,40 @@ public sealed partial class IndexSearcher : IDisposable
             case BooleanQuery bq:
             {
                 System.Collections.BitArray? mustResult = null;
+                System.Collections.BitArray? scratch = null;
+
                 foreach (var clause in bq.Clauses)
                 {
                     if (clause.Occur == Occur.MustNot) continue;
-                    var clauseBits = new System.Collections.BitArray(bits.Length);
-                    CollectChildDocsIntoBitArray(clause.Query, reader, clauseBits);
 
-                    if (clause.Occur == Occur.Must)
-                        mustResult = mustResult is null ? clauseBits : mustResult.And(clauseBits);
-                    else // Should
-                        bits.Or(clauseBits);
+                    if (clause.Occur == Occur.Must && mustResult is null)
+                    {
+                        // First MUST clause owns its BitArray for the AND chain
+                        mustResult = new System.Collections.BitArray(bits.Length);
+                        CollectChildDocsIntoBitArray(clause.Query, reader, mustResult);
+                    }
+                    else
+                    {
+                        // Reuse scratch for SHOULD and subsequent MUST clauses
+                        scratch ??= new System.Collections.BitArray(bits.Length);
+                        scratch.SetAll(false);
+                        CollectChildDocsIntoBitArray(clause.Query, reader, scratch);
+
+                        if (clause.Occur == Occur.Must)
+                            mustResult!.And(scratch);
+                        else // Should
+                            bits.Or(scratch);
+                    }
                 }
                 if (mustResult is not null) bits.Or(mustResult);
 
                 foreach (var clause in bq.Clauses)
                 {
                     if (clause.Occur != Occur.MustNot) continue;
-                    var excludeBits = new System.Collections.BitArray(bits.Length);
-                    CollectChildDocsIntoBitArray(clause.Query, reader, excludeBits);
-                    bits.And(excludeBits.Not());
+                    scratch ??= new System.Collections.BitArray(bits.Length);
+                    scratch.SetAll(false);
+                    CollectChildDocsIntoBitArray(clause.Query, reader, scratch);
+                    bits.And(scratch.Not());
                 }
                 break;
             }

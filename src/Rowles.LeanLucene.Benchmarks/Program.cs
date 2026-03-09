@@ -10,7 +10,7 @@ internal static class Program
 {
     public static int Main(string[] args)
     {
-        var (suite, runType, benchmarkArgs, showHelp, docCount, gcDump) = ParseArguments(args);
+        var (suites, runType, benchmarkArgs, showHelp, docCount, gcDump) = ParseArguments(args);
 
         if (showHelp)
         {
@@ -33,15 +33,18 @@ internal static class Program
             ? timestamp
             : $"{timestamp} ({commitHash})";
 
-        // Resolve effective run type: partial when running a single suite (unless overridden)
+        bool runAll = suites.Contains(BenchmarkSuite.All);
+        bool isSingleSuite = !runAll && suites.Count == 1;
+
+        // Resolve effective run type: partial/{suite} only for a single suite (unless overridden)
         var effectiveRunType = runType;
         if (string.IsNullOrEmpty(effectiveRunType))
             effectiveRunType = "full";
 
         // For partial runs of a single suite, nest under partial/{suite}
-        if (effectiveRunType == "partial" && suite is not BenchmarkSuite.All)
+        if (effectiveRunType == "partial" && isSingleSuite)
         {
-            effectiveRunType = $"partial/{suite.ToString().ToLowerInvariant()}";
+            effectiveRunType = $"partial/{suites.First().ToString().ToLowerInvariant()}";
         }
 
         var suiteSummaries = new List<(string Suite, Summary Summary)>();
@@ -49,61 +52,61 @@ internal static class Program
         // BDN artifacts go into the type-specific folder
         var typeDataDir = Path.Combine(dataDirectory, effectiveRunType);
 
-        if (suite is BenchmarkSuite.All or BenchmarkSuite.Query)
+        if (runAll || suites.Contains(BenchmarkSuite.Query))
             RunSuite<TermQueryBenchmarks>("query", typeDataDir, runId, benchmarkArgs, suiteSummaries, gcDump);
 
-        if (suite is BenchmarkSuite.All or BenchmarkSuite.Index)
+        if (runAll || suites.Contains(BenchmarkSuite.Index))
             RunSuite<IndexingBenchmarks>("index", typeDataDir, runId, benchmarkArgs, suiteSummaries, gcDump);
 
-        if (suite is BenchmarkSuite.All or BenchmarkSuite.Analysis)
+        if (runAll || suites.Contains(BenchmarkSuite.Analysis))
             RunSuite<AnalysisBenchmarks>("analysis", typeDataDir, runId, benchmarkArgs, suiteSummaries, gcDump);
 
-        if (suite is BenchmarkSuite.All or BenchmarkSuite.Boolean)
+        if (runAll || suites.Contains(BenchmarkSuite.Boolean))
             RunSuite<BooleanQueryBenchmarks>("boolean", typeDataDir, runId, benchmarkArgs, suiteSummaries, gcDump);
 
-        if (suite is BenchmarkSuite.All or BenchmarkSuite.Phrase)
+        if (runAll || suites.Contains(BenchmarkSuite.Phrase))
             RunSuite<PhraseQueryBenchmarks>("phrase", typeDataDir, runId, benchmarkArgs, suiteSummaries, gcDump);
 
-        if (suite is BenchmarkSuite.All or BenchmarkSuite.SmallIndex)
+        if (runAll || suites.Contains(BenchmarkSuite.SmallIndex))
             RunSuite<SmallIndexBenchmarks>("smallindex", typeDataDir, runId, benchmarkArgs, suiteSummaries, gcDump);
 
-        if (suite is BenchmarkSuite.All or BenchmarkSuite.Prefix)
+        if (runAll || suites.Contains(BenchmarkSuite.Prefix))
             RunSuite<PrefixQueryBenchmarks>("prefix", typeDataDir, runId, benchmarkArgs, suiteSummaries, gcDump);
 
-        if (suite is BenchmarkSuite.All or BenchmarkSuite.Fuzzy)
+        if (runAll || suites.Contains(BenchmarkSuite.Fuzzy))
             RunSuite<FuzzyQueryBenchmarks>("fuzzy", typeDataDir, runId, benchmarkArgs, suiteSummaries, gcDump);
 
-        if (suite is BenchmarkSuite.All or BenchmarkSuite.Wildcard)
+        if (runAll || suites.Contains(BenchmarkSuite.Wildcard))
             RunSuite<WildcardQueryBenchmarks>("wildcard", typeDataDir, runId, benchmarkArgs, suiteSummaries, gcDump);
 
-        if (suite is BenchmarkSuite.All or BenchmarkSuite.Deletion)
+        if (runAll || suites.Contains(BenchmarkSuite.Deletion))
             RunSuite<DeletionBenchmarks>("deletion", typeDataDir, runId, benchmarkArgs, suiteSummaries, gcDump);
 
-        if (suite is BenchmarkSuite.All or BenchmarkSuite.TokenBudget)
+        if (runAll || suites.Contains(BenchmarkSuite.TokenBudget))
             RunSuite<TokenBudgetBenchmarks>("tokenbudget", typeDataDir, runId, benchmarkArgs, suiteSummaries, gcDump);
 
-        if (suite is BenchmarkSuite.All or BenchmarkSuite.Diagnostics)
+        if (runAll || suites.Contains(BenchmarkSuite.Diagnostics))
             RunSuite<DiagnosticsBenchmarks>("diagnostics", typeDataDir, runId, benchmarkArgs, suiteSummaries, gcDump);
 
-        if (suite is BenchmarkSuite.All or BenchmarkSuite.Suggester)
+        if (runAll || suites.Contains(BenchmarkSuite.Suggester))
             RunSuite<SuggesterBenchmarks>("suggester", typeDataDir, runId, benchmarkArgs, suiteSummaries, gcDump);
 
-        if (suite is BenchmarkSuite.All or BenchmarkSuite.SchemaJson)
+        if (runAll || suites.Contains(BenchmarkSuite.SchemaJson))
             RunSuite<SchemaAndJsonBenchmarks>("schemajson", typeDataDir, runId, benchmarkArgs, suiteSummaries, gcDump);
 
-        if (suite is BenchmarkSuite.All or BenchmarkSuite.Compound)
+        if (runAll || suites.Contains(BenchmarkSuite.Compound))
         {
             RunSuite<CompoundFileIndexBenchmarks>("compound-index", typeDataDir, runId, benchmarkArgs, suiteSummaries, gcDump);
             RunSuite<CompoundFileSearchBenchmarks>("compound-search", typeDataDir, runId, benchmarkArgs, suiteSummaries, gcDump);
         }
 
-        if (suite is BenchmarkSuite.All or BenchmarkSuite.IndexSort)
+        if (runAll || suites.Contains(BenchmarkSuite.IndexSort))
         {
             RunSuite<IndexSortIndexBenchmarks>("indexsort-index", typeDataDir, runId, benchmarkArgs, suiteSummaries, gcDump);
             RunSuite<IndexSortSearchBenchmarks>("indexsort-search", typeDataDir, runId, benchmarkArgs, suiteSummaries, gcDump);
         }
 
-        if (suite is BenchmarkSuite.All or BenchmarkSuite.BlockJoin)
+        if (runAll || suites.Contains(BenchmarkSuite.BlockJoin))
             RunSuite<BlockJoinBenchmarks>("blockjoin", typeDataDir, runId, benchmarkArgs, suiteSummaries, gcDump);
 
         if (suiteSummaries.Count == 0)
@@ -185,10 +188,12 @@ internal static class Program
               dotnet run -c Release --project <path> -- [options] [-- BenchmarkDotNet args]
 
             Options:
-              --suite <name>   Run a specific benchmark suite (default: all)
+              --suite <name>   Run one or more benchmark suites, comma-separated (default: all)
+                               e.g. --suite fuzzy,boolean,prefix
               --type <name>    Run type: full, smoke, stress, partial (default: full)
               --doccount <n>   Override document count for all suites (env: BENCH_DOC_COUNT)
               --gcdump         Collect GC heap dumps after each benchmark run
+              --lean-only      Skip Lucene.NET comparison benchmarks, run LeanLucene only
               --help, -h       Show this help message
 
             Run Types:
@@ -235,14 +240,15 @@ internal static class Program
             """);
     }
 
-    private static (BenchmarkSuite Suite, string RunType, string[] BenchmarkArgs, bool ShowHelp, int? DocCount, bool GcDump) ParseArguments(string[] args)
+    private static (HashSet<BenchmarkSuite> Suites, string RunType, string[] BenchmarkArgs, bool ShowHelp, int? DocCount, bool GcDump) ParseArguments(string[] args)
     {
-        var suite = BenchmarkSuite.All;
+        var suites = new HashSet<BenchmarkSuite> { BenchmarkSuite.All };
         var benchmarkArgs = new List<string>(args.Length);
         var showHelp = false;
         int? docCount = null;
         string runType = string.Empty;
         bool gcDump = false;
+        bool leanOnly = false;
 
         for (var i = 0; i < args.Length; i++)
         {
@@ -259,9 +265,15 @@ internal static class Program
                 continue;
             }
 
+            if (string.Equals(args[i], "--lean-only", StringComparison.OrdinalIgnoreCase))
+            {
+                leanOnly = true;
+                continue;
+            }
+
             if (string.Equals(args[i], "--suite", StringComparison.OrdinalIgnoreCase) && i + 1 < args.Length)
             {
-                suite = ParseSuite(args[++i]);
+                suites = ParseSuites(args[++i]);
                 continue;
             }
 
@@ -281,10 +293,24 @@ internal static class Program
             benchmarkArgs.Add(args[i]);
         }
 
-        return (suite, runType, [.. benchmarkArgs], showHelp, docCount, gcDump);
+        // Inject BDN filter to exclude Lucene.NET benchmarks
+        if (leanOnly)
+            benchmarkArgs.AddRange(["--filter", "*LeanLucene*"]);
+
+        return (suites, runType, [.. benchmarkArgs], showHelp, docCount, gcDump);
     }
 
-    private static BenchmarkSuite ParseSuite(string value)
+    private static HashSet<BenchmarkSuite> ParseSuites(string value)
+    {
+        var result = new HashSet<BenchmarkSuite>();
+        foreach (var part in value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            result.Add(ParseSingleSuite(part));
+        }
+        return result;
+    }
+
+    private static BenchmarkSuite ParseSingleSuite(string value)
     {
         if (value.Equals("index", StringComparison.OrdinalIgnoreCase))
             return BenchmarkSuite.Index;
