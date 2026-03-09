@@ -14,6 +14,7 @@ public struct BlockPostingsEnum : IDisposable
 {
     private const int BlockSize = PackedIntCodec.BlockSize;
     public const int NoMoreDocs = int.MaxValue;
+    private const int MaxPreloadedSkipEntries = 4096;
 
     // Doc file
     private readonly IndexInput _docInput;
@@ -54,6 +55,9 @@ public struct BlockPostingsEnum : IDisposable
     /// <summary>Returns the current block index (0-based). -1 if no block decoded yet.</summary>
     public int CurrentBlockIndex => _currentBlockIndex;
 
+    /// <summary>Returns the current zero-based index in the overall postings list.</summary>
+    public int CurrentGlobalIndex => _blockStart + _indexInBlock;
+
     /// <summary>
     /// Creates a BlockPostingsEnum positioned before the first document.
     /// Call <see cref="NextDoc"/> to advance to the first document.
@@ -64,8 +68,9 @@ public struct BlockPostingsEnum : IDisposable
         // Read skip entries from the end of the posting list
         docInput.Seek(skipOffset);
         int skipCount = docInput.ReadInt32();
-        var skipEntries = ArrayPool<SkipEntry>.Shared.Rent(skipCount);
-        for (int i = 0; i < skipCount; i++)
+        int loadCount = Math.Min(skipCount, MaxPreloadedSkipEntries);
+        var skipEntries = ArrayPool<SkipEntry>.Shared.Rent(Math.Max(loadCount, 1));
+        for (int i = 0; i < loadCount; i++)
         {
             skipEntries[i] = new SkipEntry
             {
@@ -77,8 +82,16 @@ public struct BlockPostingsEnum : IDisposable
             };
         }
 
+        // Skip past any remaining entries we did not load
+        if (skipCount > loadCount)
+        {
+            int bytesPerEntry = hasPositions ? 23 : 15;
+            long remainingBytes = (long)(skipCount - loadCount) * bytesPerEntry;
+            docInput.Seek(docInput.Position + remainingBytes);
+        }
+
         return new BlockPostingsEnum(docInput, docStartOffset, docFreq,
-            skipEntries, skipCount, hasPositions);
+            skipEntries, loadCount, hasPositions);
     }
 
     private BlockPostingsEnum(IndexInput docInput, long docStartOffset, int docFreq,
@@ -333,21 +346,18 @@ public struct BlockPostingsEnum : IDisposable
 
         for (int i = 0; i < tailCount; i++)
         {
-            int delta = _docInput.ReadVarInt();
-            try
-            {
-                prevDocId = checked(prevDocId + delta);
-            }
-            catch (OverflowException ex)
-            {
-                throw new InvalidDataException(
-                    "Postings data is corrupt: doc ID delta overflow in tail block.", ex);
-            }
+            int delta = _docInput.ReadVarIntFast();
+            prevDocId += delta;
             _docIdBlock[i] = prevDocId;
         }
 
+        // Validate monotonically increasing doc IDs (catches overflow from corrupt data)
+        if (tailCount > 0 && _docIdBlock[tailCount - 1] < 0)
+            throw new InvalidDataException(
+                "Postings data is corrupt: doc ID delta overflow in tail block.");
+
         for (int i = 0; i < tailCount; i++)
-            _freqBlock[i] = _docInput.ReadVarInt(); // stored as freq-1
+            _freqBlock[i] = _docInput.ReadVarIntFast();
 
         _blockCount = tailCount;
     }

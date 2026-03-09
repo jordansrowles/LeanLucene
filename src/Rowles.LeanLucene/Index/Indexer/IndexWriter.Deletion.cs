@@ -27,7 +27,7 @@ public sealed partial class IndexWriter
         var qualifiedTerms = new List<string>(_pendingDeletes.Count);
         foreach (var (field, term) in _pendingDeletes)
         {
-            qualifiedTerms.Add($"{field}\x00{term}");
+            qualifiedTerms.Add(string.Concat(field, "\x00", term));
         }
 
         foreach (var seg in segments)
@@ -40,11 +40,11 @@ public sealed partial class IndexWriter
                 continue;
 
             using var dicReader = TermDictionaryReader.Open(dicPath);
-            var liveDocs = new LiveDocs(seg.DocCount);
 
             var delPath = basePath + ".del";
-            if (File.Exists(delPath))
-                liveDocs = LiveDocs.Deserialise(delPath, seg.DocCount);
+            var liveDocs = File.Exists(delPath)
+                ? LiveDocs.Deserialise(delPath, seg.DocCount)
+                : new LiveDocs(seg.DocCount);
 
             bool changed = false;
             using var posInput = new IndexInput(posPath);

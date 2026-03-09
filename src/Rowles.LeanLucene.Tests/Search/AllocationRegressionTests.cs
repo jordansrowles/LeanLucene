@@ -520,8 +520,9 @@ public sealed class AllocationRegressionTests : IClassFixture<TestDirectoryFixtu
         _output.WriteLine($"  Avg allocation: {avgBytes:F0} bytes/query");
         _output.WriteLine($"  Avg latency:    {sw.Elapsed.TotalMicroseconds / measured:F1} µs/query");
 
-        // Budget: ≤ 15 KB per query — single-pass collection with byte-level Levenshtein
-        Assert.True(avgBytes <= 15_000,
-            $"DidYouMean allocated {avgBytes:F0} bytes/query, budget is 15,000 bytes");
+        // Budget: <= 6 KB per query -- SpellIndex is cached after first call;
+        // subsequent queries only allocate the overlap array (ArrayPool) and result list.
+        Assert.True(avgBytes <= 6_000,
+            $"DidYouMean allocated {avgBytes:F0} bytes/query, budget is 6,000 bytes");
     }
 }

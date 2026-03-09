@@ -262,6 +262,14 @@ public sealed partial class IndexSearcher
             int docBase = reader.DocBase;
             bool hasDeletions = reader.HasDeletions;
 
+            // Resolve field-length arrays once per clause to avoid per-doc dictionary lookups
+            var mustFieldLens = mustCount > 0 ? new int[]?[mustCount] : null;
+            for (int i = 0; i < mustCount; i++)
+                reader.TryGetFieldLengths(mustFields![i], out mustFieldLens![i]);
+            var shouldFieldLens = shouldCount > 0 ? new int[]?[shouldCount] : null;
+            for (int i = 0; i < shouldCount; i++)
+                reader.TryGetFieldLengths(shouldFields![i], out shouldFieldLens![i]);
+
             if (mustCount > 0)
             {
                 // Sort Must enums by DocFreq ascending — rarest term leads
@@ -312,7 +320,7 @@ public sealed partial class IndexSearcher
                     float score = 0f;
                     for (int i = 0; i < mustCount; i++)
                     {
-                        int docLength = reader.GetFieldLength(docId, mustFields![i]);
+                        int docLength = mustFieldLens![i] is { } mfl && (uint)docId < (uint)mfl.Length ? mfl[docId] : 1;
                         score += _similarity.ScorePrecomputed(
                             mustFactors![i].Idf, mustFactors[i].K1BOverAvgDL,
                             mustEnums[i].Freq, docLength);
@@ -323,7 +331,7 @@ public sealed partial class IndexSearcher
                     {
                         if (shouldEnums![i].Advance(docId) && shouldEnums[i].DocId == docId)
                         {
-                            int docLength = reader.GetFieldLength(docId, shouldFields![i]);
+                            int docLength = shouldFieldLens![i] is { } sfl && (uint)docId < (uint)sfl.Length ? sfl[docId] : 1;
                             score += _similarity.ScorePrecomputed(
                                 shouldFactors![i].Idf, shouldFactors[i].K1BOverAvgDL,
                                 shouldEnums[i].Freq, docLength);
@@ -368,7 +376,7 @@ public sealed partial class IndexSearcher
                     {
                         if (currentDocs[i] == minDoc)
                         {
-                            int docLength = reader.GetFieldLength(minDoc, shouldFields![i]);
+                            int docLength = shouldFieldLens![i] is { } sfl && (uint)minDoc < (uint)sfl.Length ? sfl[minDoc] : 1;
                             score += _similarity.ScorePrecomputed(
                                 shouldFactors![i].Idf, shouldFactors[i].K1BOverAvgDL,
                                 shouldEnums![i].Freq, docLength);

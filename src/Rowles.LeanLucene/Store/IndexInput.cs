@@ -345,6 +345,33 @@ public sealed unsafe class IndexInput : IDisposable
     }
 
     /// <summary>
+    /// Unrolled VarInt decoder with a single per-value bounds check. If at least 5 bytes
+    /// remain, uses the branchless unrolled path. Otherwise falls back to the safe
+    /// per-byte checked path. This eliminates up to 4 bounds checks per VarInt value
+    /// compared to <see cref="ReadVarInt"/>.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal int ReadVarIntFast()
+    {
+        if (_position + 5 <= _length)
+        {
+            byte* p = _ptr + _position;
+            uint result = (uint)(p[0] & 0x7F);
+            if (p[0] < 0x80) { _position += 1; return (int)result; }
+            result |= (uint)(p[1] & 0x7F) << 7;
+            if (p[1] < 0x80) { _position += 2; return (int)result; }
+            result |= (uint)(p[2] & 0x7F) << 14;
+            if (p[2] < 0x80) { _position += 3; return (int)result; }
+            result |= (uint)(p[3] & 0x7F) << 21;
+            if (p[3] < 0x80) { _position += 4; return (int)result; }
+            result |= (uint)(p[4] & 0x7F) << 28;
+            _position += 5;
+            return (int)result;
+        }
+        return ReadVarInt();
+    }
+
+    /// <summary>
     /// Hints the OS to prefetch the mapped region for sequential access.
     /// Uses PrefetchVirtualMemory on Windows and madvise(MADV_SEQUENTIAL) on Linux.
     /// Failures are silently ignored (advisory only).
