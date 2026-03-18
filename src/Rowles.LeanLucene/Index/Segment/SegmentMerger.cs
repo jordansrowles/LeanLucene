@@ -105,46 +105,17 @@ public sealed class SegmentMerger
         var allStoredFields = new List<Dictionary<string, List<string>>>();
         var allNumericFields = new Dictionary<string, Dictionary<int, double>>();
         var allVectors = new List<float[]>();
-        var fieldNames = new HashSet<string>();
+        var fieldNames = new HashSet<string>(StringComparer.Ordinal);
 
-        int newDocId = 0;
-
+        // Collect the union of all field names across the source segments.
         foreach (var segInfo in segments)
         {
-            using var reader = new SegmentReader(_directory, segInfo);
-
             foreach (var field in segInfo.FieldNames)
                 fieldNames.Add(field);
-
-            for (int oldDocId = 0; oldDocId < segInfo.DocCount; oldDocId++)
-            {
-                if (!reader.IsLive(oldDocId))
-                    continue;
-
-                // Copy stored fields - convert from IReadOnlyDictionary to Dictionary
-                var fields = reader.GetStoredFields(oldDocId);
-                var mutableFields = new Dictionary<string, List<string>>();
-                foreach (var kvp in fields)
-                    mutableFields[kvp.Key] = kvp.Value.ToList();
-                allStoredFields.Add(mutableFields);
-
-                // Copy vectors if present
-                if (reader.HasVectors)
-                {
-                    var vec = reader.GetVector(oldDocId);
-                    allVectors.Add(vec ?? []);
-                }
-
-                // Re-index postings for this doc
-
-                newDocId++;
-            }
         }
 
-        // Simplified merge: re-read each segment's postings via term dictionary
-        newDocId = 0;
-        allPostings.Clear();
-        allFreqs.Clear();
+        // Re-read each segment's postings via the term dictionary, remapping doc IDs.
+        int newDocId = 0;
         var allPositions = new Dictionary<string, Dictionary<int, int[]>>();
 
         foreach (var segInfo in segments)
@@ -170,9 +141,6 @@ public sealed class SegmentMerger
         if (totalDocs == 0)
             return null;
 
-        allStoredFields.Clear();
-        allNumericFields.Clear();
-        allVectors.Clear();
         int remapDocId = 0;
         foreach (var segInfo in segments)
         {
@@ -315,7 +283,8 @@ public sealed class SegmentMerger
             DocCount = totalDocs,
             LiveDocCount = totalDocs,
             CommitGeneration = 0,
-            FieldNames = fieldNames.ToList()
+            FieldNames = fieldNames.ToList(),
+            IndexSortFields = segments[0].IndexSortFields
         };
         mergedInfo.WriteTo(basePath + ".seg");
 
