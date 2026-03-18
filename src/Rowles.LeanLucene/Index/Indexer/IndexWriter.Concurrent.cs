@@ -44,7 +44,7 @@ public sealed partial class IndexWriter
         // Per-DWPT lock (not global — only contention on the same slot)
         lock (dwpt)
         {
-            dwpt.AddDocument(doc, dwpt.DocCount);
+            dwpt.AddDocument(doc);
         }
 
         // Check per-DWPT RAM threshold and flush if needed
@@ -85,7 +85,7 @@ public sealed partial class IndexWriter
             (range, _, dwpt) =>
             {
                 for (int i = range.Item1; i < range.Item2; i++)
-                    dwpt.AddDocument(documents[i], i);
+                    dwpt.AddDocument(documents[i]);
                 return dwpt;
             },
             dwpt => perThreadResults.Add(dwpt));

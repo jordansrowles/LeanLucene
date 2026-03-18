@@ -111,4 +111,45 @@ public sealed class ConcurrentIndexingTests : IDisposable
 
         Assert.Equal(30, results.TotalHits);
     }
+
+    /// <summary>
+    /// Regression test for C1: DWPT-local doc IDs were set to the global batch index,
+    /// causing overlapping ID ranges across partitions and corrupt stored fields / postings.
+    /// </summary>
+    [Fact]
+    public void AddDocumentsConcurrent_ProducesContiguousDocIds_AndStoredFieldsMatchPostings()
+    {
+        const int DocCount = 5_000;
+
+        var directory = new MMapDirectory(_dir);
+        using var writer = new IndexWriter(directory, new IndexWriterConfig { MaxBufferedDocs = DocCount + 1 });
+
+        var docs = new List<LeanDocument>(DocCount);
+        for (int i = 0; i < DocCount; i++)
+        {
+            var doc = new LeanDocument();
+            doc.Add(new StringField("id", i.ToString()));
+            doc.Add(new TextField("body", $"uniqueterm{i} shared"));
+            docs.Add(doc);
+        }
+
+        writer.AddDocumentsConcurrent(docs);
+        writer.Commit();
+
+        using var searcher = new IndexSearcher(directory);
+        Assert.Equal(DocCount, searcher.Stats.LiveDocCount);
+
+        // Every unique term must resolve to exactly one document whose stored id matches
+        for (int i = 0; i < DocCount; i++)
+        {
+            var hits = searcher.Search(new TermQuery("body", $"uniqueterm{i}"), 10);
+            Assert.True(hits.TotalHits == 1,
+                $"Expected exactly 1 hit for uniqueterm{i}, got {hits.TotalHits}");
+
+            var stored = searcher.GetStoredFields(hits.ScoreDocs[0].DocId);
+            Assert.True(stored.TryGetValue("id", out var idValues) && idValues.Count == 1,
+                $"Missing stored 'id' for uniqueterm{i}");
+            Assert.Equal(i.ToString(), idValues![0]);
+        }
+    }
 }

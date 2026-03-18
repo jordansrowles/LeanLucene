@@ -38,7 +38,7 @@ internal sealed class DocumentsWriterPerThread
     /// Indexes a single document into this thread's local buffer.
     /// Not thread-safe — each thread owns its own DWPT instance.
     /// </summary>
-    public void AddDocument(LeanDocument doc, int globalDocId)
+    public void AddDocument(LeanDocument doc)
     {
         int localDocId = DocCount;
         var storedDoc = new Dictionary<string, List<string>>(8);

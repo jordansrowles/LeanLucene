@@ -141,7 +141,7 @@ public sealed class DwptTests
         // Act — add 10 documents to the DWPT
         for (int i = 0; i < 10; i++)
         {
-            dwpt.AddDocument(CreateDocument(i), globalDocId: i);
+            dwpt.AddDocument(CreateDocument(i));
         }
 
         // Assert — RAM tracking should reflect buffered data
