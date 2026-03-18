@@ -141,13 +141,69 @@ public sealed class SegmentMerger
         if (totalDocs == 0)
             return null;
 
+        // Pre-allocate per-field arrays for column-stride codecs (.fln, .dvn, .dvs).
+        // .fln: every field gets an entry — zero-filled by default.
+        var allFieldLengths = new Dictionary<string, int[]>(StringComparer.Ordinal);
+        foreach (var fn in fieldNames)
+            allFieldLengths[fn] = new int[totalDocs];
+
+        // .dvn / .dvs / .pbs / .tvd: lazily allocated when first needed.
+        var allNumericDocValues = new Dictionary<string, double[]>(StringComparer.Ordinal);
+        var allSortedDocValues = new Dictionary<string, string?[]>(StringComparer.Ordinal);
+
+        // Pre-check whether any source segment has term vectors. If so, every doc in the
+        // merged segment must have an entry (empty for docs from segments without TVs).
+        bool anyTermVectors = false;
+        foreach (var segInfo in segments)
+        {
+            var tvdPath = Path.Combine(_directory.DirectoryPath, segInfo.SegmentId + ".tvd");
+            var tvxPath = Path.Combine(_directory.DirectoryPath, segInfo.SegmentId + ".tvx");
+            if (File.Exists(tvdPath) && File.Exists(tvxPath))
+            {
+                anyTermVectors = true;
+                break;
+            }
+        }
+        var allTermVectorDocs = anyTermVectors
+            ? new List<Dictionary<string, List<TermVectorEntry>>>(totalDocs)
+            : null;
+
+        ParentBitSet? mergedParentBitSet = null;
+
         int remapDocId = 0;
         foreach (var segInfo in segments)
         {
             using var reader = new SegmentReader(_directory, segInfo);
+
+            // Cache per-segment readers to avoid repeated lookups inside the doc loop.
+            bool segHasTermVectors = reader.HasTermVectors;
+            var segParentBitSet = reader.GetParentBitSet();
+
+            // Pre-fetch per-field length arrays for this segment.
+            var segFieldLengths = new Dictionary<string, int[]>(StringComparer.Ordinal);
+            foreach (var field in segInfo.FieldNames)
+            {
+                if (reader.TryGetFieldLengths(field, out var fl))
+                    segFieldLengths[field] = fl;
+            }
+
+            // Pre-fetch per-field column-stride DV arrays for this segment.
+            var segNumericDvs = new Dictionary<string, double[]>(StringComparer.Ordinal);
+            var segSortedDvs = new Dictionary<string, string[]>(StringComparer.Ordinal);
+            foreach (var field in segInfo.FieldNames)
+            {
+                var ndv = reader.GetNumericDocValues(field);
+                if (ndv is not null)
+                    segNumericDvs[field] = ndv;
+                var sdv = reader.GetSortedDocValues(field);
+                if (sdv is not null)
+                    segSortedDvs[field] = sdv;
+            }
+
             for (int oldDocId = 0; oldDocId < segInfo.DocCount; oldDocId++)
             {
                 if (!reader.IsLive(oldDocId)) continue;
+
                 var fields = reader.GetStoredFields(oldDocId);
                 var mutableFields = new Dictionary<string, List<string>>();
                 foreach (var kvp in fields)
@@ -165,6 +221,54 @@ public sealed class SegmentMerger
                         }
                         fieldMap[remapDocId] = numVal;
                     }
+                }
+
+                // Field lengths (.fln) — one entry per (field, doc).
+                foreach (var field in segInfo.FieldNames)
+                {
+                    if (segFieldLengths.TryGetValue(field, out var fl) && (uint)oldDocId < (uint)fl.Length)
+                        allFieldLengths[field][remapDocId] = fl[oldDocId];
+                }
+
+                // Column-stride numeric DocValues (.dvn).
+                foreach (var (field, arr) in segNumericDvs)
+                {
+                    if ((uint)oldDocId >= (uint)arr.Length) continue;
+                    if (!allNumericDocValues.TryGetValue(field, out var dst))
+                    {
+                        dst = new double[totalDocs];
+                        allNumericDocValues[field] = dst;
+                    }
+                    dst[remapDocId] = arr[oldDocId];
+                }
+
+                // Column-stride sorted DocValues (.dvs).
+                foreach (var (field, arr) in segSortedDvs)
+                {
+                    if ((uint)oldDocId >= (uint)arr.Length) continue;
+                    if (!allSortedDocValues.TryGetValue(field, out var dst))
+                    {
+                        dst = new string?[totalDocs];
+                        allSortedDocValues[field] = dst;
+                    }
+                    dst[remapDocId] = arr[oldDocId];
+                }
+
+                // Term vectors (.tvd/.tvx) — keep alignment by emitting an empty dict
+                // for docs from segments that didn't store vectors.
+                if (allTermVectorDocs is not null)
+                {
+                    Dictionary<string, List<TermVectorEntry>>? tv = segHasTermVectors
+                        ? reader.GetTermVectors(oldDocId)
+                        : null;
+                    allTermVectorDocs.Add(tv ?? []);
+                }
+
+                // Parent bitset (.pbs) — remap any source parent docs into the merged space.
+                if (segParentBitSet is not null && segParentBitSet.IsParent(oldDocId))
+                {
+                    mergedParentBitSet ??= new ParentBitSet(totalDocs);
+                    mergedParentBitSet.Set(remapDocId);
                 }
 
                 if (reader.HasVectors)
@@ -275,6 +379,41 @@ public sealed class SegmentMerger
         // Write .num if any numeric fields
         if (allNumericFields.Count > 0)
             WriteNumericIndex(basePath + ".num", allNumericFields);
+
+        // Write exact field lengths (.fln) so BM25 scoring on the merged segment
+        // matches the unmerged segments precisely (no quantisation loss).
+        FieldLengthWriter.Write(basePath + ".fln", allFieldLengths, totalDocs);
+
+        // Write column-stride numeric DocValues (.dvn) — used by sort, collapse, aggregations.
+        if (allNumericDocValues.Count > 0)
+            NumericDocValuesWriter.Write(basePath + ".dvn", allNumericDocValues, totalDocs);
+
+        // Write column-stride sorted DocValues (.dvs) — used by string sort and collapse.
+        if (allSortedDocValues.Count > 0)
+            SortedDocValuesWriter.Write(basePath + ".dvs", allSortedDocValues, totalDocs);
+
+        // Write BKD tree (.bkd) for numeric range queries — derived from .dvn data.
+        if (allNumericDocValues.Count > 0)
+        {
+            var bkdData = new Dictionary<string, List<(double Value, int DocId)>>(StringComparer.Ordinal);
+            foreach (var (field, arr) in allNumericDocValues)
+            {
+                var points = new List<(double Value, int DocId)>(totalDocs);
+                for (int d = 0; d < totalDocs; d++)
+                    points.Add((arr[d], d));
+                bkdData[field] = points;
+            }
+            if (bkdData.Count > 0)
+                BKDWriter.Write(basePath + ".bkd", bkdData);
+        }
+
+        // Write term vectors (.tvd/.tvx) when at least one source segment had them.
+        if (allTermVectorDocs is not null && allTermVectorDocs.Count > 0)
+            TermVectorsWriter.Write(basePath + ".tvd", basePath + ".tvx", allTermVectorDocs);
+
+        // Write parent bitset (.pbs) for block-join queries to keep working post-merge.
+        if (mergedParentBitSet is not null)
+            mergedParentBitSet.WriteTo(basePath + ".pbs");
 
         // Write .seg
         var mergedInfo = new SegmentInfo
@@ -449,13 +588,13 @@ public sealed class SegmentMerger
 
     private void CleanupSegmentFiles(SegmentInfo seg)
     {
-        var basePath = Path.Combine(_directory.DirectoryPath, seg.SegmentId);
-        var extensions = new[] { ".seg", ".dic", ".pos", ".nrm", ".fdt", ".fdx", ".del", ".vec", ".num" };
-        foreach (var ext in extensions)
+        // Delete every file belonging to this segment (any extension), not a hardcoded list.
+        // This is immune to future codec additions and prevents orphan-file disk leaks.
+        var pattern = $"{seg.SegmentId}.*";
+        foreach (var filePath in Directory.GetFiles(_directory.DirectoryPath, pattern))
         {
-            var filePath = basePath + ext;
-            if (File.Exists(filePath))
-                File.Delete(filePath);
+            try { File.Delete(filePath); }
+            catch { /* best-effort cleanup */ }
         }
     }
 
