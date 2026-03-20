@@ -141,13 +141,10 @@ public sealed class SegmentMerger
         if (totalDocs == 0)
             return null;
 
-        // Pre-allocate per-field arrays for column-stride codecs (.fln, .dvn, .dvs).
-        // .fln: every field gets an entry — zero-filled by default.
+        // Lazily-populated per-field column-stride codec arrays (.fln, .dvn, .dvs).
+        // We don't pre-seed by FieldNames because numeric fields aren't always present
+        // in segInfo.FieldNames yet still produce DocValues / lengths.
         var allFieldLengths = new Dictionary<string, int[]>(StringComparer.Ordinal);
-        foreach (var fn in fieldNames)
-            allFieldLengths[fn] = new int[totalDocs];
-
-        // .dvn / .dvs / .pbs / .tvd: lazily allocated when first needed.
         var allNumericDocValues = new Dictionary<string, double[]>(StringComparer.Ordinal);
         var allSortedDocValues = new Dictionary<string, string?[]>(StringComparer.Ordinal);
 
@@ -179,26 +176,20 @@ public sealed class SegmentMerger
             bool segHasTermVectors = reader.HasTermVectors;
             var segParentBitSet = reader.GetParentBitSet();
 
-            // Pre-fetch per-field length arrays for this segment.
-            var segFieldLengths = new Dictionary<string, int[]>(StringComparer.Ordinal);
-            foreach (var field in segInfo.FieldNames)
-            {
-                if (reader.TryGetFieldLengths(field, out var fl))
-                    segFieldLengths[field] = fl;
-            }
+            // Pre-fetch per-field length arrays for this segment by reading .fln directly,
+            // which lists every field that has length data (including ones not in FieldNames).
+            var flnPath = Path.Combine(_directory.DirectoryPath, segInfo.SegmentId + ".fln");
+            var segFieldLengths = FieldLengthReader.TryRead(flnPath)
+                ?? new Dictionary<string, int[]>(StringComparer.Ordinal);
 
             // Pre-fetch per-field column-stride DV arrays for this segment.
-            var segNumericDvs = new Dictionary<string, double[]>(StringComparer.Ordinal);
-            var segSortedDvs = new Dictionary<string, string[]>(StringComparer.Ordinal);
-            foreach (var field in segInfo.FieldNames)
-            {
-                var ndv = reader.GetNumericDocValues(field);
-                if (ndv is not null)
-                    segNumericDvs[field] = ndv;
-                var sdv = reader.GetSortedDocValues(field);
-                if (sdv is not null)
-                    segSortedDvs[field] = sdv;
-            }
+            // We read .dvn / .dvs directly (rather than iterating segInfo.FieldNames)
+            // because numeric fields aren't always recorded in FieldNames yet still
+            // produce DocValues.
+            var segNumericDvs = NumericDocValuesReader.Read(
+                Path.Combine(_directory.DirectoryPath, segInfo.SegmentId + ".dvn"));
+            var segSortedDvs = SortedDocValuesReader.Read(
+                Path.Combine(_directory.DirectoryPath, segInfo.SegmentId + ".dvs"));
 
             for (int oldDocId = 0; oldDocId < segInfo.DocCount; oldDocId++)
             {
@@ -224,10 +215,15 @@ public sealed class SegmentMerger
                 }
 
                 // Field lengths (.fln) — one entry per (field, doc).
-                foreach (var field in segInfo.FieldNames)
+                foreach (var (field, fl) in segFieldLengths)
                 {
-                    if (segFieldLengths.TryGetValue(field, out var fl) && (uint)oldDocId < (uint)fl.Length)
-                        allFieldLengths[field][remapDocId] = fl[oldDocId];
+                    if ((uint)oldDocId >= (uint)fl.Length) continue;
+                    if (!allFieldLengths.TryGetValue(field, out var dst))
+                    {
+                        dst = new int[totalDocs];
+                        allFieldLengths[field] = dst;
+                    }
+                    dst[remapDocId] = fl[oldDocId];
                 }
 
                 // Column-stride numeric DocValues (.dvn).
@@ -382,7 +378,8 @@ public sealed class SegmentMerger
 
         // Write exact field lengths (.fln) so BM25 scoring on the merged segment
         // matches the unmerged segments precisely (no quantisation loss).
-        FieldLengthWriter.Write(basePath + ".fln", allFieldLengths, totalDocs);
+        if (allFieldLengths.Count > 0)
+            FieldLengthWriter.Write(basePath + ".fln", allFieldLengths, totalDocs);
 
         // Write column-stride numeric DocValues (.dvn) — used by sort, collapse, aggregations.
         if (allNumericDocValues.Count > 0)
