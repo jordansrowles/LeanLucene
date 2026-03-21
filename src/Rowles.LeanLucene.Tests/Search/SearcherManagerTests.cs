@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using Rowles.LeanLucene.Document;
 using Rowles.LeanLucene.Document.Fields;
 using Rowles.LeanLucene.Index.Indexer;
@@ -144,6 +145,79 @@ public sealed class SearcherManagerTests : IDisposable
         mgr.Dispose();
 
         Assert.Throws<ObjectDisposedException>(() => mgr.Acquire());
+    }
+
+    /// <summary>
+    /// Regression test for C3: verifies that concurrent Acquire/Release calls never receive
+    /// a disposed <see cref="IndexSearcher"/> while a refresh thread is swapping in new ones.
+    /// </summary>
+    [Fact(Timeout = 30_000)]
+    public async Task Acquire_DuringConcurrentRefresh_NeverReturnsDisposedSearcher()
+    {
+        var dir = new MMapDirectory(_dir);
+        using (var w = new IndexWriter(dir, new IndexWriterConfig()))
+        {
+            w.AddDocument(Doc("initial"));
+            w.Commit();
+        }
+
+        using var mgr = new SearcherManager(dir);
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        var errors = new ConcurrentBag<Exception>();
+
+        // 64 workers: Acquire → read Stats → Release in a tight loop
+        var workers = Enumerable.Range(0, 64).Select(_ => Task.Run(async () =>
+        {
+            while (!cts.Token.IsCancellationRequested)
+            {
+                IndexSearcher? searcher = null;
+                try
+                {
+                    searcher = mgr.Acquire();
+                    _ = searcher.Stats.TotalDocCount;
+                }
+                catch (ObjectDisposedException ex)
+                {
+                    errors.Add(ex);
+                    return;
+                }
+                catch (OperationCanceledException) { return; }
+                finally
+                {
+                    if (searcher is not null)
+                        mgr.Release(searcher);
+                }
+                await Task.Yield();
+            }
+        })).ToArray();
+
+        // Refresh thread: commits a new document then calls MaybeRefresh every ~10 ms
+        var refreshTask = Task.Run(async () =>
+        {
+            int i = 0;
+            while (!cts.Token.IsCancellationRequested)
+            {
+                try
+                {
+                    using (var w = new IndexWriter(dir, new IndexWriterConfig()))
+                    {
+                        w.AddDocument(Doc($"refresh{i++}"));
+                        w.Commit();
+                    }
+                    mgr.MaybeRefresh();
+                    await Task.Delay(10, cts.Token);
+                }
+                catch (OperationCanceledException) { return; }
+                catch (IOException) { /* Transient; skip this commit cycle */ }
+                catch (InvalidDataException) { /* Transient; skip this commit cycle */ }
+            }
+        });
+
+        await Task.WhenAll(workers.Append(refreshTask));
+
+        Assert.Empty(errors);
+        var finalCount = mgr.UsingSearcher(s => s.Stats.TotalDocCount);
+        Assert.True(finalCount >= 1, $"Expected at least 1 document; got {finalCount}");
     }
 
     private static LeanDocument Doc(string body)
