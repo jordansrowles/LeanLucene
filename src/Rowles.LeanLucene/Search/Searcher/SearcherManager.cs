@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using Rowles.LeanLucene.Store;
 
 namespace Rowles.LeanLucene.Search.Searcher;
@@ -15,6 +16,7 @@ public sealed class SearcherManager : IDisposable
     private readonly Lock _swapLock = new();
     private readonly CancellationTokenSource _cts = new();
     private readonly Task _refreshTask;
+    private readonly ConditionalWeakTable<IndexSearcher, SearcherRef> _searchers = new();
 
     private volatile SearcherRef _current;
     private int _disposed;
@@ -34,7 +36,9 @@ public sealed class SearcherManager : IDisposable
         var latestCommit = Index.IndexRecovery.RecoverLatestCommit(directory.DirectoryPath);
         int initialGen = latestCommit?.Generation ?? 0;
 
-        _current = new SearcherRef(new IndexSearcher(directory, _config.SearcherConfig), initialGen);
+        var initialSearcher = new IndexSearcher(directory, _config.SearcherConfig);
+        _current = new SearcherRef(initialSearcher, initialGen);
+        _searchers.Add(initialSearcher, _current);
         _refreshTask = Task.Run(() => RefreshLoop(_cts.Token));
     }
 
@@ -45,28 +49,25 @@ public sealed class SearcherManager : IDisposable
     public IndexSearcher Acquire()
     {
         ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
-        var sr = _current;
-        sr.IncrementRef();
-        return sr.Searcher;
+        while (true)
+        {
+            var sr = _current;
+            if (sr.TryIncrementRef())
+                return sr.Searcher;
+            // The ref was retired between reading _current and incrementing;
+            // _current has already been swapped to a live ref — spin and retry.
+            Thread.SpinWait(1);
+        }
     }
 
     /// <summary>
-    /// Releases a previously acquired searcher. If the searcher is stale and
-    /// this was the last reference, it will be disposed.
+    /// Releases a previously acquired searcher. If this was the last reference,
+    /// it will be disposed.
     /// </summary>
     public void Release(IndexSearcher searcher)
     {
-        // Walk the chain: current first, then any pending disposal
-        var sr = _current;
-        if (ReferenceEquals(sr.Searcher, searcher))
-        {
+        if (_searchers.TryGetValue(searcher, out var sr))
             sr.DecrementRef();
-            return;
-        }
-
-        // The searcher was swapped out — find the old ref
-        // In practice there's at most one old ref in flight
-        sr.DecrementRef();
     }
 
     /// <summary>
@@ -105,7 +106,7 @@ public sealed class SearcherManager : IDisposable
         catch (AggregateException) { /* Expected: task cancelled during shutdown */ }
         catch (ObjectDisposedException) { /* CTS already disposed */ }
         _cts.Dispose();
-        _current.Searcher.Dispose();
+        _current.Retire();
     }
 
     private async Task RefreshLoop(CancellationToken ct)
@@ -129,10 +130,7 @@ public sealed class SearcherManager : IDisposable
         var latestCommit = Index.IndexRecovery.RecoverLatestCommit(_directory.DirectoryPath);
         if (latestCommit is null) return false;
 
-        var currentStats = _current.Searcher.Stats;
-        // Quick heuristic: if total doc count or generation changed, refresh
-        int currentGen = _current.Generation;
-        if (latestCommit.Generation <= currentGen)
+        if (latestCommit.Generation <= _current.Generation)
             return false;
 
         lock (_swapLock)
@@ -142,11 +140,12 @@ public sealed class SearcherManager : IDisposable
                 return false;
 
             var newSearcher = new IndexSearcher(_directory, _config.SearcherConfig);
-            var oldRef = _current;
-            _current = new SearcherRef(newSearcher, latestCommit.Generation);
+            var newRef = new SearcherRef(newSearcher, latestCommit.Generation);
+            _searchers.Add(newSearcher, newRef);
 
-            // Dispose old searcher when no more references
-            oldRef.MarkStale();
+            var oldRef = _current;
+            _current = newRef;
+            oldRef.Retire();
             return true;
         }
     }
@@ -156,8 +155,7 @@ public sealed class SearcherManager : IDisposable
     {
         public IndexSearcher Searcher { get; }
         public int Generation { get; }
-        private int _refCount;
-        private volatile bool _stale;
+        private int _refCount = 1; // 1 = the owner/publish reference held by _current
 
         public SearcherRef(IndexSearcher searcher, int generation = 0)
         {
@@ -165,20 +163,32 @@ public sealed class SearcherManager : IDisposable
             Generation = generation;
         }
 
-        public void IncrementRef() => Interlocked.Increment(ref _refCount);
+        /// <summary>
+        /// Attempts to increment the ref count atomically. Returns false if the count
+        /// is already zero (the ref has been retired), allowing <see cref="SearcherManager.Acquire"/>
+        /// to retry with a fresh <see cref="SearcherRef"/>.
+        /// </summary>
+        public bool TryIncrementRef()
+        {
+            int current;
+            do
+            {
+                current = Volatile.Read(ref _refCount);
+                if (current <= 0) return false;
+            } while (Interlocked.CompareExchange(ref _refCount, current + 1, current) != current);
+            return true;
+        }
 
         public void DecrementRef()
         {
-            int remaining = Interlocked.Decrement(ref _refCount);
-            if (remaining <= 0 && _stale)
+            if (Interlocked.Decrement(ref _refCount) == 0)
                 Searcher.Dispose();
         }
 
-        public void MarkStale()
-        {
-            _stale = true;
-            if (Volatile.Read(ref _refCount) <= 0)
-                Searcher.Dispose();
-        }
+        /// <summary>
+        /// Releases the owner/publish reference. Called by <see cref="SearcherManager"/> when
+        /// this ref is swapped out or when the manager is disposed.
+        /// </summary>
+        public void Retire() => DecrementRef();
     }
 }
