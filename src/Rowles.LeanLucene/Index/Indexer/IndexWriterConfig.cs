@@ -44,6 +44,14 @@ public sealed class IndexWriterConfig
     public bool UseCompoundFile { get; set; }
 
     /// <summary>
+    /// When <c>true</c> (default), <see cref="IndexWriter.Commit"/> flushes file contents and
+    /// directory metadata to disk via <c>fsync</c> before and after the <c>segments_N</c> rename,
+    /// guaranteeing the commit survives a power loss. Disable only for write-heavy benchmarks
+    /// where durability is not required; correctness suffers if the host crashes mid-commit.
+    /// </summary>
+    public bool DurableCommits { get; set; } = true;
+
+    /// <summary>
     /// Compression algorithm for stored fields. Default: LZ4 (fast decompression).
     /// Options: None, Lz4, Zstandard.
     /// </summary>
