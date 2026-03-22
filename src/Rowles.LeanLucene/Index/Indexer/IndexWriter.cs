@@ -177,28 +177,30 @@ public sealed partial class IndexWriter : IDisposable
         ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
         if (documents.Count == 0) return;
 
-        if (_backpressureSemaphore is not null)
-        {
-            for (int i = 0; i < documents.Count; i++)
-            {
-                if (!_backpressureSemaphore.Wait(0))
-                {
-                    lock (_writeLock)
-                    {
-                        if (_bufferedDocCount > 0)
-                            FlushSegment();
-                    }
-                    _backpressureSemaphore.Wait();
-                }
-            }
-        }
-
+        int acquired = 0;
         try
         {
+            if (_backpressureSemaphore is not null)
+            {
+                for (int i = 0; i < documents.Count; i++)
+                {
+                    if (!_backpressureSemaphore.Wait(0))
+                    {
+                        lock (_writeLock)
+                        {
+                            if (_bufferedDocCount > 0)
+                                FlushSegment();
+                        }
+                        _backpressureSemaphore.Wait();
+                    }
+                    acquired++;
+                }
+            }
+
             lock (_writeLock)
             {
                 if (_backpressureSemaphore is not null)
-                    _semaphoreSlotsHeld += documents.Count;
+                    _semaphoreSlotsHeld += acquired;
 
                 for (int i = 0; i < documents.Count; i++)
                     AddDocumentCore(documents[i]);
@@ -206,12 +208,12 @@ public sealed partial class IndexWriter : IDisposable
         }
         catch
         {
-            if (_backpressureSemaphore is not null)
+            if (_backpressureSemaphore is not null && acquired > 0)
             {
-                _backpressureSemaphore.Release(documents.Count);
+                _backpressureSemaphore.Release(acquired);
                 lock (_writeLock)
                 {
-                    _semaphoreSlotsHeld -= documents.Count;
+                    _semaphoreSlotsHeld -= acquired;
                 }
             }
             throw;
@@ -232,28 +234,30 @@ public sealed partial class IndexWriter : IDisposable
         if (block.Count < 2)
             throw new ArgumentException("A document block requires at least one child and one parent document.", nameof(block));
 
-        if (_backpressureSemaphore is not null)
-        {
-            for (int i = 0; i < block.Count; i++)
-            {
-                if (!_backpressureSemaphore.Wait(0))
-                {
-                    lock (_writeLock)
-                    {
-                        if (_bufferedDocCount > 0)
-                            FlushSegment();
-                    }
-                    _backpressureSemaphore.Wait();
-                }
-            }
-        }
-
+        int acquired = 0;
         try
         {
+            if (_backpressureSemaphore is not null)
+            {
+                for (int i = 0; i < block.Count; i++)
+                {
+                    if (!_backpressureSemaphore.Wait(0))
+                    {
+                        lock (_writeLock)
+                        {
+                            if (_bufferedDocCount > 0)
+                                FlushSegment();
+                        }
+                        _backpressureSemaphore.Wait();
+                    }
+                    acquired++;
+                }
+            }
+
             lock (_writeLock)
             {
                 if (_backpressureSemaphore is not null)
-                    _semaphoreSlotsHeld += block.Count;
+                    _semaphoreSlotsHeld += acquired;
 
                 // Index all docs in the block contiguously.
                 // Record the parent ID BEFORE its AddDocumentCore call so that
@@ -272,12 +276,12 @@ public sealed partial class IndexWriter : IDisposable
         }
         catch
         {
-            if (_backpressureSemaphore is not null)
+            if (_backpressureSemaphore is not null && acquired > 0)
             {
-                _backpressureSemaphore.Release(block.Count);
+                _backpressureSemaphore.Release(acquired);
                 lock (_writeLock)
                 {
-                    _semaphoreSlotsHeld -= block.Count;
+                    _semaphoreSlotsHeld -= acquired;
                 }
             }
             throw;
