@@ -13,6 +13,7 @@ public sealed class IndexOutput : IDisposable
 
     private readonly FileStream _stream;
     private readonly byte[] _buffer;
+    private readonly bool _durable;
     private int _bufferPosition;
     private bool _disposed;
 
@@ -23,11 +24,17 @@ public sealed class IndexOutput : IDisposable
     /// Creates a new file at <paramref name="filePath"/> and opens it for buffered sequential writing.
     /// </summary>
     /// <param name="filePath">The full path of the file to create.</param>
-    public IndexOutput(string filePath)
+    /// <param name="durable">
+    /// When <c>true</c>, <see cref="Dispose"/> calls <c>FileStream.Flush(flushToDisk: true)</c> so the
+    /// file's bytes are persisted to the storage device before the handle is released. Defaults to
+    /// <c>false</c> to preserve historic non-durable behaviour for callers that don't need it.
+    /// </param>
+    public IndexOutput(string filePath, bool durable = false)
     {
         _stream = new FileStream(filePath, FileMode.Create, FileAccess.Write, FileShare.None);
         _buffer = ArrayPool<byte>.Shared.Rent(BufferSize);
         _bufferPosition = 0;
+        _durable = durable;
     }
 
     /// <summary>
@@ -144,6 +151,8 @@ public sealed class IndexOutput : IDisposable
         try
         {
             FlushBuffer();
+            if (_durable)
+                _stream.Flush(flushToDisk: true);
         }
         finally
         {
