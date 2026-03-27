@@ -18,10 +18,17 @@ public static class IndexRecovery
     /// Attempts to load the latest valid commit from the index directory.
     /// Tries generations from highest to lowest. Returns null if no valid commit exists.
     /// </summary>
-    public static RecoveryResult? RecoverLatestCommit(string directoryPath)
+    /// <param name="directoryPath">The index directory.</param>
+    /// <param name="cleanupOrphans">
+    /// When <c>true</c> (writer-side recovery), deletes orphan segment files and stale temp files.
+    /// When <c>false</c> (reader-side polling), only inspects the directory and never mutates it —
+    /// reader threads must not race the writer by deleting in-flight segment files.
+    /// </param>
+    public static RecoveryResult? RecoverLatestCommit(string directoryPath, bool cleanupOrphans = true)
     {
-        // Clean up any leftover temp files from interrupted commits
-        CleanupTempFiles(directoryPath);
+        // Clean up any leftover temp files from interrupted commits (writer-side only).
+        if (cleanupOrphans)
+            CleanupTempFiles(directoryPath);
 
         var commitFiles = FindCommitFiles(directoryPath);
         if (commitFiles.Count == 0)
@@ -33,8 +40,8 @@ public static class IndexRecovery
             var result = TryLoadCommit(directoryPath, filePath, generation);
             if (result is not null)
             {
-                // Clean up orphaned segment files
-                CleanupOrphanedSegments(directoryPath, result.SegmentIds);
+                if (cleanupOrphans)
+                    CleanupOrphanedSegments(directoryPath, result.SegmentIds);
                 return result;
             }
         }

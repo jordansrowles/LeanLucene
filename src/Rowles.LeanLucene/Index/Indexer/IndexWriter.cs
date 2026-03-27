@@ -340,9 +340,6 @@ public sealed partial class IndexWriter : IDisposable
         if (_pendingDeletes.Count > 0)
             ApplyPendingDeletions(_committedSegments);
 
-        // Schedule merge in background (non-blocking)
-        ScheduleBackgroundMerge();
-
         // Write segments_N commit file (atomic: write to temp, then rename)
         _commitGeneration++;
         var commitFile = Path.Combine(_directory.DirectoryPath, $"segments_{_commitGeneration}");
@@ -364,6 +361,8 @@ public sealed partial class IndexWriter : IDisposable
                 if (string.Equals(name, "write.lock", StringComparison.Ordinal)) continue;
                 Store.DirectoryFsync.SyncFile(path);
             }
+            foreach (var f in Directory.EnumerateFiles(_directory.DirectoryPath))
+                Console.Error.WriteLine($"[DBG]   sweep file: {Path.GetFileName(f)} ({new FileInfo(f).Length}B)");
 
             // Sync the directory itself so any prior file creations are durable before the rename.
             Store.DirectoryFsync.Sync(_directory.DirectoryPath);
@@ -393,6 +392,11 @@ public sealed partial class IndexWriter : IDisposable
 
         // Apply deletion policy to prune old commit files
         _config.DeletionPolicy.OnCommit(_directory.DirectoryPath, _commitGeneration);
+
+        // Schedule merge in background (non-blocking) only after every reader of
+        // _committedSegments and its files has completed. Scheduling earlier allowed
+        // a fast merge to delete segment files the post-commit work still needed.
+        ScheduleBackgroundMerge();
     }
 
     /// <summary>

@@ -33,7 +33,7 @@ public sealed class SearcherManager : IDisposable
         _config = config ?? new SearcherManagerConfig();
 
         // Determine the current commit generation so we don't falsely refresh
-        var latestCommit = Index.IndexRecovery.RecoverLatestCommit(directory.DirectoryPath);
+        var latestCommit = Index.IndexRecovery.RecoverLatestCommit(directory.DirectoryPath, cleanupOrphans: false);
         int initialGen = latestCommit?.Generation ?? 0;
 
         var initialSearcher = new IndexSearcher(directory, _config.SearcherConfig);
@@ -127,7 +127,7 @@ public sealed class SearcherManager : IDisposable
     private bool TryRefresh()
     {
         // Check if the commit generation on disk is newer than what we have
-        var latestCommit = Index.IndexRecovery.RecoverLatestCommit(_directory.DirectoryPath);
+        var latestCommit = Index.IndexRecovery.RecoverLatestCommit(_directory.DirectoryPath, cleanupOrphans: false);
         if (latestCommit is null) return false;
 
         if (latestCommit.Generation <= _current.Generation)
