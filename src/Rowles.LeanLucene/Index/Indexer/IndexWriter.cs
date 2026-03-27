@@ -351,8 +351,41 @@ public sealed partial class IndexWriter : IDisposable
         foreach (var seg in _committedSegments)
             segmentIds.Add(seg.SegmentId);
         var commitData = JsonSerializer.Serialize(new CommitData { Segments = segmentIds, Generation = _commitGeneration });
-        File.WriteAllText(tempFile, commitData);
-        File.Move(tempFile, commitFile, overwrite: true);
+
+        if (_config.DurableCommits)
+        {
+            // Belt-and-braces durability: fsync every committed segment file before writing
+            // the segments_N pointer. Codec writers don't all use IndexOutput, so we do a
+            // post-hoc sweep here rather than thread a flag through every writer.
+            foreach (var path in Directory.EnumerateFiles(_directory.DirectoryPath))
+            {
+                var name = Path.GetFileName(path);
+                if (name.StartsWith("segments_", StringComparison.Ordinal)) continue;
+                if (string.Equals(name, "write.lock", StringComparison.Ordinal)) continue;
+                Store.DirectoryFsync.SyncFile(path);
+            }
+
+            // Sync the directory itself so any prior file creations are durable before the rename.
+            Store.DirectoryFsync.Sync(_directory.DirectoryPath);
+
+            // Write segments_N.tmp durably so its contents survive a crash before the rename.
+            using (var fs = new FileStream(tempFile, FileMode.Create, FileAccess.Write, FileShare.None))
+            using (var sw = new StreamWriter(fs))
+            {
+                sw.Write(commitData);
+                sw.Flush();
+                fs.Flush(flushToDisk: true);
+            }
+            File.Move(tempFile, commitFile, overwrite: true);
+
+            // Sync the directory again so the rename itself is durable.
+            Store.DirectoryFsync.Sync(_directory.DirectoryPath);
+        }
+        else
+        {
+            File.WriteAllText(tempFile, commitData);
+            File.Move(tempFile, commitFile, overwrite: true);
+        }
 
         // Persist index statistics alongside the commit so IndexSearcher can
         // skip the expensive full-segment scan on construction.

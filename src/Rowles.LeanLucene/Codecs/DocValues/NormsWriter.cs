@@ -9,9 +9,9 @@ namespace Rowles.LeanLucene.Codecs.DocValues;
 /// </summary>
 internal static class NormsWriter
 {
-    internal static void Write(string filePath, IReadOnlyDictionary<string, float[]> fieldNorms, int docCount = -1)
+    internal static void Write(string filePath, IReadOnlyDictionary<string, float[]> fieldNorms, int docCount = -1, bool durable = false)
     {
-        using var output = new IndexOutput(filePath);
+        using var output = new IndexOutput(filePath, durable);
         
         CodecConstants.WriteHeader(output, CodecConstants.NormsVersion);
         

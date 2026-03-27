@@ -9,9 +9,9 @@ namespace Rowles.LeanLucene.Codecs;
 /// </summary>
 internal static class TermDictionaryWriter
 {
-    internal static void Write(string filePath, List<string> sortedTerms, Dictionary<string, long> postingsOffsets)
+    internal static void Write(string filePath, List<string> sortedTerms, Dictionary<string, long> postingsOffsets, bool durable = false)
     {
-        using var output = new IndexOutput(filePath);
+        using var output = new IndexOutput(filePath, durable);
         CodecConstants.WriteHeader(output, CodecConstants.TermDictionaryVersion);
         FSTBuilder.Write(output, sortedTerms, postingsOffsets);
     }

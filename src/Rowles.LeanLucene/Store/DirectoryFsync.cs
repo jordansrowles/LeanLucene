@@ -66,4 +66,23 @@ internal static class DirectoryFsync
 
     [DllImport("libc", EntryPoint = "close", SetLastError = true)]
     private static extern int close(int fd);
+
+    /// <summary>
+    /// Forces a previously written file's contents to be persisted to the underlying storage
+    /// device. Equivalent to <c>fsync</c> on Unix and <c>FlushFileBuffers</c> on Windows.
+    /// Errors are swallowed (best-effort).
+    /// </summary>
+    public static void SyncFile(string filePath)
+    {
+        if (string.IsNullOrEmpty(filePath)) return;
+        try
+        {
+            using var fs = new FileStream(filePath, FileMode.Open, FileAccess.Write, FileShare.ReadWrite);
+            fs.Flush(flushToDisk: true);
+        }
+        catch (FileNotFoundException) { }
+        catch (DirectoryNotFoundException) { }
+        catch (UnauthorizedAccessException) { }
+        catch (IOException) { }
+    }
 }

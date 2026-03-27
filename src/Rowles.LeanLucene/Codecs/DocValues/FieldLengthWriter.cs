@@ -10,9 +10,9 @@ namespace Rowles.LeanLucene.Codecs.DocValues;
 /// </summary>
 internal static class FieldLengthWriter
 {
-    internal static void Write(string filePath, IReadOnlyDictionary<string, int[]> fieldTokenCounts, int docCount = -1)
+    internal static void Write(string filePath, IReadOnlyDictionary<string, int[]> fieldTokenCounts, int docCount = -1, bool durable = false)
     {
-        using var output = new IndexOutput(filePath);
+        using var output = new IndexOutput(filePath, durable);
 
         CodecConstants.WriteHeader(output, CodecConstants.FieldLengthVersion);
         output.WriteInt32(fieldTokenCounts.Count);

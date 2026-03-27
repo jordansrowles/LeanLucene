@@ -10,9 +10,9 @@ namespace Rowles.LeanLucene.Codecs.DocValues;
 /// </summary>
 internal static class NumericDocValuesWriter
 {
-    public static void Write(string filePath, IReadOnlyDictionary<string, double[]> fields, int docCount)
+    public static void Write(string filePath, IReadOnlyDictionary<string, double[]> fields, int docCount, bool durable = false)
     {
-        using var output = new IndexOutput(filePath);
+        using var output = new IndexOutput(filePath, durable);
         
         CodecConstants.WriteHeader(output, CodecConstants.NumericDocValuesVersion);
         
