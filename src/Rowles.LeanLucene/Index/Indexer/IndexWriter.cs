@@ -474,14 +474,7 @@ public sealed partial class IndexWriter : IDisposable
         if (_bufferedDocCount >= _config.MaxBufferedDocs)
             return true;
         long ram = ComputeEstimatedRamBytes();
-        if (ram >= (long)(_config.RamBufferSizeMB * 1024 * 1024))
-            return true;
-        if (_config.FlushThrottleBytes > 0 && ram >= _config.FlushThrottleBytes)
-        {
-            GC.Collect(2, GCCollectionMode.Aggressive, blocking: true);
-            return true;
-        }
-        return false;
+        return ram >= (long)(_config.RamBufferSizeMB * 1024 * 1024);
     }
 
     /// <summary>

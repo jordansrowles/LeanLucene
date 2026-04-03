@@ -131,12 +131,6 @@ public sealed class IndexWriterConfig
     public IndexSort? IndexSort { get; set; }
 
     /// <summary>
-    /// Hard ceiling in bytes. When <see cref="ComputeEstimatedRamBytes"/> exceeds this value,
-    /// IndexWriter force-flushes and requests a GC. Default: 0 (disabled).
-    /// </summary>
-    public long FlushThrottleBytes { get; set; }
-
-    /// <summary>
     /// Maximum number of unmerged segments before AddDocument blocks until a merge completes.
     /// Provides backpressure to prevent unbounded segment accumulation. Default: 0 (disabled).
     /// </summary>

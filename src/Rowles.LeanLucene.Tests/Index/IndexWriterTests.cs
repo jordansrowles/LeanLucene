@@ -128,14 +128,13 @@ public sealed class IndexWriterTests : IClassFixture<TestDirectoryFixture>
     }
 
     [Fact]
-    public void HardCeiling_ForcesFlush_WhenExceeded()
+    public void RamThreshold_ForcesFlush_WhenExceeded()
     {
         var dir = new MMapDirectory(SubDir("hard_ceiling"));
         var config = new IndexWriterConfig
         {
-            RamBufferSizeMB = 1024, // very high so RAM threshold won't trigger
-            MaxBufferedDocs = 100_000,
-            FlushThrottleBytes = 100 * 1024 // 100 KB hard ceiling
+            RamBufferSizeMB = 0.1, // 100 KB — tight threshold to trigger RAM-based flush
+            MaxBufferedDocs = 100_000
         };
         using var writer = new IndexWriter(dir, config);
 
@@ -147,9 +146,45 @@ public sealed class IndexWriterTests : IClassFixture<TestDirectoryFixture>
         }
         writer.Commit();
 
-        // Hard ceiling should have forced flushes, creating segment files
+        // RAM threshold should have forced at least one flush, creating segment files
         var segFiles = System.IO.Directory.GetFiles(SubDir("hard_ceiling"), "*.seg");
         Assert.NotEmpty(segFiles);
+    }
+
+    [Fact]
+    public void HighRamPressure_DoesNotForceFullGC()
+    {
+        // Verify that high indexing load never triggers an induced gen-2 collection.
+        // Pre-M3, ShouldFlush() called GC.Collect(2, Aggressive, blocking) when
+        // FlushThrottleBytes was exceeded. That call is now removed entirely.
+        var dir = new MMapDirectory(SubDir("no_full_gc"));
+        var config = new IndexWriterConfig
+        {
+            RamBufferSizeMB = 0.5,   // low threshold → frequent flushes, lots of GC pressure
+            MaxBufferedDocs = 100_000
+        };
+
+        int gen2Before = GC.CollectionCount(2);
+
+        using (var writer = new IndexWriter(dir, config))
+        {
+            for (int i = 0; i < 5000; i++)
+            {
+                var doc = new LeanDocument();
+                doc.Add(new TextField("body", $"stress document {i} forcing ram pressure"));
+                writer.AddDocument(doc);
+            }
+            writer.Commit();
+        }
+
+        int gen2After = GC.CollectionCount(2);
+
+        // A forced GC.Collect(2) would unconditionally increment this counter.
+        // With the fix applied it must stay at the natural background value — which
+        // for a short-running test should be 0 induced collections (natural GC may
+        // still fire, so we only assert the count did not jump by more than 1).
+        Assert.True(gen2After - gen2Before <= 1,
+            $"Unexpected gen-2 collection(s) during indexing: before={gen2Before}, after={gen2After}");
     }
 
     [Fact]
