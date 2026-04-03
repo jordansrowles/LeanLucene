@@ -37,31 +37,47 @@ public sealed partial class IndexWriter
         var pool = _dwptPool ?? throw new InvalidOperationException(
             "DWPT pool not initialised. Call InitialiseDwptPool() first.");
 
-        // Round-robin DWPT selection — lock-free via Interlocked
-        int slot = (int)((uint)Interlocked.Increment(ref _dwptCounter) % (uint)pool.Length);
-        var dwpt = pool[slot];
-
-        // Per-DWPT lock (not global — only contention on the same slot)
-        lock (dwpt)
+        // Register this call as in-flight BEFORE entering the hot path, then re-check
+        // disposed. This two-step prevents Dispose from tearing down the semaphore
+        // while we are still inside the lock on a DWPT slot.
+        Interlocked.Increment(ref _inFlightAdds);
+        try
         {
-            dwpt.AddDocument(doc);
-        }
+            // Re-check: Dispose may have set _disposed between the first check and the
+            // increment above. If so, bail cleanly — the increment is undone in finally.
+            if (Volatile.Read(ref _disposed) != 0)
+                throw new ObjectDisposedException(nameof(IndexWriter));
 
-        // Check per-DWPT RAM threshold and flush if needed
-        long ramThreshold = (long)(_config.RamBufferSizeMB * 1024 * 1024) / pool.Length;
-        if (dwpt.EstimatedRamBytes > ramThreshold)
-        {
-            lock (_writeLock)
+            // Round-robin DWPT selection — lock-free via Interlocked
+            int slot = (int)((uint)Interlocked.Increment(ref _dwptCounter) % (uint)pool.Length);
+            var dwpt = pool[slot];
+
+            // Per-DWPT lock (not global — only contention on the same slot)
+            lock (dwpt)
             {
-                lock (dwpt)
+                dwpt.AddDocument(doc);
+            }
+
+            // Check per-DWPT RAM threshold and flush if needed
+            long ramThreshold = (long)(_config.RamBufferSizeMB * 1024 * 1024) / pool.Length;
+            if (dwpt.EstimatedRamBytes > ramThreshold)
+            {
+                lock (_writeLock)
                 {
-                    if (dwpt.DocCount > 0)
+                    lock (dwpt)
                     {
-                        MergeDwpt(dwpt);
-                        ResetDwpt(dwpt);
+                        if (dwpt.DocCount > 0)
+                        {
+                            MergeDwpt(dwpt);
+                            ResetDwpt(dwpt);
+                        }
                     }
                 }
             }
+        }
+        finally
+        {
+            Interlocked.Decrement(ref _inFlightAdds);
         }
     }
 

@@ -61,7 +61,8 @@ public sealed partial class IndexWriter : IDisposable
     private readonly SemaphoreSlim? _backpressureSemaphore;
     private int _semaphoreSlotsHeld;
     private readonly List<IndexSnapshot> _heldSnapshots = [];
-    private int _disposed; // 0 = alive, 1 = disposed (atomically set via Interlocked)
+    private int _disposed;      // 0 = alive, 1 = disposed (atomically set via Interlocked)
+    private int _inFlightAdds;  // count of AddDocumentLockFree callers currently inside the hot path
     private readonly FileStream _writeLockFile;
     // Background merge
     private Task? _mergeTask;
@@ -445,6 +446,13 @@ public sealed partial class IndexWriter : IDisposable
     public void Dispose()
     {
         if (Interlocked.CompareExchange(ref _disposed, 1, 0) != 0) return;
+
+        // Drain any AddDocumentLockFree callers that passed the disposed-check gate
+        // but have not yet completed their work. Without this fence they would race
+        // the semaphore dispose below and produce an ObjectDisposedException.
+        var spinWait = new SpinWait();
+        while (Volatile.Read(ref _inFlightAdds) != 0)
+            spinWait.SpinOnce();
 
         // Cancel and await background merge
         _mergeCts.Cancel();
