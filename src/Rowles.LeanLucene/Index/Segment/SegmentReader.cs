@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Collections.Frozen;
 using System.Runtime.CompilerServices;
 using Rowles.LeanLucene.Codecs;
@@ -21,17 +22,13 @@ public sealed partial class SegmentReader : IDisposable
     private readonly FrozenDictionary<string, byte[]> _fieldNorms;
     private readonly FrozenDictionary<string, int[]> _fieldLengthsPerField;
     private readonly VectorReader? _vectorReader;
-    private readonly Dictionary<(string, string), string> _qualifiedTermCache = new();
+    private readonly ConcurrentDictionary<(string, string), string> _qualifiedTermCache = new();
     private const int MaxQualifiedTermCacheSize = 8192;
     private LiveDocs? _liveDocs;
     private readonly CompoundFileReader? _cfsReader;
 
-    // 64-entry open-addressing term offset cache
-    private const int TermCacheSize = 64;
-    private const int TermCacheMask = TermCacheSize - 1;
-    private readonly string?[] _termCacheKeys = new string?[TermCacheSize];
-    private readonly long[] _termCacheOffsets = new long[TermCacheSize];
-    private readonly bool[] _termCacheHits = new bool[TermCacheSize];
+    // Thread-safe term offset cache (dictionary lookup, replaces racy open-addressing array)
+    private readonly ConcurrentDictionary<string, (long Offset, bool Found)> _termOffsetCache = new(StringComparer.Ordinal);
 
     // Lazy-loaded Stage 2 features (thread-safe via LazyInitializer)
     private Dictionary<string, Dictionary<int, double>>? _numericIndex;
@@ -141,11 +138,17 @@ public sealed partial class SegmentReader : IDisposable
     /// </summary>
     internal ParentBitSet? GetParentBitSet()
     {
-        if (_parentBitSetLoaded) return _parentBitSet;
-        var pbsPath = _basePath + ".pbs";
-        if (File.Exists(pbsPath))
-            _parentBitSet = ParentBitSet.ReadFrom(pbsPath);
-        _parentBitSetLoaded = true;
+        if (Volatile.Read(ref _parentBitSetLoaded)) return _parentBitSet;
+
+        var lockObj = LazyInitializer.EnsureInitialized(ref _lazyInitLock)!;
+        lock (lockObj)
+        {
+            if (_parentBitSetLoaded) return _parentBitSet;
+            var pbsPath = _basePath + ".pbs";
+            if (File.Exists(pbsPath))
+                _parentBitSet = ParentBitSet.ReadFrom(pbsPath);
+            Volatile.Write(ref _parentBitSetLoaded, true);
+        }
         return _parentBitSet;
     }
 
@@ -237,15 +240,7 @@ public sealed partial class SegmentReader : IDisposable
     /// </summary>
     private string GetQualifiedTerm(string field, string term)
     {
-        var key = (field, term);
-        if (!_qualifiedTermCache.TryGetValue(key, out var qt))
-        {
-            if (_qualifiedTermCache.Count >= MaxQualifiedTermCacheSize)
-                _qualifiedTermCache.Clear();
-            qt = string.Concat(field, "\x00", term);
-            _qualifiedTermCache[key] = qt;
-        }
-        return qt;
+        return _qualifiedTermCache.GetOrAdd((field, term), static k => string.Concat(k.Item1, "\x00", k.Item2));
     }
 
     /// <summary>
@@ -301,21 +296,18 @@ public sealed partial class SegmentReader : IDisposable
         return _posInput.ReadInt32();
     }
 
-    /// <summary>16-entry open-addressing cache for recent term lookups.</summary>
+    /// <summary>Thread-safe cache for recent term lookups.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private bool TryGetCachedOffset(string qualifiedTerm, out long offset)
     {
-        int slot = qualifiedTerm.GetHashCode() & TermCacheMask;
-        if (ReferenceEquals(qualifiedTerm, _termCacheKeys[slot]))
+        if (_termOffsetCache.TryGetValue(qualifiedTerm, out var entry))
         {
-            offset = _termCacheOffsets[slot];
-            return _termCacheHits[slot];
+            offset = entry.Offset;
+            return entry.Found;
         }
 
         bool found = _dicReader.TryGetPostingsOffset(qualifiedTerm, out offset);
-        _termCacheKeys[slot] = qualifiedTerm;
-        _termCacheOffsets[slot] = offset;
-        _termCacheHits[slot] = found;
+        _termOffsetCache.TryAdd(qualifiedTerm, (offset, found));
         return found;
     }
 
