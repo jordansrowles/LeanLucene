@@ -19,8 +19,9 @@ public sealed partial class IndexSearcher : IDisposable
     private readonly IndexStats _stats;
     private readonly ISimilarity _similarity;
     private readonly IndexSearcherConfig _config;
-    private PostingsEnum[]? _postingsBuffer;
-    private ScoreDoc[]? _collectorHeapCache;
+    [ThreadStatic] private static PostingsEnum[]? t_postingsBuffer;
+    [ThreadStatic] private static ScoreDoc[]? t_collectorHeapCache;
+    [ThreadStatic] private static HashSet<(string Field, string Term)>? t_docFreqTermsBuf;
     private static readonly Dictionary<(string Field, string Term), int> EmptyGlobalDFs = new();
     private readonly QueryCache? _queryCache;
 
@@ -469,15 +470,14 @@ public sealed partial class IndexSearcher : IDisposable
     }
 
     // Reusable buffer for PrecomputeGlobalDocFreqs to avoid per-call HashSet allocation
-    private readonly HashSet<(string Field, string Term)> _docFreqTermsBuf = new();
-
     private Dictionary<(string Field, string Term), int> PrecomputeGlobalDocFreqs(Query query)
     {
-        _docFreqTermsBuf.Clear();
-        CollectTerms(query, _docFreqTermsBuf);
+        var buf = t_docFreqTermsBuf ??= new HashSet<(string, string)>();
+        buf.Clear();
+        CollectTerms(query, buf);
 
-        var result = new Dictionary<(string Field, string Term), int>(_docFreqTermsBuf.Count);
-        foreach (var (field, term) in _docFreqTermsBuf)
+        var result = new Dictionary<(string Field, string Term), int>(buf.Count);
+        foreach (var (field, term) in buf)
         {
             var qt = string.Concat(field, "\x00", term);
             int total = 0;
@@ -521,9 +521,9 @@ public sealed partial class IndexSearcher : IDisposable
         int readerCount = _readers.Count;
 
         // Reuse a pre-allocated array to avoid per-query allocation
-        if (_postingsBuffer is null || _postingsBuffer.Length < readerCount)
-            _postingsBuffer = new PostingsEnum[readerCount];
-        var postingsArr = _postingsBuffer;
+        if (t_postingsBuffer is null || t_postingsBuffer.Length < readerCount)
+            t_postingsBuffer = new PostingsEnum[readerCount];
+        var postingsArr = t_postingsBuffer;
         int globalDF = 0;
         for (int i = 0; i < readerCount; i++)
         {
@@ -544,9 +544,9 @@ public sealed partial class IndexSearcher : IDisposable
         float boost = query.Boost;
 
         // Reuse the backing ScoreDoc[] across queries to avoid per-query allocation
-        if (_collectorHeapCache is null || _collectorHeapCache.Length < topN)
-            _collectorHeapCache = new ScoreDoc[topN];
-        var collector = new TopNCollector(_collectorHeapCache, topN);
+        if (t_collectorHeapCache is null || t_collectorHeapCache.Length < topN)
+            t_collectorHeapCache = new ScoreDoc[topN];
+        var collector = new TopNCollector(t_collectorHeapCache, topN);
 
         try
         {
