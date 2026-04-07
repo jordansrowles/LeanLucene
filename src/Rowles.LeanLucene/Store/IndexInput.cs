@@ -78,6 +78,17 @@ public sealed unsafe class IndexInput : IDisposable
         return value;
     }
 
+    /// <summary>Reads and returns the next byte using a caller-supplied cursor, leaving <see cref="_position"/> untouched.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public byte ReadByte(ref long position)
+    {
+        if (position >= _length)
+            ThrowEndOfStream();
+        byte value = _ptr[position];
+        position++;
+        return value;
+    }
+
     /// <summary>Reads the next byte and returns <see langword="true"/> if it is non-zero.</summary>
     /// <returns><see langword="true"/> if the byte is non-zero; otherwise, <see langword="false"/>.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -85,6 +96,10 @@ public sealed unsafe class IndexInput : IDisposable
     {
         return ReadByte() != 0;
     }
+
+    /// <summary>Reads the next byte using a caller-supplied cursor and returns <see langword="true"/> if it is non-zero.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public bool ReadBoolean(ref long position) => ReadByte(ref position) != 0;
 
     /// <summary>Reads exactly <paramref name="count"/> bytes and returns them as a new array.</summary>
     /// <param name="count">The number of bytes to read.</param>
@@ -115,6 +130,17 @@ public sealed unsafe class IndexInput : IDisposable
         return span;
     }
 
+    /// <summary>Stateless variant of <see cref="ReadSpan(int)"/> using a caller-supplied cursor.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public ReadOnlySpan<byte> ReadSpan(int count, ref long position)
+    {
+        if (position + count > _length)
+            ThrowEndOfStream();
+        var span = new ReadOnlySpan<byte>(_ptr + position, count);
+        position += count;
+        return span;
+    }
+
     /// <summary>Reads a 32-bit signed integer written in little-endian byte order.</summary>
     /// <returns>The decoded <see cref="int"/> value.</returns>
     /// <exception cref="EndOfStreamException">Thrown if fewer than 4 bytes remain.</exception>
@@ -125,6 +151,17 @@ public sealed unsafe class IndexInput : IDisposable
             ThrowEndOfStream();
         int value = Unsafe.ReadUnaligned<int>(_ptr + _position);
         _position += sizeof(int);
+        return value;
+    }
+
+    /// <summary>Stateless variant of <see cref="ReadInt32()"/> using a caller-supplied cursor.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public int ReadInt32(ref long position)
+    {
+        if (position + sizeof(int) > _length)
+            ThrowEndOfStream();
+        int value = Unsafe.ReadUnaligned<int>(_ptr + position);
+        position += sizeof(int);
         return value;
     }
 
@@ -144,6 +181,19 @@ public sealed unsafe class IndexInput : IDisposable
         _position += byteCount;
     }
 
+    /// <summary>Stateless variant of <see cref="ReadInt32Array(Span{int},int)"/> using a caller-supplied cursor.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void ReadInt32Array(Span<int> dest, int count, ref long position)
+    {
+        int byteCount = count * sizeof(int);
+        if (position + byteCount > _length)
+            ThrowEndOfStream();
+
+        new ReadOnlySpan<byte>(_ptr + position, byteCount)
+            .CopyTo(MemoryMarshal.AsBytes(dest[..count]));
+        position += byteCount;
+    }
+
     /// <summary>Reads a 64-bit signed integer written in little-endian byte order.</summary>
     /// <returns>The decoded <see cref="long"/> value.</returns>
     /// <exception cref="EndOfStreamException">Thrown if fewer than 8 bytes remain.</exception>
@@ -157,6 +207,17 @@ public sealed unsafe class IndexInput : IDisposable
         return value;
     }
 
+    /// <summary>Stateless variant of <see cref="ReadInt64()"/> using a caller-supplied cursor.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public long ReadInt64(ref long position)
+    {
+        if (position + sizeof(long) > _length)
+            ThrowEndOfStream();
+        long value = Unsafe.ReadUnaligned<long>(_ptr + position);
+        position += sizeof(long);
+        return value;
+    }
+
     /// <summary>Reads a 32-bit single-precision floating-point value.</summary>
     /// <returns>The decoded <see cref="float"/> value.</returns>
     /// <exception cref="EndOfStreamException">Thrown if fewer than 4 bytes remain.</exception>
@@ -167,6 +228,17 @@ public sealed unsafe class IndexInput : IDisposable
             ThrowEndOfStream();
         float value = Unsafe.ReadUnaligned<float>(_ptr + _position);
         _position += sizeof(float);
+        return value;
+    }
+
+    /// <summary>Stateless variant of <see cref="ReadSingle()"/> using a caller-supplied cursor.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public float ReadSingle(ref long position)
+    {
+        if (position + sizeof(float) > _length)
+            ThrowEndOfStream();
+        float value = Unsafe.ReadUnaligned<float>(_ptr + position);
+        position += sizeof(float);
         return value;
     }
 
@@ -344,6 +416,29 @@ public sealed unsafe class IndexInput : IDisposable
         return (int)result;
     }
 
+    /// <summary>Stateless variant of <see cref="ReadVarInt()"/> using a caller-supplied cursor.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public int ReadVarInt(ref long position)
+    {
+        uint result = 0;
+        int shift = 0;
+        byte b;
+        do
+        {
+            if (position >= _length)
+                ThrowEndOfStream();
+            b = _ptr[position++];
+            if (shift >= 35)
+                throw new InvalidDataException("VarInt is too large or malformed.");
+            result |= (uint)(b & 0x7F) << shift;
+            shift += 7;
+        } while ((b & 0x80) != 0);
+
+        if (result > int.MaxValue)
+            throw new InvalidDataException("VarInt exceeds Int32 range.");
+        return (int)result;
+    }
+
     /// <summary>
     /// Unrolled VarInt decoder with a single per-value bounds check. If at least 5 bytes
     /// remain, uses the branchless unrolled path. Otherwise falls back to the safe
@@ -369,6 +464,28 @@ public sealed unsafe class IndexInput : IDisposable
             return (int)result;
         }
         return ReadVarInt();
+    }
+
+    /// <summary>Stateless variant of <see cref="ReadVarIntFast()"/> using a caller-supplied cursor.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal int ReadVarIntFast(ref long position)
+    {
+        if (position + 5 <= _length)
+        {
+            byte* p = _ptr + position;
+            uint result = (uint)(p[0] & 0x7F);
+            if (p[0] < 0x80) { position += 1; return (int)result; }
+            result |= (uint)(p[1] & 0x7F) << 7;
+            if (p[1] < 0x80) { position += 2; return (int)result; }
+            result |= (uint)(p[2] & 0x7F) << 14;
+            if (p[2] < 0x80) { position += 3; return (int)result; }
+            result |= (uint)(p[3] & 0x7F) << 21;
+            if (p[3] < 0x80) { position += 4; return (int)result; }
+            result |= (uint)(p[4] & 0x7F) << 28;
+            position += 5;
+            return (int)result;
+        }
+        return ReadVarInt(ref position);
     }
 
     /// <summary>
