@@ -92,17 +92,17 @@ public sealed partial class SegmentReader
             return ids;
         }
 
-        _posInput.Seek(offset);
-        int count = _posInput.ReadInt32();
+        long cursor = offset;
+        int count = _posInput.ReadInt32(ref cursor);
         // Skip past skip entries
-        int skipCount = _posInput.ReadInt32();
+        int skipCount = _posInput.ReadInt32(ref cursor);
         if (skipCount > 0)
-            _posInput.Seek(_posInput.Position + skipCount * 8L);
+            cursor += skipCount * 8L;
         var docIds = new int[count];
         int prev = 0;
         for (int i = 0; i < count; i++)
         {
-            prev = ReadNextDocId(_posInput, prev);
+            prev = ReadNextDocId(_posInput, prev, ref cursor);
             docIds[i] = prev;
         }
         return docIds;
@@ -121,27 +121,27 @@ public sealed partial class SegmentReader
             return 0;
         }
 
-        _posInput.Seek(offset);
-        int count = _posInput.ReadInt32();
+        long cursor = offset;
+        int count = _posInput.ReadInt32(ref cursor);
         // Skip past skip entries
-        int skipCount = _posInput.ReadInt32();
+        int skipCount = _posInput.ReadInt32(ref cursor);
         if (skipCount > 0)
-            _posInput.Seek(_posInput.Position + skipCount * 8L);
+            cursor += skipCount * 8L;
 
         var ids = new int[count];
         int prev = 0;
         for (int i = 0; i < count; i++)
         {
-            prev = ReadNextDocId(_posInput, prev);
+            prev = ReadNextDocId(_posInput, prev, ref cursor);
             ids[i] = prev;
         }
 
-        bool hasFreqs = _posInput.ReadBoolean();
+        bool hasFreqs = _posInput.ReadBoolean(ref cursor);
         if (!hasFreqs) return 1;
 
         for (int i = 0; i < count; i++)
         {
-            int freq = _posInput.ReadVarInt();
+            int freq = _posInput.ReadVarInt(ref cursor);
             if (ids[i] == targetDocId)
                 return freq;
         }
@@ -164,75 +164,75 @@ public sealed partial class SegmentReader
             return null;
         }
 
-        _posInput.Seek(offset);
-        int count = _posInput.ReadInt32();
+        long cursor = offset;
+        int count = _posInput.ReadInt32(ref cursor);
         // Skip past skip entries
-        int skipCount = _posInput.ReadInt32();
+        int skipCount = _posInput.ReadInt32(ref cursor);
         if (skipCount > 0)
-            _posInput.Seek(_posInput.Position + skipCount * 8L);
+            cursor += skipCount * 8L;
 
         // Stream through doc IDs to find target index (zero alloc)
         int targetIndex = -1;
         int prev = 0;
         for (int i = 0; i < count; i++)
         {
-            prev = ReadNextDocId(_posInput, prev);
+            prev = ReadNextDocId(_posInput, prev, ref cursor);
             if (prev == docId && targetIndex < 0)
                 targetIndex = i;
         }
         if (targetIndex < 0) return null;
 
-        bool hasFreqs = _posInput.ReadBoolean();
+        bool hasFreqs = _posInput.ReadBoolean(ref cursor);
         if (hasFreqs)
         {
             for (int i = 0; i < count; i++)
-                _posInput.ReadVarInt(); // skip freqs
+                _posInput.ReadVarInt(ref cursor); // skip freqs
         }
 
-        bool hasPositions = _posInput.ReadBoolean();
+        bool hasPositions = _posInput.ReadBoolean(ref cursor);
 
         bool hasPayloads = false;
         if (_postingsVersion >= 2)
-            hasPayloads = _posInput.ReadBoolean();
+            hasPayloads = _posInput.ReadBoolean(ref cursor);
 
         if (!hasPositions) return null;
 
         for (int i = 0; i < targetIndex; i++)
         {
-            int posCount = _posInput.ReadVarInt();
+            int posCount = _posInput.ReadVarInt(ref cursor);
             for (int j = 0; j < posCount; j++)
             {
-                _posInput.ReadVarInt(); // position delta
+                _posInput.ReadVarInt(ref cursor); // position delta
                 if (hasPayloads)
                 {
-                    int payloadLen = _posInput.ReadVarInt();
+                    int payloadLen = _posInput.ReadVarInt(ref cursor);
                     if (payloadLen > 0)
-                        _posInput.Seek(_posInput.Position + payloadLen);
+                        cursor += payloadLen;
                 }
             }
         }
 
-        int targetPosCount = _posInput.ReadVarInt();
+        int targetPosCount = _posInput.ReadVarInt(ref cursor);
         var positions = new int[targetPosCount];
         int prevPos = 0;
         for (int i = 0; i < targetPosCount; i++)
         {
-            prevPos += _posInput.ReadVarInt();
+            prevPos += _posInput.ReadVarInt(ref cursor);
             positions[i] = prevPos;
             if (hasPayloads)
             {
-                int payloadLen = _posInput.ReadVarInt();
+                int payloadLen = _posInput.ReadVarInt(ref cursor);
                 if (payloadLen > 0)
-                    _posInput.Seek(_posInput.Position + payloadLen);
+                    cursor += payloadLen;
             }
         }
 
         return positions;
     }
 
-    private static int ReadNextDocId(IndexInput input, int previous)
+    private static int ReadNextDocId(IndexInput input, int previous, ref long position)
     {
-        int delta = input.ReadVarInt();
+        int delta = input.ReadVarInt(ref position);
         if (delta < 0)
             throw new InvalidDataException("Postings data is corrupt: negative delta encountered.");
 

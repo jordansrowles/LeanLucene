@@ -285,15 +285,15 @@ public sealed partial class SegmentReader : IDisposable
         if (!TryGetCachedOffset(qualifiedTerm, out long offset))
             return 0;
 
-        _posInput.Seek(offset);
-        return _posInput.ReadInt32();
+        long cursor = offset;
+        return _posInput.ReadInt32(ref cursor);
     }
 
     /// <summary>Reads docFreq directly from a known postings file offset (no dictionary lookup).</summary>
     internal int ReadDocFreqAtOffset(long offset)
     {
-        _posInput.Seek(offset);
-        return _posInput.ReadInt32();
+        long cursor = offset;
+        return _posInput.ReadInt32(ref cursor);
     }
 
     /// <summary>Thread-safe cache for recent term lookups.</summary>
