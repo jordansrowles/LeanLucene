@@ -9,6 +9,7 @@ namespace Rowles.LeanLucene.Search.Scoring;
 public struct TopNCollector
 {
     private readonly ScoreDoc[] _heap;
+    private readonly int _maxSize;
     private int _size;
     private float _minScore;
 
@@ -16,13 +17,14 @@ public struct TopNCollector
     public int TotalHits { get; private set; }
 
     /// <summary>Gets the maximum number of documents this collector can retain.</summary>
-    public int Capacity => _heap.Length;
+    public int Capacity => _maxSize;
 
     /// <summary>Initialises a new <see cref="TopNCollector"/> with the specified capacity.</summary>
     /// <param name="maxSize">Maximum number of top-scoring documents to retain.</param>
     public TopNCollector(int maxSize)
     {
         _heap = new ScoreDoc[maxSize];
+        _maxSize = maxSize;
         _size = 0;
         _minScore = float.NegativeInfinity;
         TotalHits = 0;
@@ -32,6 +34,7 @@ public struct TopNCollector
     public TopNCollector(ScoreDoc[] heap, int maxSize)
     {
         _heap = heap;
+        _maxSize = maxSize;
         _size = 0;
         _minScore = float.NegativeInfinity;
         TotalHits = 0;
@@ -53,10 +56,10 @@ public struct TopNCollector
     {
         TotalHits++;
 
-        if (_size < _heap.Length)
+        if (_size < _maxSize)
         {
             _heap[_size++] = new ScoreDoc(docId, score);
-            if (_size == _heap.Length)
+            if (_size == _maxSize)
             {
                 BuildMinHeap();
                 _minScore = _heap[0].Score;
