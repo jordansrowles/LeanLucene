@@ -35,6 +35,7 @@ public struct BlockPostingsEnum : IDisposable
     private int _currentBlockIndex; // which block we decoded (-1 = none yet)
     private bool _exhausted;
     private long _nextBlockOffset; // absolute file offset of the next block to decode
+    private long _cursorPosition;  // per-call read cursor; never shared with callers
 
     /// <summary>Current doc ID, or <see cref="NoMoreDocs"/> if exhausted.</summary>
     public int DocId => _exhausted ? NoMoreDocs :
@@ -65,29 +66,27 @@ public struct BlockPostingsEnum : IDisposable
     public static BlockPostingsEnum Create(IndexInput docInput, long docStartOffset,
         long skipOffset, int docFreq, bool hasPositions = false)
     {
-        // Read skip entries from the end of the posting list
-        docInput.Seek(skipOffset);
-        int skipCount = docInput.ReadInt32();
+        // Use a local cursor so we do not mutate the shared docInput._position.
+        long cursor = skipOffset;
+        int skipCount = docInput.ReadInt32(ref cursor);
         int loadCount = Math.Min(skipCount, MaxPreloadedSkipEntries);
         var skipEntries = ArrayPool<SkipEntry>.Shared.Rent(Math.Max(loadCount, 1));
         for (int i = 0; i < loadCount; i++)
         {
             skipEntries[i] = new SkipEntry
             {
-                LastDocId = docInput.ReadInt32(),
-                DocByteOffset = docInput.ReadInt64(),
-                PosFileOffset = hasPositions ? docInput.ReadInt64() : 0,
-                MaxFreqInBlock = (ushort)(docInput.ReadByte() | (docInput.ReadByte() << 8)),
-                MaxNormInBlock = docInput.ReadByte()
+                LastDocId = docInput.ReadInt32(ref cursor),
+                DocByteOffset = docInput.ReadInt64(ref cursor),
+                PosFileOffset = hasPositions ? docInput.ReadInt64(ref cursor) : 0,
+                MaxFreqInBlock = (ushort)(docInput.ReadByte(ref cursor) | (docInput.ReadByte(ref cursor) << 8)),
+                MaxNormInBlock = docInput.ReadByte(ref cursor)
             };
         }
 
-        // Skip past any remaining entries we did not load
         if (skipCount > loadCount)
         {
             int bytesPerEntry = hasPositions ? 23 : 15;
-            long remainingBytes = (long)(skipCount - loadCount) * bytesPerEntry;
-            docInput.Seek(docInput.Position + remainingBytes);
+            cursor += (long)(skipCount - loadCount) * bytesPerEntry;
         }
 
         return new BlockPostingsEnum(docInput, docStartOffset, docFreq,
@@ -113,6 +112,7 @@ public struct BlockPostingsEnum : IDisposable
         _currentBlockIndex = -1;
         _exhausted = docFreq == 0;
         _nextBlockOffset = docStartOffset;
+        _cursorPosition = docStartOffset;
     }
 
     /// <summary>
@@ -167,12 +167,11 @@ public struct BlockPostingsEnum : IDisposable
             int blockStart = targetBlockIdx * BlockSize;
             if (blockStart != _blockStart || _blockCount == 0)
             {
-                // Seek to block start and decode
-                _docInput.Seek(_docStartOffset + _skipEntries[targetBlockIdx].DocByteOffset);
+                _cursorPosition = _docStartOffset + _skipEntries[targetBlockIdx].DocByteOffset;
                 _blockStart = blockStart;
                 _currentBlockIndex = targetBlockIdx;
                 DecodeFullBlockAtCurrentPosition();
-                _nextBlockOffset = _docInput.Position;
+                _nextBlockOffset = _cursorPosition;
                 _indexInBlock = 0;
             }
 
@@ -281,13 +280,10 @@ public struct BlockPostingsEnum : IDisposable
         int blockIndex = blockStart / BlockSize;
         int remaining = _docFreq - blockStart;
 
-        // Seek to the correct position. Skip entries cover full blocks;
-        // the tracked _nextBlockOffset handles sequential and tail access
-        // when the shared IndexInput position may have been moved.
         if (blockIndex < _skipCount)
-            _docInput.Seek(_docStartOffset + _skipEntries[blockIndex].DocByteOffset);
+            _cursorPosition = _docStartOffset + _skipEntries[blockIndex].DocByteOffset;
         else
-            _docInput.Seek(_nextBlockOffset);
+            _cursorPosition = _nextBlockOffset;
 
         _currentBlockIndex = blockIndex;
 
@@ -296,7 +292,7 @@ public struct BlockPostingsEnum : IDisposable
         else
             DecodeTailAtCurrentPosition();
 
-        _nextBlockOffset = _docInput.Position;
+        _nextBlockOffset = _cursorPosition;
     }
 
     private void DecodeFullBlockAtCurrentPosition()
@@ -306,7 +302,7 @@ public struct BlockPostingsEnum : IDisposable
         // Freqs:  [numBits:1byte][packed data: numBits*16 bytes]
 
         // Decode doc IDs (delta-encoded)
-        int docNumBits = _docInput.ReadByte();
+        int docNumBits = _docInput.ReadByte(ref _cursorPosition);
         int docPackedBytes = docNumBits * 16;
         int prevDocId = _currentBlockIndex > 0
             ? _skipEntries[_currentBlockIndex - 1].LastDocId : 0;
@@ -318,12 +314,12 @@ public struct BlockPostingsEnum : IDisposable
         }
         else
         {
-            var docData = _docInput.ReadSpan(docPackedBytes);
+            var docData = _docInput.ReadSpan(docPackedBytes, ref _cursorPosition);
             PackedIntCodec.UnpackDelta(docData, docNumBits, prevDocId, _docIdBlock);
         }
 
         // Decode frequencies (stored as freq-1, bit-packed with embedded numBits header)
-        int freqNumBits = _docInput.ReadByte();
+        int freqNumBits = _docInput.ReadByte(ref _cursorPosition);
         if (freqNumBits == 0)
         {
             Array.Fill(_freqBlock, 0, 0, BlockSize); // all freq-1 = 0, i.e. freq = 1
@@ -331,7 +327,7 @@ public struct BlockPostingsEnum : IDisposable
         else
         {
             int freqPackedBytes = freqNumBits * 16;
-            var freqData = _docInput.ReadSpan(freqPackedBytes);
+            var freqData = _docInput.ReadSpan(freqPackedBytes, ref _cursorPosition);
             PackedIntCodec.Unpack(freqData, freqNumBits, _freqBlock);
         }
 
@@ -340,13 +336,13 @@ public struct BlockPostingsEnum : IDisposable
 
     private void DecodeTailAtCurrentPosition()
     {
-        int tailCount = _docInput.ReadVarInt();
+        int tailCount = _docInput.ReadVarInt(ref _cursorPosition);
         int prevDocId = _currentBlockIndex > 0 && _currentBlockIndex <= _skipCount
             ? _skipEntries[_currentBlockIndex - 1].LastDocId : 0;
 
         for (int i = 0; i < tailCount; i++)
         {
-            int delta = _docInput.ReadVarIntFast();
+            int delta = _docInput.ReadVarIntFast(ref _cursorPosition);
             prevDocId += delta;
             _docIdBlock[i] = prevDocId;
         }
@@ -357,7 +353,7 @@ public struct BlockPostingsEnum : IDisposable
                 "Postings data is corrupt: doc ID delta overflow in tail block.");
 
         for (int i = 0; i < tailCount; i++)
-            _freqBlock[i] = _docInput.ReadVarIntFast();
+            _freqBlock[i] = _docInput.ReadVarIntFast(ref _cursorPosition);
 
         _blockCount = tailCount;
     }
