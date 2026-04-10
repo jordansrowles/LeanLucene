@@ -179,6 +179,7 @@ public sealed partial class IndexWriter : IDisposable
         if (documents.Count == 0) return;
 
         int acquired = 0;
+        bool addedToHeldSlots = false;
         try
         {
             if (_backpressureSemaphore is not null)
@@ -201,7 +202,10 @@ public sealed partial class IndexWriter : IDisposable
             lock (_writeLock)
             {
                 if (_backpressureSemaphore is not null)
+                {
                     _semaphoreSlotsHeld += acquired;
+                    addedToHeldSlots = true;
+                }
 
                 for (int i = 0; i < documents.Count; i++)
                     AddDocumentCore(documents[i]);
@@ -211,11 +215,21 @@ public sealed partial class IndexWriter : IDisposable
         {
             if (_backpressureSemaphore is not null && acquired > 0)
             {
-                _backpressureSemaphore.Release(acquired);
+                if (!addedToHeldSlots)
+                {
+                    _backpressureSemaphore.Release(acquired);
+                    throw;
+                }
+
+                int toRelease;
                 lock (_writeLock)
                 {
-                    _semaphoreSlotsHeld -= acquired;
+                    toRelease = Math.Min(acquired, Math.Max(0, _semaphoreSlotsHeld));
+                    if (toRelease > 0)
+                        _semaphoreSlotsHeld -= toRelease;
                 }
+                if (toRelease > 0)
+                    _backpressureSemaphore.Release(toRelease);
             }
             throw;
         }
@@ -236,6 +250,7 @@ public sealed partial class IndexWriter : IDisposable
             throw new ArgumentException("A document block requires at least one child and one parent document.", nameof(block));
 
         int acquired = 0;
+        bool addedToHeldSlots = false;
         try
         {
             if (_backpressureSemaphore is not null)
@@ -258,7 +273,10 @@ public sealed partial class IndexWriter : IDisposable
             lock (_writeLock)
             {
                 if (_backpressureSemaphore is not null)
+                {
                     _semaphoreSlotsHeld += acquired;
+                    addedToHeldSlots = true;
+                }
 
                 // Index all docs in the block contiguously.
                 // Record the parent ID BEFORE its AddDocumentCore call so that
@@ -279,11 +297,21 @@ public sealed partial class IndexWriter : IDisposable
         {
             if (_backpressureSemaphore is not null && acquired > 0)
             {
-                _backpressureSemaphore.Release(acquired);
+                if (!addedToHeldSlots)
+                {
+                    _backpressureSemaphore.Release(acquired);
+                    throw;
+                }
+
+                int toRelease;
                 lock (_writeLock)
                 {
-                    _semaphoreSlotsHeld -= acquired;
+                    toRelease = Math.Min(acquired, Math.Max(0, _semaphoreSlotsHeld));
+                    if (toRelease > 0)
+                        _semaphoreSlotsHeld -= toRelease;
                 }
+                if (toRelease > 0)
+                    _backpressureSemaphore.Release(toRelease);
             }
             throw;
         }
@@ -343,12 +371,29 @@ public sealed partial class IndexWriter : IDisposable
 
         // Write segments_N commit file (atomic: write to temp, then rename)
         _commitGeneration++;
-        var commitFile = Path.Combine(_directory.DirectoryPath, $"segments_{_commitGeneration}");
+        WriteCommitFile(_commitGeneration);
+
+        // Persist index statistics alongside the commit so IndexSearcher can
+        // skip the expensive full-segment scan on construction.
+        WriteCommitStats(_commitGeneration);
+
+        // Apply deletion policy to prune old commit files
+        _config.DeletionPolicy.OnCommit(_directory.DirectoryPath, _commitGeneration);
+
+        // Schedule merge in background (non-blocking) only after every reader of
+        // _committedSegments and its files has completed. Scheduling earlier allowed
+        // a fast merge to delete segment files the post-commit work still needed.
+        ScheduleBackgroundMerge();
+    }
+
+    private void WriteCommitFile(int generation)
+    {
+        var commitFile = Path.Combine(_directory.DirectoryPath, $"segments_{generation}");
         var tempFile = commitFile + ".tmp";
         var segmentIds = new List<string>(_committedSegments.Count);
         foreach (var seg in _committedSegments)
             segmentIds.Add(seg.SegmentId);
-        var commitData = JsonSerializer.Serialize(new CommitData { Segments = segmentIds, Generation = _commitGeneration });
+        var commitData = JsonSerializer.Serialize(new CommitData { Segments = segmentIds, Generation = generation });
 
         if (_config.DurableCommits)
         {
@@ -360,10 +405,9 @@ public sealed partial class IndexWriter : IDisposable
                 var name = Path.GetFileName(path);
                 if (name.StartsWith("segments_", StringComparison.Ordinal)) continue;
                 if (string.Equals(name, "write.lock", StringComparison.Ordinal)) continue;
+                if (name.EndsWith(".tmp", StringComparison.Ordinal)) continue;
                 Store.DirectoryFsync.SyncFile(path);
             }
-            foreach (var f in Directory.EnumerateFiles(_directory.DirectoryPath))
-                Console.Error.WriteLine($"[DBG]   sweep file: {Path.GetFileName(f)} ({new FileInfo(f).Length}B)");
 
             // Sync the directory itself so any prior file creations are durable before the rename.
             Store.DirectoryFsync.Sync(_directory.DirectoryPath);
@@ -386,18 +430,6 @@ public sealed partial class IndexWriter : IDisposable
             File.WriteAllText(tempFile, commitData);
             File.Move(tempFile, commitFile, overwrite: true);
         }
-
-        // Persist index statistics alongside the commit so IndexSearcher can
-        // skip the expensive full-segment scan on construction.
-        WriteCommitStats(_commitGeneration);
-
-        // Apply deletion policy to prune old commit files
-        _config.DeletionPolicy.OnCommit(_directory.DirectoryPath, _commitGeneration);
-
-        // Schedule merge in background (non-blocking) only after every reader of
-        // _committedSegments and its files has completed. Scheduling earlier allowed
-        // a fast merge to delete segment files the post-commit work still needed.
-        ScheduleBackgroundMerge();
     }
 
     /// <summary>
@@ -441,7 +473,7 @@ public sealed partial class IndexWriter : IDisposable
 
     /// <summary>
     /// Releases all resources held by this writer, including the directory write lock.
-    /// Cancels any background merge task and waits up to 10 seconds for it to complete.
+    /// Cancels any background merge task and waits for in-progress merge I/O to complete.
     /// </summary>
     public void Dispose()
     {
@@ -456,7 +488,7 @@ public sealed partial class IndexWriter : IDisposable
 
         // Cancel and await background merge
         _mergeCts.Cancel();
-        try { _mergeTask?.Wait(TimeSpan.FromSeconds(10)); }
+        try { _mergeTask?.Wait(); }
         catch (AggregateException) { /* Expected: merge task cancelled during shutdown */ }
         catch (ObjectDisposedException) { /* CTS already disposed */ }
         _mergeCts.Dispose();
