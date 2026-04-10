@@ -40,15 +40,19 @@ public sealed partial class SegmentReader
     public bool TryGetNumericValue(string field, int docId, out double value)
     {
         value = 0;
-        // Prefer column-stride DocValues (faster, no dict lookup per doc)
+        var numericIndex = EnsureNumericIndex();
+        if (numericIndex.TryGetValue(field, out var fieldMap))
+            return fieldMap.TryGetValue(docId, out value);
+
+        // Legacy fallback for segments that predate the sparse .num index.
         var numericDocValues = EnsureNumericDocValues();
         if (numericDocValues.TryGetValue(field, out var dvArr) && (uint)docId < (uint)dvArr.Length)
         {
             value = dvArr[docId];
             return true;
         }
-        var numericIndex = EnsureNumericIndex();
-        return numericIndex.TryGetValue(field, out var fieldMap) && fieldMap.TryGetValue(docId, out value);
+
+        return false;
     }
 
     /// <summary>
