@@ -48,9 +48,9 @@ public sealed class SearcherManager : IDisposable
     /// </summary>
     public IndexSearcher Acquire()
     {
-        ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
         while (true)
         {
+            ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
             var sr = _current;
             if (sr.TryIncrementRef())
                 return sr.Searcher;
@@ -106,7 +106,10 @@ public sealed class SearcherManager : IDisposable
         catch (AggregateException) { /* Expected: task cancelled during shutdown */ }
         catch (ObjectDisposedException) { /* CTS already disposed */ }
         _cts.Dispose();
-        _current.Retire();
+        lock (_swapLock)
+        {
+            _current.Retire();
+        }
     }
 
     private async Task RefreshLoop(CancellationToken ct)
@@ -126,6 +129,9 @@ public sealed class SearcherManager : IDisposable
 
     private bool TryRefresh()
     {
+        if (Volatile.Read(ref _disposed) != 0)
+            return false;
+
         // Check if the commit generation on disk is newer than what we have
         var latestCommit = Index.IndexRecovery.RecoverLatestCommit(_directory.DirectoryPath, cleanupOrphans: false);
         if (latestCommit is null) return false;
@@ -135,6 +141,9 @@ public sealed class SearcherManager : IDisposable
 
         lock (_swapLock)
         {
+            if (Volatile.Read(ref _disposed) != 0)
+                return false;
+
             // Double-check under lock
             if (latestCommit.Generation <= _current.Generation)
                 return false;
