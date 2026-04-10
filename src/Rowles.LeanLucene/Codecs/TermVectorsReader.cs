@@ -36,23 +36,23 @@ internal sealed class TermVectorsReader : IDisposable
         if ((uint)docId >= (uint)_offsets.Length)
             return new();
 
-        _tvdInput.Seek(_offsets[docId]);
-        int fieldCount = _tvdInput.ReadInt32();
+        long position = _offsets[docId];
+        int fieldCount = _tvdInput.ReadInt32(ref position);
         var result = new Dictionary<string, List<TermVectorEntry>>(fieldCount, StringComparer.Ordinal);
 
         for (int f = 0; f < fieldCount; f++)
         {
-            string fieldName = _tvdInput.ReadLengthPrefixedString();
-            int termCount = _tvdInput.ReadInt32();
+            string fieldName = _tvdInput.ReadLengthPrefixedString(ref position);
+            int termCount = _tvdInput.ReadInt32(ref position);
             var entries = new List<TermVectorEntry>(termCount);
             for (int t = 0; t < termCount; t++)
             {
-                string term = _tvdInput.ReadLengthPrefixedString();
-                int freq = _tvdInput.ReadInt32();
-                int posCount = _tvdInput.ReadInt32();
+                string term = _tvdInput.ReadLengthPrefixedString(ref position);
+                int freq = _tvdInput.ReadInt32(ref position);
+                int posCount = _tvdInput.ReadInt32(ref position);
                 var positions = new int[posCount];
                 for (int p = 0; p < posCount; p++)
-                    positions[p] = _tvdInput.ReadInt32();
+                    positions[p] = _tvdInput.ReadInt32(ref position);
                 entries.Add(new TermVectorEntry(term, freq, positions));
             }
             result[fieldName] = entries;

@@ -270,6 +270,20 @@ public sealed unsafe class IndexInput : IDisposable
         return System.Text.Encoding.UTF8.GetString(span);
     }
 
+    /// <summary>
+    /// Stateless variant of <see cref="ReadLengthPrefixedString()"/> using a caller-supplied cursor.
+    /// </summary>
+    public string ReadLengthPrefixedString(ref long position)
+    {
+        int byteLength = Read7BitEncodedInt(ref position);
+        if (byteLength == 0) return string.Empty;
+        if (position + byteLength > _length)
+            ThrowEndOfStream();
+        var span = new ReadOnlySpan<byte>(_ptr + position, byteLength);
+        position += byteLength;
+        return System.Text.Encoding.UTF8.GetString(span);
+    }
+
     private int Read7BitEncodedInt()
     {
         int result = 0;
@@ -279,6 +293,21 @@ public sealed unsafe class IndexInput : IDisposable
         {
             if (_position >= _length) ThrowEndOfStream();
             b = _ptr[_position++];
+            result |= (b & 0x7F) << shift;
+            shift += 7;
+        } while ((b & 0x80) != 0);
+        return result;
+    }
+
+    private int Read7BitEncodedInt(ref long position)
+    {
+        int result = 0;
+        int shift = 0;
+        byte b;
+        do
+        {
+            if (position >= _length) ThrowEndOfStream();
+            b = _ptr[position++];
             result |= (b & 0x7F) << shift;
             shift += 7;
         } while ((b & 0x80) != 0);
