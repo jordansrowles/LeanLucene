@@ -1,4 +1,3 @@
-using System.Text.Json;
 using Rowles.LeanLucene.Store;
 
 namespace Rowles.LeanLucene.Index.Indexer;
@@ -26,6 +25,7 @@ public sealed partial class IndexWriter
                 try
                 {
                     var merger = new SegmentMerger(_directory, _config.MergeThreshold, _config.PostingsSkipInterval);
+                    var sourceSegments = _committedSegments.ToArray();
                     var merged = merger.MaybeMerge(_committedSegments, ref _nextSegmentOrdinal);
                     if (!ReferenceEquals(merged, _committedSegments))
                     {
@@ -33,16 +33,18 @@ public sealed partial class IndexWriter
                         _committedSegments.AddRange(merged);
 
                         _commitGeneration++;
-                        var commitFile = Path.Combine(_directory.DirectoryPath, $"segments_{_commitGeneration}");
-                        var tempFile = commitFile + ".tmp";
-                        var segmentIds = new List<string>(_committedSegments.Count);
-                        foreach (var seg in _committedSegments)
-                            segmentIds.Add(seg.SegmentId);
-                        var commitData = JsonSerializer.Serialize(new CommitData { Segments = segmentIds, Generation = _commitGeneration });
-                        File.WriteAllText(tempFile, commitData);
-                        File.Move(tempFile, commitFile, overwrite: true);
-
+                        WriteCommitFile(_commitGeneration);
+                        WriteCommitStats(_commitGeneration);
                         _config.DeletionPolicy.OnCommit(_directory.DirectoryPath, _commitGeneration);
+
+                        var activeSegments = new HashSet<string>(
+                            _committedSegments.Select(static segment => segment.SegmentId),
+                            StringComparer.Ordinal);
+                        foreach (var segment in sourceSegments)
+                        {
+                            if (!activeSegments.Contains(segment.SegmentId))
+                                merger.CleanupSegmentFiles(segment);
+                        }
                     }
                 }
                 finally

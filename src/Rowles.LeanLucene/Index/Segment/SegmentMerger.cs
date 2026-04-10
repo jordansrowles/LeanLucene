@@ -86,7 +86,6 @@ public sealed class SegmentMerger
             foreach (var seg in toMerge)
             {
                 result.Remove(seg);
-                CleanupSegmentFiles(seg);
             }
             result.Add(merged);
         }
@@ -190,6 +189,8 @@ public sealed class SegmentMerger
                 Path.Combine(_directory.DirectoryPath, segInfo.SegmentId + ".dvn"));
             var segSortedDvs = SortedDocValuesReader.Read(
                 Path.Combine(_directory.DirectoryPath, segInfo.SegmentId + ".dvs"));
+            var segNumericIndex = ReadNumericIndex(
+                Path.Combine(_directory.DirectoryPath, segInfo.SegmentId + ".num"));
 
             for (int oldDocId = 0; oldDocId < segInfo.DocCount; oldDocId++)
             {
@@ -201,9 +202,9 @@ public sealed class SegmentMerger
                     mutableFields[kvp.Key] = kvp.Value.ToList();
                 allStoredFields.Add(mutableFields);
 
-                foreach (var field in segInfo.FieldNames)
+                foreach (var (field, values) in segNumericIndex)
                 {
-                    if (reader.TryGetNumericValue(field, oldDocId, out double numVal))
+                    if (values.TryGetValue(oldDocId, out double numVal))
                     {
                         if (!allNumericFields.TryGetValue(field, out var fieldMap))
                         {
@@ -389,15 +390,16 @@ public sealed class SegmentMerger
         if (allSortedDocValues.Count > 0)
             SortedDocValuesWriter.Write(basePath + ".dvs", allSortedDocValues, totalDocs);
 
-        // Write BKD tree (.bkd) for numeric range queries — derived from .dvn data.
-        if (allNumericDocValues.Count > 0)
+        // Write BKD tree (.bkd) for numeric range queries from sparse numeric values.
+        // Missing numeric values must not be materialised as real zero-valued points.
+        if (allNumericFields.Count > 0)
         {
             var bkdData = new Dictionary<string, List<(double Value, int DocId)>>(StringComparer.Ordinal);
-            foreach (var (field, arr) in allNumericDocValues)
+            foreach (var (field, values) in allNumericFields)
             {
-                var points = new List<(double Value, int DocId)>(totalDocs);
-                for (int d = 0; d < totalDocs; d++)
-                    points.Add((arr[d], d));
+                var points = new List<(double Value, int DocId)>(values.Count);
+                foreach (var (docId, value) in values)
+                    points.Add((value, docId));
                 bkdData[field] = points;
             }
             if (bkdData.Count > 0)
@@ -583,7 +585,7 @@ public sealed class SegmentMerger
             list.Sort();
     }
 
-    private void CleanupSegmentFiles(SegmentInfo seg)
+    internal void CleanupSegmentFiles(SegmentInfo seg)
     {
         // Delete every file belonging to this segment (any extension), not a hardcoded list.
         // This is immune to future codec additions and prevents orphan-file disk leaks.
@@ -617,5 +619,32 @@ public sealed class SegmentMerger
                 writer.Write(value);
             }
         }
+    }
+
+    private static Dictionary<string, Dictionary<int, double>> ReadNumericIndex(string filePath)
+    {
+        var result = new Dictionary<string, Dictionary<int, double>>(StringComparer.Ordinal);
+        if (!File.Exists(filePath))
+            return result;
+
+        using var fs = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read);
+        using var reader = new BinaryReader(fs, System.Text.Encoding.UTF8, leaveOpen: false);
+
+        int fieldCount = reader.ReadInt32();
+        for (int f = 0; f < fieldCount; f++)
+        {
+            string fieldName = reader.ReadString();
+            int entryCount = reader.ReadInt32();
+            var fieldMap = new Dictionary<int, double>(entryCount);
+            for (int e = 0; e < entryCount; e++)
+            {
+                int docId = reader.ReadInt32();
+                double value = reader.ReadDouble();
+                fieldMap[docId] = value;
+            }
+            result[fieldName] = fieldMap;
+        }
+
+        return result;
     }
 }
