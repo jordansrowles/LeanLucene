@@ -124,6 +124,6 @@ public class CollapsingTests : IDisposable
             new CollapseField("group"));
 
         // All in same group → single result
-        Assert.Equal(1, results.ScoreDocs.Length);
+        Assert.Single(results.ScoreDocs);
     }
 }

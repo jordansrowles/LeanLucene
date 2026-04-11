@@ -119,9 +119,9 @@ public sealed class MultiValuedFieldTests : IClassFixture<TestDirectoryFixture>
         var stored = searcher.GetStoredFields(0);
 
         // Single-value fields should have 1 value
-        Assert.Equal(1, stored["title"].Count);
+        Assert.Single(stored["title"]);
         Assert.Equal("My Document", stored["title"][0]);
-        Assert.Equal(1, stored["author"].Count);
+        Assert.Single(stored["author"]);
         Assert.Equal("John Doe", stored["author"][0]);
 
         // Multi-value field should have 2 values
