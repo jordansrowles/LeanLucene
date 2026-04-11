@@ -33,7 +33,7 @@ public sealed class SearcherManagerTests : IDisposable
             w.Commit();
         }
 
-        using var mgr = new SearcherManager(dir);
+        using var mgr = new SearcherManager(dir, new SearcherManagerConfig { RefreshInterval = TimeSpan.FromMinutes(5) });
         var searcher = mgr.Acquire();
         try
         {
@@ -56,7 +56,7 @@ public sealed class SearcherManagerTests : IDisposable
             w.Commit();
         }
 
-        using var mgr = new SearcherManager(dir);
+        using var mgr = new SearcherManager(dir, new SearcherManagerConfig { RefreshInterval = TimeSpan.FromMinutes(5) });
         var hits = mgr.UsingSearcher(s => s.Search(new TermQuery("body", "test"), 10).TotalHits);
         Assert.Equal(1, hits);
     }
