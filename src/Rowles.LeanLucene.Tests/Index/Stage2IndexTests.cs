@@ -98,7 +98,7 @@ public sealed class Stage2IndexTests : IClassFixture<TestDirectoryFixture>
                 if (i % 2 == 1) writer.Commit();
             }
             writer.Commit();
-            // Dispose waits for background merge to complete (up to 10s)
+            // Dispose waits for any in-progress background merge to complete.
         }
 
         // Should be searchable after merge completes
@@ -119,7 +119,7 @@ public sealed class Stage2IndexTests : IClassFixture<TestDirectoryFixture>
         };
         BKDWriter.Write(path, fieldPoints);
 
-        var reader = BKDReader.Open(path);
+        using var reader = BKDReader.Open(path);
         var results = reader.RangeQuery("price", 15.0, 35.0);
         Assert.Equal(2, results.Count);
         Assert.Contains(results, r => r.DocId == 1);
@@ -136,7 +136,7 @@ public sealed class Stage2IndexTests : IClassFixture<TestDirectoryFixture>
         };
         BKDWriter.Write(path, fieldPoints);
 
-        var reader = BKDReader.Open(path);
+        using var reader = BKDReader.Open(path);
         var results = reader.RangeQuery("price", 100.0, 200.0);
         Assert.Empty(results);
     }
@@ -151,7 +151,7 @@ public sealed class Stage2IndexTests : IClassFixture<TestDirectoryFixture>
         };
         BKDWriter.Write(path, fieldPoints);
 
-        var reader = BKDReader.Open(path);
+        using var reader = BKDReader.Open(path);
         var results = reader.RangeQuery("nonexistent", 0.0, 100.0);
         Assert.Empty(results);
     }
@@ -178,7 +178,7 @@ public sealed class Stage2IndexTests : IClassFixture<TestDirectoryFixture>
         };
 
         TermVectorsWriter.Write(tvdPath, tvxPath, docs);
-        var reader = TermVectorsReader.Open(tvdPath, tvxPath);
+        using var reader = TermVectorsReader.Open(tvdPath, tvxPath);
 
         var tv0 = reader.GetTermVector(0);
         Assert.True(tv0.ContainsKey("body"));
@@ -207,7 +207,7 @@ public sealed class Stage2IndexTests : IClassFixture<TestDirectoryFixture>
         };
 
         TermVectorsWriter.Write(tvdPath, tvxPath, docs);
-        var reader = TermVectorsReader.Open(tvdPath, tvxPath);
+        using var reader = TermVectorsReader.Open(tvdPath, tvxPath);
 
         var titleTV = reader.GetTermVector(0, "title");
         Assert.NotNull(titleTV);
@@ -254,7 +254,7 @@ public sealed class Stage2IndexTests : IClassFixture<TestDirectoryFixture>
         CompoundFileWriter.Write(basePath + ".cfs", basePath, [".seg", ".dic", ".pos"]);
         Assert.True(File.Exists(basePath + ".cfs"));
 
-        var reader = CompoundFileReader.Open(basePath + ".cfs");
+        using var reader = CompoundFileReader.Open(basePath + ".cfs");
         var segData = reader.ReadFile(".seg");
         Assert.Equal("segment metadata", System.Text.Encoding.UTF8.GetString(segData));
 
