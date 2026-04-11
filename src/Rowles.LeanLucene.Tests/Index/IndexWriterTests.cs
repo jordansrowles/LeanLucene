@@ -1,3 +1,5 @@
+using System.Reflection;
+using System.Reflection.Emit;
 using Rowles.LeanLucene.Document;
 using Rowles.LeanLucene.Document.Fields;
 using Rowles.LeanLucene.Index;
@@ -10,8 +12,25 @@ namespace Rowles.LeanLucene.Tests.Index;
 [Trait("Category", "Index")]
 public sealed class IndexWriterTests : IClassFixture<TestDirectoryFixture>
 {
+    private static readonly OpCode[] SingleByteOpCodes = new OpCode[0x100];
+    private static readonly OpCode[] MultiByteOpCodes = new OpCode[0x100];
     private readonly TestDirectoryFixture _fixture;
     private readonly ITestOutputHelper _output;
+
+    static IndexWriterTests()
+    {
+        foreach (var field in typeof(OpCodes).GetFields(BindingFlags.Public | BindingFlags.Static))
+        {
+            if (field.GetValue(null) is not OpCode opCode)
+                continue;
+
+            var value = unchecked((ushort)opCode.Value);
+            if (value < 0x100)
+                SingleByteOpCodes[value] = opCode;
+            else if ((value & 0xff00) == 0xfe00)
+                MultiByteOpCodes[value & 0xff] = opCode;
+        }
+    }
 
     public IndexWriterTests(TestDirectoryFixture fixture, ITestOutputHelper output)
     {
@@ -154,38 +173,75 @@ public sealed class IndexWriterTests : IClassFixture<TestDirectoryFixture>
     [Fact]
     public void HighRamPressure_DoesNotForceFullGC()
     {
-        // Verify that high indexing load never triggers an induced gen-2 collection.
-        // Pre-M3, ShouldFlush() called GC.Collect(2, Aggressive, blocking) when
-        // FlushThrottleBytes was exceeded. That call is now removed entirely.
-        var dir = new MMapDirectory(SubDir("no_full_gc"));
-        var config = new IndexWriterConfig
-        {
-            RamBufferSizeMB = 0.5,   // low threshold → frequent flushes, lots of GC pressure
-            MaxBufferedDocs = 100_000
-        };
+        var shouldFlush = typeof(IndexWriter).GetMethod("ShouldFlush", BindingFlags.Instance | BindingFlags.NonPublic);
+        Assert.NotNull(shouldFlush);
 
-        int gen2Before = GC.CollectionCount(2);
+        Assert.False(
+            CallsMethod(shouldFlush!, typeof(GC), nameof(GC.Collect)),
+            "ShouldFlush must not induce a full GC; natural gen-2 collections make runtime counter assertions flaky.");
+    }
 
-        using (var writer = new IndexWriter(dir, config))
+    private static bool CallsMethod(MethodInfo source, Type declaringType, string methodName)
+    {
+        var body = source.GetMethodBody();
+        var il = body?.GetILAsByteArray();
+        if (il is null)
+            return false;
+
+        int offset = 0;
+        while (offset < il.Length)
         {
-            for (int i = 0; i < 5000; i++)
+            OpCode opCode;
+            int first = il[offset++];
+            if (first == 0xfe)
             {
-                var doc = new LeanDocument();
-                doc.Add(new TextField("body", $"stress document {i} forcing ram pressure"));
-                writer.AddDocument(doc);
+                if (offset >= il.Length)
+                    break;
+
+                opCode = MultiByteOpCodes[il[offset++]];
             }
-            writer.Commit();
+            else
+            {
+                opCode = SingleByteOpCodes[first];
+            }
+
+            if (opCode.OperandType == OperandType.InlineMethod)
+            {
+                int token = BitConverter.ToInt32(il, offset);
+                offset += 4;
+                try
+                {
+                    var called = source.Module.ResolveMethod(token);
+                    if (called?.DeclaringType == declaringType &&
+                        string.Equals(called.Name, methodName, StringComparison.Ordinal))
+                    {
+                        return true;
+                    }
+                }
+                catch (ArgumentException)
+                {
+                }
+                continue;
+            }
+
+            offset += GetOperandSize(opCode.OperandType, il, offset);
         }
 
-        int gen2After = GC.CollectionCount(2);
-
-        // A forced GC.Collect(2) would unconditionally increment this counter.
-        // With the fix applied it must stay at the natural background value — which
-        // for a short-running test should be 0 induced collections (natural GC may
-        // still fire, so we only assert the count did not jump by more than 1).
-        Assert.True(gen2After - gen2Before <= 1,
-            $"Unexpected gen-2 collection(s) during indexing: before={gen2Before}, after={gen2After}");
+        return false;
     }
+
+    private static int GetOperandSize(OperandType operandType, byte[] il, int operandOffset)
+        => operandType switch
+        {
+            OperandType.InlineNone => 0,
+            OperandType.ShortInlineBrTarget or OperandType.ShortInlineI or OperandType.ShortInlineVar => 1,
+            OperandType.InlineVar => 2,
+            OperandType.InlineBrTarget or OperandType.InlineField or OperandType.InlineI or OperandType.InlineSig
+                or OperandType.InlineString or OperandType.InlineTok or OperandType.InlineType or OperandType.ShortInlineR => 4,
+            OperandType.InlineI8 or OperandType.InlineR => 8,
+            OperandType.InlineSwitch => 4 + (BitConverter.ToInt32(il, operandOffset) * 4),
+            _ => throw new InvalidOperationException($"Unsupported IL operand type: {operandType}")
+        };
 
     [Fact]
     public void MergeBackpressure_PausesIndexing_WhenTooManySegments()

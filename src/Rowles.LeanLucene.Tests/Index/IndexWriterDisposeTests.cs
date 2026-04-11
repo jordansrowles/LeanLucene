@@ -68,7 +68,7 @@ public sealed class IndexWriterDisposeTests : IClassFixture<TestDirectoryFixture
                         return;
                     }
                 }
-            }, cts.Token);
+            });
         }
 
         // Let producers run for 100 ms, then dispose the writer

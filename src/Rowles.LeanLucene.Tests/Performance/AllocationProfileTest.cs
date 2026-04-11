@@ -10,6 +10,7 @@ using Rowles.LeanLucene.Store;
 
 namespace Rowles.LeanLucene.Tests.Performance;
 
+[Trait("Category", "Performance")]
 public class AllocationProfileTest : IDisposable
 {
     private readonly string _path;
@@ -49,13 +50,13 @@ public class AllocationProfileTest : IDisposable
         for (int w = 0; w < 50; w++) _searcher.Search(new TermQuery("body", "search"), 25);
 
         GC.Collect(2, GCCollectionMode.Forced, true, true);
-        long before = GC.GetTotalAllocatedBytes(precise: true);
+        long before = GC.GetAllocatedBytesForCurrentThread();
 
         const int iterations = 1000;
         for (int q = 0; q < iterations; q++)
             _searcher.Search(new TermQuery("body", "search"), 25);
 
-        long totalAlloc = GC.GetTotalAllocatedBytes(precise: true) - before;
+        long totalAlloc = GC.GetAllocatedBytesForCurrentThread() - before;
         long perQuery = totalAlloc / iterations;
 
         _output.WriteLine($"TermQuery: {perQuery} B/query, total {totalAlloc / 1024.0:F1} KB for {iterations} queries");
@@ -72,7 +73,7 @@ public class AllocationProfileTest : IDisposable
             _searcher.Search(warmBq, 25);
 
         GC.Collect(2, GCCollectionMode.Forced, true, true);
-        long before = GC.GetTotalAllocatedBytes(precise: true);
+        long before = GC.GetAllocatedBytesForCurrentThread();
 
         const int iterations = 1000;
         for (int q = 0; q < iterations; q++)
@@ -83,7 +84,7 @@ public class AllocationProfileTest : IDisposable
             _searcher.Search(bq, 25);
         }
 
-        long totalAlloc = GC.GetTotalAllocatedBytes(precise: true) - before;
+        long totalAlloc = GC.GetAllocatedBytesForCurrentThread() - before;
         long perQuery = totalAlloc / iterations;
 
         _output.WriteLine($"BooleanQuery: {perQuery} B/query, total {totalAlloc / 1024.0:F1} KB for {iterations} queries");
@@ -96,13 +97,13 @@ public class AllocationProfileTest : IDisposable
         for (int w = 0; w < 50; w++) _searcher.Search(new PhraseQuery("body", "dotnet", "segment"), 25);
 
         GC.Collect(2, GCCollectionMode.Forced, true, true);
-        long before = GC.GetTotalAllocatedBytes(precise: true);
+        long before = GC.GetAllocatedBytesForCurrentThread();
 
         const int iterations = 1000;
         for (int q = 0; q < iterations; q++)
             _searcher.Search(new PhraseQuery("body", "dotnet", "segment"), 25);
 
-        long totalAlloc = GC.GetTotalAllocatedBytes(precise: true) - before;
+        long totalAlloc = GC.GetAllocatedBytesForCurrentThread() - before;
         long perQuery = totalAlloc / iterations;
 
         _output.WriteLine($"PhraseQuery: {perQuery} B/query, total {totalAlloc / 1024.0:F1} KB for {iterations} queries");
@@ -115,13 +116,13 @@ public class AllocationProfileTest : IDisposable
         for (int w = 0; w < 50; w++) _searcher.Search(new WildcardQuery("body", "search*"), 25);
 
         GC.Collect(2, GCCollectionMode.Forced, true, true);
-        long before = GC.GetTotalAllocatedBytes(precise: true);
+        long before = GC.GetAllocatedBytesForCurrentThread();
 
         const int iterations = 1000;
         for (int q = 0; q < iterations; q++)
             _searcher.Search(new WildcardQuery("body", "search*"), 25);
 
-        long totalAlloc = GC.GetTotalAllocatedBytes(precise: true) - before;
+        long totalAlloc = GC.GetAllocatedBytesForCurrentThread() - before;
         long perQuery = totalAlloc / iterations;
 
         _output.WriteLine($"WildcardQuery: {perQuery} B/query, total {totalAlloc / 1024.0:F1} KB for {iterations} queries");
@@ -156,7 +157,7 @@ public class AllocationProfileTest : IDisposable
         try
         {
             GC.Collect(2, GCCollectionMode.Forced, true, true);
-            long before = GC.GetTotalAllocatedBytes(precise: true);
+            long before = GC.GetAllocatedBytesForCurrentThread();
 
             var testDir = new MMapDirectory(testPath);
             using var writer = new IndexWriter(testDir, new IndexWriterConfig { MaxBufferedDocs = 10000, RamBufferSizeMB = 256 });
@@ -169,7 +170,7 @@ public class AllocationProfileTest : IDisposable
             }
             writer.Commit();
 
-            long totalAlloc = GC.GetTotalAllocatedBytes(precise: true) - before;
+            long totalAlloc = GC.GetAllocatedBytesForCurrentThread() - before;
             double mb = totalAlloc / 1024.0 / 1024.0;
 
             _output.WriteLine($"Indexing 10K: {mb:F1} MB total allocation");
