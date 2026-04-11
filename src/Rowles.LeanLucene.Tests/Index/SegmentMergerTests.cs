@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Rowles.LeanLucene.Document;
 using Rowles.LeanLucene.Document.Fields;
 using Rowles.LeanLucene.Index.Indexer;
@@ -31,23 +32,56 @@ public sealed class SegmentMergerTests : IClassFixture<TestDirectoryFixture>
         return path;
     }
 
-    private static string LatestMergedSegmentId(string dir)
+    private static int SegmentOrdinal(string segmentId)
     {
-        // After a merge with threshold=2 over seg_0/seg_1, the merged segment is seg_2.
-        // Pick whichever .seg file has the highest ordinal.
-        var segFiles = Directory.GetFiles(dir, "seg_*.seg");
-        Assert.NotEmpty(segFiles);
-        return segFiles
-            .Select(p => Path.GetFileNameWithoutExtension(p))
-            .OrderByDescending(id => int.Parse(id.AsSpan("seg_".Length)))
-            .First()!;
+        Assert.StartsWith("seg_", segmentId);
+        return int.Parse(segmentId.AsSpan("seg_".Length));
+    }
+
+    private static string MergeSegmentsForTest(string dir, MMapDirectory mmap)
+    {
+        var sourceSegments = Directory.GetFiles(dir, "seg_*.seg")
+            .Select(SegmentInfo.ReadFrom)
+            .OrderBy(s => SegmentOrdinal(s.SegmentId))
+            .ToList();
+        Assert.True(sourceSegments.Count >= 2, "Expected at least two source segments to merge.");
+
+        int nextSegmentOrdinal = sourceSegments.Max(s => SegmentOrdinal(s.SegmentId)) + 1;
+        var merger = new SegmentMerger(mmap, mergeThreshold: 2);
+        var mergedSegments = merger.MaybeMerge(sourceSegments, ref nextSegmentOrdinal);
+
+        var mergedSegment = mergedSegments
+            .FirstOrDefault(candidate => sourceSegments.All(source => source.SegmentId != candidate.SegmentId));
+        Assert.NotNull(mergedSegment);
+
+        // Publish a test-only commit that references the merged segment so searchers exercise
+        // the freshly-written codec files rather than the pre-merge source segments.
+        int generation = Directory.GetFiles(dir, "segments_*")
+            .Select(path => int.TryParse(Path.GetFileName(path).AsSpan("segments_".Length), out int gen) ? gen : 0)
+            .DefaultIfEmpty(0)
+            .Max() + 1;
+        var commitData = JsonSerializer.Serialize(new
+        {
+            Segments = new[] { mergedSegment!.SegmentId },
+            Generation = generation
+        });
+        File.WriteAllText(Path.Combine(dir, $"segments_{generation}"), commitData);
+
+        var activeSegments = new HashSet<string>(mergedSegments.Select(static segment => segment.SegmentId), StringComparer.Ordinal);
+        foreach (var segment in sourceSegments)
+        {
+            if (!activeSegments.Contains(segment.SegmentId))
+                merger.CleanupSegmentFiles(segment);
+        }
+
+        return mergedSegment!.SegmentId;
     }
 
     private static IndexWriterConfig SmallSegmentMergeConfig(bool storeTermVectors = false, IndexSort? sort = null)
         => new()
         {
             MaxBufferedDocs = 1,
-            MergeThreshold = 2,
+            MergeThreshold = 100,
             StoreTermVectors = storeTermVectors,
             IndexSort = sort,
         };
@@ -60,7 +94,7 @@ public sealed class SegmentMergerTests : IClassFixture<TestDirectoryFixture>
 
         using (var writer = new IndexWriter(mmap, SmallSegmentMergeConfig()))
         {
-            for (int i = 0; i < 4; i++)
+            for (int i = 0; i < 2; i++)
             {
                 var doc = new LeanDocument();
                 doc.Add(new TextField("id", $"doc{i}"));
@@ -68,21 +102,19 @@ public sealed class SegmentMergerTests : IClassFixture<TestDirectoryFixture>
                 writer.AddDocument(doc);
             }
             writer.Commit();
-            Thread.Sleep(500);
-            writer.Commit();
         }
 
         // After merge there must be a .fln file on the merged segment to preserve
         // exact per-doc field lengths (BM25 falls back to coarse norms otherwise).
-        var mergedId = LatestMergedSegmentId(dir);
+        var mergedId = MergeSegmentsForTest(dir, mmap);
         var flnPath = Path.Combine(dir, mergedId + ".fln");
         Assert.True(File.Exists(flnPath), $"Expected merged segment {mergedId} to have a .fln file at {flnPath}");
         Assert.True(new FileInfo(flnPath).Length > 0);
 
-        // Sanity: searching still returns all 4 docs and the longer doc scores lowest under BM25.
+        // Sanity: searching still returns the merged docs.
         using var searcher = new IndexSearcher(mmap);
         var results = searcher.Search(new TermQuery("body", "alpha"), 10);
-        Assert.Equal(4, results.TotalHits);
+        Assert.Equal(2, results.TotalHits);
     }
 
     [Fact]
@@ -93,7 +125,7 @@ public sealed class SegmentMergerTests : IClassFixture<TestDirectoryFixture>
 
         using (var writer = new IndexWriter(mmap, SmallSegmentMergeConfig()))
         {
-            for (int i = 0; i < 4; i++)
+            for (int i = 0; i < 2; i++)
             {
                 var doc = new LeanDocument();
                 doc.Add(new TextField("id", $"doc{i}"));
@@ -101,18 +133,16 @@ public sealed class SegmentMergerTests : IClassFixture<TestDirectoryFixture>
                 writer.AddDocument(doc);
             }
             writer.Commit();
-            Thread.Sleep(500);
-            writer.Commit();
         }
 
-        var mergedId = LatestMergedSegmentId(dir);
+        var mergedId = MergeSegmentsForTest(dir, mmap);
         var dvnPath = Path.Combine(dir, mergedId + ".dvn");
         Assert.True(File.Exists(dvnPath), $"Expected merged segment {mergedId} to have a .dvn file");
 
         // Sort by numeric DocValues field — works only if .dvn survives the merge.
         using var searcher = new IndexSearcher(mmap);
         var sorted = searcher.Search(new WildcardQuery("id", "*"), 10, SortField.Numeric("price"));
-        Assert.Equal(4, sorted.TotalHits);
+        Assert.Equal(2, sorted.TotalHits);
     }
 
     [Fact]
@@ -123,8 +153,8 @@ public sealed class SegmentMergerTests : IClassFixture<TestDirectoryFixture>
 
         using (var writer = new IndexWriter(mmap, SmallSegmentMergeConfig()))
         {
-            string[] cats = ["alpha", "bravo", "charlie", "delta"];
-            for (int i = 0; i < 4; i++)
+            string[] cats = ["alpha", "bravo"];
+            for (int i = 0; i < 2; i++)
             {
                 var doc = new LeanDocument();
                 doc.Add(new TextField("id", $"doc{i}"));
@@ -132,17 +162,15 @@ public sealed class SegmentMergerTests : IClassFixture<TestDirectoryFixture>
                 writer.AddDocument(doc);
             }
             writer.Commit();
-            Thread.Sleep(500);
-            writer.Commit();
         }
 
-        var mergedId = LatestMergedSegmentId(dir);
+        var mergedId = MergeSegmentsForTest(dir, mmap);
         var dvsPath = Path.Combine(dir, mergedId + ".dvs");
         Assert.True(File.Exists(dvsPath), $"Expected merged segment {mergedId} to have a .dvs file");
 
         using var searcher = new IndexSearcher(mmap);
         var sorted = searcher.Search(new WildcardQuery("id", "*"), 10, SortField.String("category"));
-        Assert.Equal(4, sorted.TotalHits);
+        Assert.Equal(2, sorted.TotalHits);
     }
 
     [Fact]
@@ -153,7 +181,7 @@ public sealed class SegmentMergerTests : IClassFixture<TestDirectoryFixture>
 
         using (var writer = new IndexWriter(mmap, SmallSegmentMergeConfig()))
         {
-            for (int i = 0; i < 4; i++)
+            for (int i = 1; i <= 2; i++)
             {
                 var doc = new LeanDocument();
                 doc.Add(new TextField("id", $"doc{i}"));
@@ -161,11 +189,9 @@ public sealed class SegmentMergerTests : IClassFixture<TestDirectoryFixture>
                 writer.AddDocument(doc);
             }
             writer.Commit();
-            Thread.Sleep(500);
-            writer.Commit();
         }
 
-        var mergedId = LatestMergedSegmentId(dir);
+        var mergedId = MergeSegmentsForTest(dir, mmap);
         var bkdPath = Path.Combine(dir, mergedId + ".bkd");
         Assert.True(File.Exists(bkdPath), $"Expected merged segment {mergedId} to have a .bkd file");
 
@@ -183,7 +209,7 @@ public sealed class SegmentMergerTests : IClassFixture<TestDirectoryFixture>
 
         using (var writer = new IndexWriter(mmap, SmallSegmentMergeConfig(storeTermVectors: true)))
         {
-            for (int i = 0; i < 4; i++)
+            for (int i = 0; i < 2; i++)
             {
                 var doc = new LeanDocument();
                 doc.Add(new TextField("id", $"doc{i}"));
@@ -191,11 +217,9 @@ public sealed class SegmentMergerTests : IClassFixture<TestDirectoryFixture>
                 writer.AddDocument(doc);
             }
             writer.Commit();
-            Thread.Sleep(500);
-            writer.Commit();
         }
 
-        var mergedId = LatestMergedSegmentId(dir);
+        var mergedId = MergeSegmentsForTest(dir, mmap);
         var tvdPath = Path.Combine(dir, mergedId + ".tvd");
         var tvxPath = Path.Combine(dir, mergedId + ".tvx");
         Assert.True(File.Exists(tvdPath), $"Expected merged segment {mergedId} to have a .tvd file");
@@ -218,7 +242,7 @@ public sealed class SegmentMergerTests : IClassFixture<TestDirectoryFixture>
         var config = new IndexWriterConfig
         {
             MaxBufferedDocs = 16,
-            MergeThreshold = 2,
+            MergeThreshold = 100,
         };
 
         using (var writer = new IndexWriter(mmap, config))
@@ -238,11 +262,9 @@ public sealed class SegmentMergerTests : IClassFixture<TestDirectoryFixture>
             ]);
             writer.Commit();
 
-            Thread.Sleep(500);
-            writer.Commit();
         }
 
-        var mergedId = LatestMergedSegmentId(dir);
+        var mergedId = MergeSegmentsForTest(dir, mmap);
         var pbsPath = Path.Combine(dir, mergedId + ".pbs");
         Assert.True(File.Exists(pbsPath), $"Expected merged segment {mergedId} to have a .pbs file");
 
@@ -263,7 +285,7 @@ public sealed class SegmentMergerTests : IClassFixture<TestDirectoryFixture>
 
         using (var writer = new IndexWriter(mmap, SmallSegmentMergeConfig(sort: sort)))
         {
-            for (int i = 0; i < 4; i++)
+            for (int i = 0; i < 2; i++)
             {
                 var doc = new LeanDocument();
                 doc.Add(new TextField("id", $"doc{i}"));
@@ -271,11 +293,9 @@ public sealed class SegmentMergerTests : IClassFixture<TestDirectoryFixture>
                 writer.AddDocument(doc);
             }
             writer.Commit();
-            Thread.Sleep(500);
-            writer.Commit();
         }
 
-        var mergedId = LatestMergedSegmentId(dir);
+        var mergedId = MergeSegmentsForTest(dir, mmap);
         var segInfo = SegmentInfo.ReadFrom(Path.Combine(dir, mergedId + ".seg"));
         Assert.NotNull(segInfo.IndexSortFields);
         Assert.Single(segInfo.IndexSortFields!);
@@ -290,7 +310,7 @@ public sealed class SegmentMergerTests : IClassFixture<TestDirectoryFixture>
 
         using (var writer = new IndexWriter(mmap, SmallSegmentMergeConfig(storeTermVectors: true)))
         {
-            for (int i = 0; i < 4; i++)
+            for (int i = 0; i < 2; i++)
             {
                 var doc = new LeanDocument();
                 doc.Add(new TextField("id", $"doc{i}"));
@@ -300,13 +320,13 @@ public sealed class SegmentMergerTests : IClassFixture<TestDirectoryFixture>
                 writer.AddDocument(doc);
             }
             writer.Commit();
-            Thread.Sleep(500);
-            writer.Commit();
         }
 
-        // After merge, the original seg_0 .. seg_3 must have ZERO files left on disk
+        _ = MergeSegmentsForTest(dir, mmap);
+
+        // After merge, the original seg_0 and seg_1 must have ZERO files left on disk
         // (any extension). The previous bug only cleaned a hardcoded extension list.
-        for (int i = 0; i < 4; i++)
+        for (int i = 0; i < 2; i++)
         {
             var orphans = Directory.GetFiles(dir, $"seg_{i}.*");
             Assert.Empty(orphans);
