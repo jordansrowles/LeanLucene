@@ -8,7 +8,7 @@ namespace Rowles.LeanLucene.Tests.Analysis;
 public sealed class LanguageAnalyserTests
 {
     [Fact]
-    public void EnglishAnalyser_StemsAndRemovesStopWords()
+    public void FactoryCreate_English_StemsAndRemovesStopWords()
     {
         var analyser = AnalyserFactory.Create("en");
         var tokens = analyser.Analyse("The running foxes jumped over the lazy dogs");
@@ -16,9 +16,9 @@ public sealed class LanguageAnalyserTests
         var texts = tokens.Select(t => t.Text).ToList();
         // "the" is a stop word and should be removed
         Assert.DoesNotContain("the", texts);
-        Assert.Contains("run", texts); // "running" → "run" via Porter
-        Assert.Contains("fox", texts); // "foxes" → "fox"
-        Assert.Contains("jump", texts); // "jumped" → "jump"
+        Assert.Contains("run", texts); // "running" -> "run" via Porter
+        Assert.Contains("fox", texts); // "foxes" -> "fox"
+        Assert.Contains("jump", texts); // "jumped" -> "jump"
     }
 
     [Fact]
