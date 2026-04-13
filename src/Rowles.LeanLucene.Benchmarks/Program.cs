@@ -23,91 +23,89 @@ internal static class Program
             Environment.SetEnvironmentVariable("BENCH_DOC_COUNT", docCount.Value.ToString(CultureInfo.InvariantCulture));
 
         var repoRoot = FindRepositoryRoot();
-        var benchRoot = Path.Combine(repoRoot, "bench");
-        var dataDirectory = Path.Combine(benchRoot, "data");
-        Directory.CreateDirectory(dataDirectory);
+        var now = DateTimeOffset.UtcNow;
+
+        var machineDir = Path.Combine(repoRoot, "benches", Environment.MachineName);
+        var runDir = Path.Combine(
+            machineDir,
+            now.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+            now.ToString("HH-mm", CultureInfo.InvariantCulture));
+        Directory.CreateDirectory(runDir);
 
         var commitHash = GetGitShortHash(repoRoot);
-        var timestamp = DateTimeOffset.UtcNow.ToString("yyyy-MM-dd HH-mm", CultureInfo.InvariantCulture);
         var runId = string.IsNullOrEmpty(commitHash)
-            ? timestamp
-            : $"{timestamp} ({commitHash})";
+            ? now.ToString("yyyy-MM-dd HH-mm", CultureInfo.InvariantCulture)
+            : $"{now.ToString("yyyy-MM-dd HH-mm", CultureInfo.InvariantCulture)} ({commitHash})";
 
         bool runAll = suites.Contains(BenchmarkSuite.All);
-        bool isSingleSuite = !runAll && suites.Count == 1;
 
-        // Resolve effective run type: partial/{suite} only for a single suite (unless overridden)
-        var effectiveRunType = runType;
-        if (string.IsNullOrEmpty(effectiveRunType))
-            effectiveRunType = "full";
-
-        // For partial runs of a single suite, nest under partial/{suite}
-        if (effectiveRunType == "partial" && isSingleSuite)
-        {
-            effectiveRunType = $"partial/{suites.First().ToString().ToLowerInvariant()}";
-        }
+        // Resolve effective run type for metadata (does not affect output path)
+        var effectiveRunType = string.IsNullOrEmpty(runType) ? "full" : runType;
 
         var suiteSummaries = new List<(string Suite, Summary Summary)>();
 
-        // BDN artifacts go into the type-specific folder
-        var typeDataDir = Path.Combine(dataDirectory, effectiveRunType);
-
         if (runAll || suites.Contains(BenchmarkSuite.Query))
-            RunSuite<TermQueryBenchmarks>("query", typeDataDir, runId, benchmarkArgs, suiteSummaries, gcDump);
+            RunSuite<TermQueryBenchmarks>("query", runDir, benchmarkArgs, suiteSummaries, gcDump);
 
         if (runAll || suites.Contains(BenchmarkSuite.Index))
-            RunSuite<IndexingBenchmarks>("index", typeDataDir, runId, benchmarkArgs, suiteSummaries, gcDump);
+            RunSuite<IndexingBenchmarks>("index", runDir, benchmarkArgs, suiteSummaries, gcDump);
 
         if (runAll || suites.Contains(BenchmarkSuite.Analysis))
-            RunSuite<AnalysisBenchmarks>("analysis", typeDataDir, runId, benchmarkArgs, suiteSummaries, gcDump);
+            RunSuite<AnalysisBenchmarks>("analysis", runDir, benchmarkArgs, suiteSummaries, gcDump);
 
         if (runAll || suites.Contains(BenchmarkSuite.Boolean))
-            RunSuite<BooleanQueryBenchmarks>("boolean", typeDataDir, runId, benchmarkArgs, suiteSummaries, gcDump);
+            RunSuite<BooleanQueryBenchmarks>("boolean", runDir, benchmarkArgs, suiteSummaries, gcDump);
 
         if (runAll || suites.Contains(BenchmarkSuite.Phrase))
-            RunSuite<PhraseQueryBenchmarks>("phrase", typeDataDir, runId, benchmarkArgs, suiteSummaries, gcDump);
-
-        if (runAll || suites.Contains(BenchmarkSuite.SmallIndex))
-            RunSuite<SmallIndexBenchmarks>("smallindex", typeDataDir, runId, benchmarkArgs, suiteSummaries, gcDump);
+            RunSuite<PhraseQueryBenchmarks>("phrase", runDir, benchmarkArgs, suiteSummaries, gcDump);
 
         if (runAll || suites.Contains(BenchmarkSuite.Prefix))
-            RunSuite<PrefixQueryBenchmarks>("prefix", typeDataDir, runId, benchmarkArgs, suiteSummaries, gcDump);
+            RunSuite<PrefixQueryBenchmarks>("prefix", runDir, benchmarkArgs, suiteSummaries, gcDump);
 
         if (runAll || suites.Contains(BenchmarkSuite.Fuzzy))
-            RunSuite<FuzzyQueryBenchmarks>("fuzzy", typeDataDir, runId, benchmarkArgs, suiteSummaries, gcDump);
+            RunSuite<FuzzyQueryBenchmarks>("fuzzy", runDir, benchmarkArgs, suiteSummaries, gcDump);
 
         if (runAll || suites.Contains(BenchmarkSuite.Wildcard))
-            RunSuite<WildcardQueryBenchmarks>("wildcard", typeDataDir, runId, benchmarkArgs, suiteSummaries, gcDump);
+            RunSuite<WildcardQueryBenchmarks>("wildcard", runDir, benchmarkArgs, suiteSummaries, gcDump);
 
         if (runAll || suites.Contains(BenchmarkSuite.Deletion))
-            RunSuite<DeletionBenchmarks>("deletion", typeDataDir, runId, benchmarkArgs, suiteSummaries, gcDump);
+            RunSuite<DeletionBenchmarks>("deletion", runDir, benchmarkArgs, suiteSummaries, gcDump);
 
-        if (runAll || suites.Contains(BenchmarkSuite.TokenBudget))
-            RunSuite<TokenBudgetBenchmarks>("tokenbudget", typeDataDir, runId, benchmarkArgs, suiteSummaries, gcDump);
+        if (suites.Contains(BenchmarkSuite.TokenBudget))
+            RunSuite<TokenBudgetBenchmarks>("tokenbudget", runDir, benchmarkArgs, suiteSummaries, gcDump);
 
-        if (runAll || suites.Contains(BenchmarkSuite.Diagnostics))
-            RunSuite<DiagnosticsBenchmarks>("diagnostics", typeDataDir, runId, benchmarkArgs, suiteSummaries, gcDump);
+        if (suites.Contains(BenchmarkSuite.Diagnostics))
+            RunSuite<DiagnosticsBenchmarks>("diagnostics", runDir, benchmarkArgs, suiteSummaries, gcDump);
 
         if (runAll || suites.Contains(BenchmarkSuite.Suggester))
-            RunSuite<SuggesterBenchmarks>("suggester", typeDataDir, runId, benchmarkArgs, suiteSummaries, gcDump);
+            RunSuite<SuggesterBenchmarks>("suggester", runDir, benchmarkArgs, suiteSummaries, gcDump);
 
         if (runAll || suites.Contains(BenchmarkSuite.SchemaJson))
-            RunSuite<SchemaAndJsonBenchmarks>("schemajson", typeDataDir, runId, benchmarkArgs, suiteSummaries, gcDump);
+            RunSuite<SchemaAndJsonBenchmarks>("schemajson", runDir, benchmarkArgs, suiteSummaries, gcDump);
 
         if (runAll || suites.Contains(BenchmarkSuite.Compound))
         {
-            RunSuite<CompoundFileIndexBenchmarks>("compound-index", typeDataDir, runId, benchmarkArgs, suiteSummaries, gcDump);
-            RunSuite<CompoundFileSearchBenchmarks>("compound-search", typeDataDir, runId, benchmarkArgs, suiteSummaries, gcDump);
+            RunSuite<CompoundFileIndexBenchmarks>("compound-index", runDir, benchmarkArgs, suiteSummaries, gcDump);
+            RunSuite<CompoundFileSearchBenchmarks>("compound-search", runDir, benchmarkArgs, suiteSummaries, gcDump);
         }
 
         if (runAll || suites.Contains(BenchmarkSuite.IndexSort))
         {
-            RunSuite<IndexSortIndexBenchmarks>("indexsort-index", typeDataDir, runId, benchmarkArgs, suiteSummaries, gcDump);
-            RunSuite<IndexSortSearchBenchmarks>("indexsort-search", typeDataDir, runId, benchmarkArgs, suiteSummaries, gcDump);
+            RunSuite<IndexSortIndexBenchmarks>("indexsort-index", runDir, benchmarkArgs, suiteSummaries, gcDump);
+            RunSuite<IndexSortSearchBenchmarks>("indexsort-search", runDir, benchmarkArgs, suiteSummaries, gcDump);
         }
 
         if (runAll || suites.Contains(BenchmarkSuite.BlockJoin))
-            RunSuite<BlockJoinBenchmarks>("blockjoin", typeDataDir, runId, benchmarkArgs, suiteSummaries, gcDump);
+            RunSuite<BlockJoinBenchmarks>("blockjoin", runDir, benchmarkArgs, suiteSummaries, gcDump);
+
+        if (suites.Contains(BenchmarkSuite.GutenbergAnalysis))
+            RunSuite<GutenbergAnalysisBenchmarks>("gutenberg-analysis", runDir, benchmarkArgs, suiteSummaries, gcDump);
+
+        if (suites.Contains(BenchmarkSuite.GutenbergIndex))
+            RunSuite<GutenbergIndexingBenchmarks>("gutenberg-index", runDir, benchmarkArgs, suiteSummaries, gcDump);
+
+        if (suites.Contains(BenchmarkSuite.GutenbergSearch))
+            RunSuite<GutenbergSearchBenchmarks>("gutenberg-search", runDir, benchmarkArgs, suiteSummaries, gcDump);
 
         if (suiteSummaries.Count == 0)
         {
@@ -118,33 +116,31 @@ internal static class Program
         // Build and write consolidated report + index.json
         var report = BenchmarkRunReportBuilder.Build(
             runId,
-            DateTimeOffset.UtcNow,
+            now,
             benchmarkArgs,
             suiteSummaries);
         report.CommitHash = commitHash;
         report.RunType = effectiveRunType;
 
-        BenchmarkRunReportWriter.WriteReport(dataDirectory, report);
+        BenchmarkRunReportWriter.WriteReport(runDir, machineDir, report);
 
         Console.WriteLine();
         Console.WriteLine($"Run:    {runId}");
         Console.WriteLine($"Type:   {effectiveRunType}");
         Console.WriteLine($"Commit: {(string.IsNullOrEmpty(commitHash) ? "(unknown)" : commitHash)}");
-        Console.WriteLine($"Output: {Path.Combine(typeDataDir, runId)}");
-        Console.WriteLine($"Report: {Path.Combine(typeDataDir, $"{runId}.json")}");
+        Console.WriteLine($"Output: {runDir}");
         Console.WriteLine($"Suites: {string.Join(", ", suiteSummaries.Select(s => s.Suite))}");
         return 0;
     }
 
     private static void RunSuite<T>(
         string suiteName,
-        string dataDirectory,
-        string runId,
+        string runDir,
         string[] benchmarkArgs,
         List<(string Suite, Summary Summary)> suiteSummaries,
         bool gcDump = false) where T : class
     {
-        var artifactsPath = Path.Combine(dataDirectory, runId, suiteName);
+        var artifactsPath = Path.Combine(runDir, suiteName);
         Directory.CreateDirectory(artifactsPath);
         var config = DefaultConfig.Instance.WithArtifactsPath(artifactsPath);
         if (gcDump)
@@ -190,52 +186,49 @@ internal static class Program
             Options:
               --suite <name>   Run one or more benchmark suites, comma-separated (default: all)
                                e.g. --suite fuzzy,boolean,prefix
-              --type <name>    Run type: full, smoke, stress, partial (default: full)
+              --type <name>    Run type label stored in report metadata (default: full)
               --doccount <n>   Override document count for all suites (env: BENCH_DOC_COUNT)
               --gcdump         Collect GC heap dumps after each benchmark run
               --lean-only      Skip Lucene.NET comparison benchmarks, run LeanLucene only
               --help, -h       Show this help message
 
-            Run Types:
-              full             Standardised full run with maximum information output
-              smoke            Quick smoke test (fast validation)
-              stress           Stress testing with large document counts
-              partial          Benchmarking specific suites (auto-set when --suite is not 'all')
-
             Suites:
-              all              Run all benchmark suites (default)
-              index            IndexingBenchmarks — bulk indexing throughput (vs Lucene.NET)
-              query            TermQueryBenchmarks — single-term search (vs Lucene.NET)
-              analysis         AnalysisBenchmarks — tokenisation pipeline throughput
-              boolean          BooleanQueryBenchmarks — Must/Should/MustNot queries
-              phrase           PhraseQueryBenchmarks — exact and slop phrase matching
-              prefix           PrefixQueryBenchmarks — prefix matching (vs Lucene.NET)
-              fuzzy            FuzzyQueryBenchmarks — fuzzy/edit-distance matching
-              wildcard         WildcardQueryBenchmarks — wildcard pattern matching
-              deletion         DeletionBenchmarks — delete throughput (vs Lucene.NET)
-              smallindex       SmallIndexBenchmarks — 100-doc roundtrip overhead
-              tokenbudget      TokenBudgetBenchmarks — token budget enforcement overhead
-              diagnostics      DiagnosticsBenchmarks — SlowQueryLog + Analytics hook overhead
-              suggester        SuggesterBenchmarks — DidYouMean spelling correction (vs Lucene.NET)
-              schemajson       SchemaAndJsonBenchmarks — schema validation + JSON mapping
-              compound         CompoundFileIndex/SearchBenchmarks — compound file read/write (vs Lucene.NET)
-              indexsort        IndexSortIndex/SearchBenchmarks — index-time sort + early termination
-              blockjoin        BlockJoinBenchmarks — block-join queries (vs Lucene.NET)
+              all              Run all standard benchmark suites (default)
+              index            IndexingBenchmarks -- bulk indexing throughput (vs Lucene.NET)
+              query            TermQueryBenchmarks -- single-term search (vs Lucene.NET)
+              analysis         AnalysisBenchmarks -- tokenisation pipeline throughput
+              boolean          BooleanQueryBenchmarks -- Must/Should/MustNot queries
+              phrase           PhraseQueryBenchmarks -- exact and slop phrase matching
+              prefix           PrefixQueryBenchmarks -- prefix matching (vs Lucene.NET)
+              fuzzy            FuzzyQueryBenchmarks -- fuzzy/edit-distance matching
+              wildcard         WildcardQueryBenchmarks -- wildcard pattern matching
+              deletion         DeletionBenchmarks -- delete throughput (vs Lucene.NET)
+              suggester        SuggesterBenchmarks -- DidYouMean spelling correction (vs Lucene.NET)
+              schemajson       SchemaAndJsonBenchmarks -- schema validation + JSON mapping
+              compound         CompoundFileIndex/SearchBenchmarks -- compound file read/write (vs Lucene.NET)
+              indexsort        IndexSortIndex/SearchBenchmarks -- index-time sort + early termination
+              blockjoin        BlockJoinBenchmarks -- block-join queries (vs Lucene.NET)
+
+              gutenberg-analysis  GutenbergAnalysisBenchmarks -- analysis on real ebook text (explicit only)
+              gutenberg-index     GutenbergIndexingBenchmarks -- indexing real ebook data (explicit only)
+              gutenberg-search    GutenbergSearchBenchmarks -- search on real ebook data (explicit only)
+              tokenbudget         TokenBudgetBenchmarks -- token budget enforcement overhead (explicit only)
+              diagnostics         DiagnosticsBenchmarks -- SlowQueryLog + Analytics hook overhead (explicit only)
 
             Output:
-              Results are written to bench/data/<type>/<runId>/
-              Run ID format: "yyyy-MM-dd HH-mm (shortcommit)"
-              A consolidated JSON report and index.json are maintained.
+              Results are written to benches/{machine-name}/{yyyy-MM-dd}/{HH-mm}/
+              A consolidated JSON report and per-machine index.json are maintained.
 
             Examples:
               dotnet run -c Release -- --suite all
-              dotnet run -c Release -- --suite query --type partial
+              dotnet run -c Release -- --suite gutenberg-search
+              dotnet run -c Release -- --lean-only --suite query,index
               dotnet run -c Release -- --type smoke --suite analysis --job dry
 
             Script wrapper:
               .\scripts\benchmark.ps1 -Suite all
-              .\scripts\benchmark.ps1 -Suite query -Type partial
-              .\scripts\benchmark.ps1 -Strat fast -Suite analysis
+              .\scripts\benchmark.ps1 -Suite query -LeanOnly
+              .\scripts\benchmark.ps1 -Suite gutenberg-search
               .\scripts\benchmark.ps1 -Help
             """);
     }
@@ -322,8 +315,6 @@ internal static class Program
             return BenchmarkSuite.Boolean;
         if (value.Equals("phrase", StringComparison.OrdinalIgnoreCase))
             return BenchmarkSuite.Phrase;
-        if (value.Equals("smallindex", StringComparison.OrdinalIgnoreCase))
-            return BenchmarkSuite.SmallIndex;
         if (value.Equals("prefix", StringComparison.OrdinalIgnoreCase))
             return BenchmarkSuite.Prefix;
         if (value.Equals("fuzzy", StringComparison.OrdinalIgnoreCase))
@@ -346,6 +337,15 @@ internal static class Program
             return BenchmarkSuite.IndexSort;
         if (value.Equals("blockjoin", StringComparison.OrdinalIgnoreCase))
             return BenchmarkSuite.BlockJoin;
+        if (value.Equals("gutenberganalysis", StringComparison.OrdinalIgnoreCase) ||
+            value.Equals("gutenberg-analysis", StringComparison.OrdinalIgnoreCase))
+            return BenchmarkSuite.GutenbergAnalysis;
+        if (value.Equals("gutenbergindex", StringComparison.OrdinalIgnoreCase) ||
+            value.Equals("gutenberg-index", StringComparison.OrdinalIgnoreCase))
+            return BenchmarkSuite.GutenbergIndex;
+        if (value.Equals("gutenbergsearch", StringComparison.OrdinalIgnoreCase) ||
+            value.Equals("gutenberg-search", StringComparison.OrdinalIgnoreCase))
+            return BenchmarkSuite.GutenbergSearch;
 
         return BenchmarkSuite.All;
     }
@@ -376,7 +376,6 @@ internal static class Program
         Analysis,
         Boolean,
         Phrase,
-        SmallIndex,
         Prefix,
         Fuzzy,
         Wildcard,
@@ -387,6 +386,9 @@ internal static class Program
         SchemaJson,
         Compound,
         IndexSort,
-        BlockJoin
+        BlockJoin,
+        GutenbergAnalysis,
+        GutenbergIndex,
+        GutenbergSearch
     }
 }

@@ -246,26 +246,20 @@ internal static class BenchmarkRunReportWriter
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase
     };
 
-    public static void WriteReport(string dataDirectory, BenchmarkRunReport report)
+    public static void WriteReport(string runDir, string machineDir, BenchmarkRunReport report)
     {
-        // Build type-specific output directory: data/{type}/ or data/partial/{suite}/
-        var typeDir = Path.Combine(dataDirectory, report.RunType);
-        Directory.CreateDirectory(typeDir);
+        Directory.CreateDirectory(runDir);
 
-        var reportFileName = $"{report.RunId}.json";
-        var reportPath = Path.Combine(typeDir, reportFileName);
+        var reportPath = Path.Combine(runDir, "report.json");
         File.WriteAllText(reportPath, JsonSerializer.Serialize(report, JsonOptions));
 
-        // Relative path from dataDirectory for the index
-        var relativeFile = Path.Combine(report.RunType, reportFileName);
-
-        var indexPath = Path.Combine(dataDirectory, "index.json");
+        Directory.CreateDirectory(machineDir);
+        var indexPath = Path.Combine(machineDir, "index.json");
         var runIndex = File.Exists(indexPath)
             ? JsonSerializer.Deserialize<BenchmarkRunIndex>(File.ReadAllText(indexPath), JsonOptions) ?? new BenchmarkRunIndex()
             : new BenchmarkRunIndex();
 
-        runIndex.Runs.RemoveAll(entry => string.Equals(entry.RunId, report.RunId, StringComparison.Ordinal)
-            && string.Equals(entry.RunType, report.RunType, StringComparison.Ordinal));
+        runIndex.Runs.RemoveAll(entry => string.Equals(entry.RunId, report.RunId, StringComparison.Ordinal));
 
         runIndex.Runs.Add(new BenchmarkRunIndexEntry
         {
@@ -273,7 +267,7 @@ internal static class BenchmarkRunReportWriter
             RunType = report.RunType,
             GeneratedAtUtc = report.GeneratedAtUtc,
             CommitHash = report.CommitHash,
-            File = relativeFile,
+            File = Path.GetRelativePath(machineDir, reportPath),
             BenchmarkCount = report.TotalBenchmarkCount,
             Suites = report.Suites.Select(s => s.SuiteName).ToArray()
         });
