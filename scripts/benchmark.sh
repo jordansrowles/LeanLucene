@@ -1,26 +1,30 @@
 #!/usr/bin/env bash
 # Unified LeanLucene benchmark runner.
 #
-# USAGE:
+# Usage:
 #   ./scripts/benchmark.sh [options] [BenchmarkDotNet args...]
 #
-# OPTIONS:
-#   --suite <name>      Benchmark suite (default: all)
-#   --type <name>       Run type: full, smoke, stress, partial
-#   --strat <name>      Predefined strategy: default, fast, quick-compare, intense, stress
-#   --doccount <n>      Override document count
-#   --list              List available suites, types, and strategies
-#   --dry               Print the command without executing it
-#   --help              Show help and exit
+# Options:
+#   --suite <name>        Benchmark suite to run (default: all)
+#   --strat <name>        Predefined strategy (default: default)
+#   --doccount <n>        Override document count (overrides --strat)
+#   --prepare-data        Download benchmark data if not already present
+#   --book-count <n>      Number of Gutenberg books to fetch with --prepare-data (default: 200)
+#   --lean-only           Skip Lucene.NET comparison benchmarks
+#   --list                List available suites and strategies and exit
+#   --dry                 Print the command that would run without executing it
+#   --gcdump              Collect GC heap dumps (requires dotnet-gcdump)
+#   --help                Show help and exit
 #
 # Extra arguments after -- are passed through to BenchmarkDotNet.
 #
-# EXAMPLES:
+# Examples:
 #   ./scripts/benchmark.sh
 #   ./scripts/benchmark.sh --suite query
+#   ./scripts/benchmark.sh --suite gutenberg-search --lean-only
 #   ./scripts/benchmark.sh --strat fast --suite boolean
-#   ./scripts/benchmark.sh --type partial --suite analysis
 #   ./scripts/benchmark.sh --strat intense --doccount 20000
+#   ./scripts/benchmark.sh --prepare-data --book-count 200
 #   ./scripts/benchmark.sh --list
 #   ./scripts/benchmark.sh --dry --suite index --strat fast
 
@@ -30,121 +34,156 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 PROJECT_PATH="$REPO_ROOT/src/Rowles.LeanLucene.Benchmarks/Rowles.LeanLucene.Benchmarks.csproj"
 
-# ── Defaults ──────────────────────────────────────────────────────────────────
 SUITE="all"
-TYPE=""
 STRAT="default"
 DOC_COUNT=0
+LEAN_ONLY=false
 DRY=false
 LIST=false
 HELP=false
 GCDUMP=false
+PREPARE_DATA=false
+BOOK_COUNT=200
 EXTRA_ARGS=()
 
-# ── Suite / strategy / type descriptions ──────────────────────────────────────
 declare -A SUITE_DESC=(
-    [all]="Run all benchmark suites (default)"
-    [index]="IndexingBenchmarks       - bulk indexing throughput (vs Lucene.NET)"
-    [query]="TermQueryBenchmarks      - single-term search (vs Lucene.NET)"
-    [analysis]="AnalysisBenchmarks       - tokenisation pipeline (vs Lucene.NET)"
-    [boolean]="BooleanQueryBenchmarks   - Must / Should / MustNot (vs Lucene.NET)"
-    [phrase]="PhraseQueryBenchmarks    - exact and slop phrase (vs Lucene.NET)"
-    [prefix]="PrefixQueryBenchmarks    - prefix matching (vs Lucene.NET)"
-    [fuzzy]="FuzzyQueryBenchmarks     - fuzzy/edit-distance (vs Lucene.NET)"
-    [wildcard]="WildcardQueryBenchmarks  - wildcard patterns (vs Lucene.NET)"
-    [deletion]="DeletionBenchmarks       - delete throughput (vs Lucene.NET)"
-    [smallindex]="SmallIndexBenchmarks     - 100-doc roundtrip overhead (index + search)"
-    [tokenbudget]="TokenBudgetBenchmarks   - token budget enforcement overhead"
-    [diagnostics]="DiagnosticsBenchmarks   - SlowQueryLog + Analytics hook overhead"
-    [suggester]="SuggesterBenchmarks      - DidYouMean spelling (vs Lucene.NET SpellChecker)"
-    [schemajson]="SchemaAndJsonBenchmarks  - schema validation + JSON mapping"
-    [compound]="CompoundFileIndex/SearchBenchmarks - compound file read/write (vs Lucene.NET)"
-    [indexsort]="IndexSortIndex/SearchBenchmarks   - index-time sort + early termination"
-    [blockjoin]="BlockJoinBenchmarks      - block-join queries (vs Lucene.NET Join)"
+    [all]="Run all standard benchmark suites (default)"
+    [index]="IndexingBenchmarks        -- bulk indexing throughput (vs Lucene.NET)"
+    [query]="TermQueryBenchmarks       -- single-term search (vs Lucene.NET)"
+    [analysis]="AnalysisBenchmarks        -- tokenisation pipeline"
+    [boolean]="BooleanQueryBenchmarks    -- Must / Should / MustNot"
+    [phrase]="PhraseQueryBenchmarks     -- exact and slop phrase"
+    [prefix]="PrefixQueryBenchmarks      -- prefix matching (vs Lucene.NET)"
+    [fuzzy]="FuzzyQueryBenchmarks      -- fuzzy/edit-distance"
+    [wildcard]="WildcardQueryBenchmarks   -- wildcard patterns"
+    [deletion]="DeletionBenchmarks        -- delete throughput (vs Lucene.NET)"
+    [suggester]="SuggesterBenchmarks       -- DidYouMean spelling (vs Lucene.NET)"
+    [schemajson]="SchemaAndJsonBenchmarks   -- schema validation + JSON mapping"
+    [compound]="CompoundFileIndex/Search  -- compound file read/write (vs Lucene.NET)"
+    [indexsort]="IndexSortIndex/Search     -- index-time sort + early termination"
+    [blockjoin]="BlockJoinBenchmarks       -- block-join queries (vs Lucene.NET)"
+    ["gutenberg-analysis"]="GutenbergAnalysis         -- analysis on real ebook text (explicit only)"
+    ["gutenberg-index"]="GutenbergIndex            -- indexing real ebook data (explicit only)"
+    ["gutenberg-search"]="GutenbergSearch           -- search on real ebook data (explicit only)"
+    [tokenbudget]="TokenBudgetBenchmarks     -- token budget enforcement overhead (explicit only)"
+    [diagnostics]="DiagnosticsBenchmarks     -- SlowQueryLog + Analytics overhead (explicit only)"
 )
-SUITE_ORDER=(all index query analysis boolean phrase prefix fuzzy wildcard deletion smallindex tokenbudget diagnostics suggester schemajson compound indexsort blockjoin)
+
+SUITE_ORDER=(
+    all index query analysis boolean phrase prefix fuzzy wildcard deletion
+    suggester schemajson compound indexsort blockjoin
+    gutenberg-analysis gutenberg-index gutenberg-search tokenbudget diagnostics
+)
 
 declare -A STRAT_DESC=(
-    [default]="No overrides, uses BDN defaults. Type: full"
-    [fast]="500 docs, --job dry (minimal smoke-test). Type: smoke"
-    [quick-compare]="1000 docs, --job short (quick comparison). Type: partial"
-    [intense]="10000 docs, default BDN job. Type: full"
-    [stress]="50000 docs, default BDN job. Type: stress"
+    [default]="No overrides, uses BDN defaults."
+    [fast]="500 docs, --job dry (minimal smoke-test)."
+    [quick-compare]="1000 docs, --job short (quick comparison)."
+    [intense]="10000 docs, default BDN job."
+    [stress]="50000 docs, default BDN job."
 )
+
 STRAT_ORDER=(default fast quick-compare intense stress)
 
-declare -A TYPE_DESC=(
-    [full]="Standardised full run with maximum information output"
-    [smoke]="Quick smoke test (fast validation)"
-    [stress]="Stress testing with large document counts"
-    [partial]="Benchmarking specific suites (auto-set for single-suite runs)"
-)
-TYPE_ORDER=(full smoke stress partial)
-
-VALID_SUITES=(all index query analysis boolean phrase prefix fuzzy wildcard deletion smallindex tokenbudget diagnostics suggester schemajson compound indexsort blockjoin)
-VALID_TYPES=(full smoke stress partial)
-VALID_STRATS=(default fast quick-compare intense stress)
-
-# ── Helper: check membership ───────────────────────────────────────────────────
 contains() {
-    local val="$1"; shift
-    for item in "$@"; do [[ "$item" == "$val" ]] && return 0; done
+    local needle="$1"
+    shift
+    local item
+    for item in "$@"; do
+        if [[ "$item" == "$needle" ]]; then
+            return 0
+        fi
+    done
     return 1
 }
 
-# ── Parse arguments ────────────────────────────────────────────────────────────
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        --suite)   SUITE="$2";     shift 2 ;;
-        --type)    TYPE="$2";      shift 2 ;;
-        --strat)   STRAT="$2";     shift 2 ;;
-        --doccount) DOC_COUNT="$2"; shift 2 ;;
-        --dry)     DRY=true;       shift ;;
-        --list)    LIST=true;      shift ;;
-        --gcdump)  GCDUMP=true;    shift ;;
-        --help|-h) HELP=true;      shift ;;
-        --)        shift; EXTRA_ARGS+=("$@"); break ;;
-        *)         EXTRA_ARGS+=("$1"); shift ;;
+        --suite)
+            SUITE="${2:-}"
+            shift 2
+            ;;
+        --strat)
+            STRAT="${2:-}"
+            shift 2
+            ;;
+        --doccount)
+            DOC_COUNT="${2:-}"
+            shift 2
+            ;;
+        --prepare-data)
+            PREPARE_DATA=true
+            shift
+            ;;
+        --book-count)
+            BOOK_COUNT="${2:-}"
+            shift 2
+            ;;
+        --lean-only)
+            LEAN_ONLY=true
+            shift
+            ;;
+        --dry)
+            DRY=true
+            shift
+            ;;
+        --list)
+            LIST=true
+            shift
+            ;;
+        --gcdump)
+            GCDUMP=true
+            shift
+            ;;
+        --help|-h)
+            HELP=true
+            shift
+            ;;
+        --)
+            shift
+            EXTRA_ARGS+=("$@")
+            break
+            ;;
+        *)
+            EXTRA_ARGS+=("$1")
+            shift
+            ;;
     esac
 done
 
-# ── Validate ───────────────────────────────────────────────────────────────────
-if ! contains "$SUITE" "${VALID_SUITES[@]}"; then
-    echo "Error: invalid suite '$SUITE'. Valid: ${VALID_SUITES[*]}" >&2; exit 1
-fi
-if [[ -n "$TYPE" ]] && ! contains "$TYPE" "${VALID_TYPES[@]}"; then
-    echo "Error: invalid type '$TYPE'. Valid: ${VALID_TYPES[*]}" >&2; exit 1
-fi
-if ! contains "$STRAT" "${VALID_STRATS[@]}"; then
-    echo "Error: invalid strat '$STRAT'. Valid: ${VALID_STRATS[*]}" >&2; exit 1
+if ! contains "$SUITE" "${SUITE_ORDER[@]}"; then
+    echo "Error: invalid suite '$SUITE'. Valid: ${SUITE_ORDER[*]}" >&2
+    exit 1
 fi
 
-# ── Help ───────────────────────────────────────────────────────────────────────
+if ! contains "$STRAT" "${STRAT_ORDER[@]}"; then
+    echo "Error: invalid strat '$STRAT'. Valid: ${STRAT_ORDER[*]}" >&2
+    exit 1
+fi
+
 if $HELP; then
     echo ""
     echo "  LeanLucene Benchmark Runner"
     echo "  ============================"
     echo ""
     echo "  Usage:"
-    echo "    ./scripts/benchmark.sh [options] [-- BenchmarkDotNet args...]"
+    echo "    ./scripts/benchmark.sh [options] [BenchmarkDotNet args...]"
     echo ""
     echo "  Options:"
-    echo "    --suite <name>      Run a specific benchmark suite (default: all)"
-    echo "    --type <name>       Run type: full, smoke, stress, partial (overrides auto-detection)"
-    echo "    --strat <name>      Use a predefined strategy (default: default)"
-    echo "    --doccount <n>      Override document count (overrides --strat doc count)"
-    echo "    --list              List available suites, types, and strategies and exit"
-    echo "    --dry               Print the command that would run without executing it"
-    echo "    --help              Show this help message and exit"
-    echo ""
-    echo "  Run Types (--type):"
-    for name in "${TYPE_ORDER[@]}"; do
-        printf "    %-12s %s\n" "$name" "${TYPE_DESC[$name]}"
-    done
+    echo "    --suite <name>        Benchmark suite to run (default: all)"
+    echo "    --strat <name>        Predefined strategy (default: default)"
+    echo "    --doccount <n>        Override document count (overrides --strat)"
+    echo "    --prepare-data        Download benchmark data if not already present"
+    echo "    --book-count <n>      Number of Gutenberg books to fetch (default: 200)"
+    echo "    --lean-only           Skip Lucene.NET comparison benchmarks"
+    echo "    --list                List available suites and strategies and exit"
+    echo "    --dry                 Print the command that would run without executing it"
+    echo "    --gcdump              Collect GC heap dumps (requires dotnet-gcdump)"
+    echo "    --help                Show this help message and exit"
     echo ""
     echo "  Suites (--suite):"
     for name in "${SUITE_ORDER[@]}"; do
-        printf "    %-12s %s\n" "$name" "${SUITE_DESC[$name]}"
+        printf "    %-22s %s\n" "$name" "${SUITE_DESC[$name]}"
     done
     echo ""
     echo "  Strategies (--strat):"
@@ -152,49 +191,34 @@ if $HELP; then
         printf "    %-16s %s\n" "$name" "${STRAT_DESC[$name]}"
     done
     echo ""
-    echo "  Type auto-detection from --strat (overridden by --type):"
-    echo "    fast          -> smoke"
-    echo "    quick-compare -> partial"
-    echo "    intense       -> full"
-    echo "    stress        -> stress"
-    echo "    default       -> full"
-    echo ""
     echo "  Output:"
-    echo "    bench/data/<type>/<runId>/<suite>/"
-    echo "    Run ID format: \"yyyy-MM-dd HH-mm (shortcommit)\""
-    echo "    bench/data/index.json           Run index for all runs"
+    echo "    benches/{machine-name}/{yyyy-MM-dd}/{HH-mm}/"
+    echo "    benches/{machine-name}/index.json   Per-machine run index"
     echo ""
-    echo "  BenchmarkDotNet pass-through examples (after --):"
-    echo "    -- --filter '*Lean*'            Run only methods whose name contains Lean"
-    echo "    -- --job short                  Use the Short job instead of Default"
-    echo "    -- --runtimes net10.0           Override the target runtime"
-    echo "    -- --memory true                Force memory diagnoser (already enabled)"
+    echo "  BenchmarkDotNet pass-through examples:"
+    echo "    --filter *Lean*            Run only methods whose name contains Lean"
+    echo "    --job short                Use the Short job instead of Default"
+    echo "    --runtimes net10.0         Override the target runtime"
     echo ""
     echo "  Examples:"
-    echo "    ./scripts/benchmark.sh                                    # all suites, type: full"
-    echo "    ./scripts/benchmark.sh --suite query                      # query only"
-    echo "    ./scripts/benchmark.sh --strat fast --suite boolean       # smoke: boolean"
-    echo "    ./scripts/benchmark.sh --type partial --suite analysis    # partial: analysis"
-    echo "    ./scripts/benchmark.sh --strat intense --doccount 20000   # full: 20K docs"
-    echo "    ./scripts/benchmark.sh --list                             # list suites"
-    echo "    ./scripts/benchmark.sh --dry --suite index --strat fast   # dry run"
+    echo "    ./scripts/benchmark.sh                                          # all suites"
+    echo "    ./scripts/benchmark.sh --suite query                            # query only"
+    echo "    ./scripts/benchmark.sh --suite gutenberg-search --lean-only     # real data, lean only"
+    echo "    ./scripts/benchmark.sh --strat fast --suite boolean             # smoke: boolean"
+    echo "    ./scripts/benchmark.sh --strat intense --doccount 20000         # full: 20K docs"
+    echo "    ./scripts/benchmark.sh --prepare-data --book-count 200          # fetch data then run all"
+    echo "    ./scripts/benchmark.sh --list                                    # list suites"
+    echo "    ./scripts/benchmark.sh --dry --suite index --strat fast         # dry run"
     echo ""
     exit 0
 fi
 
-# ── List ───────────────────────────────────────────────────────────────────────
 if $LIST; then
-    echo ""
-    echo "  Available run types (--type):"
-    echo ""
-    for name in "${TYPE_ORDER[@]}"; do
-        printf "    %-12s %s\n" "$name" "${TYPE_DESC[$name]}"
-    done
     echo ""
     echo "  Available benchmark suites (--suite):"
     echo ""
     for name in "${SUITE_ORDER[@]}"; do
-        printf "    %-12s %s\n" "$name" "${SUITE_DESC[$name]}"
+        printf "    %-22s %s\n" "$name" "${SUITE_DESC[$name]}"
     done
     echo ""
     echo "  Available strategies (--strat):"
@@ -206,36 +230,26 @@ if $LIST; then
     exit 0
 fi
 
-# ── Resolve strategy presets ───────────────────────────────────────────────────
 STRAT_DOC_COUNT=0
 STRAT_JOB_ARGS=()
-STRAT_TYPE="full"
 
 case "$STRAT" in
     fast)
         STRAT_DOC_COUNT=500
         STRAT_JOB_ARGS=(--job dry)
-        STRAT_TYPE="smoke"
         ;;
     quick-compare)
         STRAT_DOC_COUNT=1000
         STRAT_JOB_ARGS=(--job short)
-        STRAT_TYPE="partial"
         ;;
     intense)
         STRAT_DOC_COUNT=10000
-        STRAT_TYPE="full"
         ;;
     stress)
         STRAT_DOC_COUNT=50000
-        STRAT_TYPE="stress"
         ;;
 esac
 
-# Resolve effective type: --type overrides strategy-derived type
-EFFECTIVE_TYPE="${TYPE:-$STRAT_TYPE}"
-
-# Resolve effective doc count: --doccount overrides strategy
 EFFECTIVE_DOC_COUNT=0
 if [[ "$DOC_COUNT" -gt 0 ]]; then
     EFFECTIVE_DOC_COUNT="$DOC_COUNT"
@@ -243,43 +257,75 @@ elif [[ "$STRAT_DOC_COUNT" -gt 0 ]]; then
     EFFECTIVE_DOC_COUNT="$STRAT_DOC_COUNT"
 fi
 
-# ── Validate project exists ────────────────────────────────────────────────────
 if [[ ! -f "$PROJECT_PATH" ]]; then
     echo "Error: benchmark project not found at: $PROJECT_PATH" >&2
     exit 1
 fi
 
-# ── Build run args ─────────────────────────────────────────────────────────────
-RUN_ARGS=(--suite "$SUITE" --type "$EFFECTIVE_TYPE")
+# Prepare benchmark data if requested.
+if $PREPARE_DATA; then
+    DATA_DIR="$REPO_ROOT/bench/data"
+    GUTENBERG_DIR="$DATA_DIR/gutenberg-ebooks"
+    NEWS_DIR="$DATA_DIR/20newsgroups"
+
+    GUTENBERG_COUNT=0
+    if [[ -d "$GUTENBERG_DIR" ]]; then
+        GUTENBERG_COUNT=$(find "$GUTENBERG_DIR" -maxdepth 1 -name "*.txt" | wc -l)
+    fi
+
+    if [[ "$GUTENBERG_COUNT" -lt 10 ]]; then
+        echo "Preparing Gutenberg data (book-count=$BOOK_COUNT)..."
+        pwsh -File "$SCRIPT_DIR/download-gutenberg.ps1" -BookCount "$BOOK_COUNT"
+    else
+        echo "Gutenberg data present ($GUTENBERG_COUNT books), skipping download."
+    fi
+
+    if [[ ! -d "$NEWS_DIR" ]]; then
+        echo "Preparing news data..."
+        bash "$SCRIPT_DIR/download-news.ps1" 2>/dev/null || \
+            pwsh -File "$SCRIPT_DIR/download-news.ps1"
+    else
+        echo "News data present, skipping download."
+    fi
+
+    echo ""
+fi
+
+RUN_ARGS=(--suite "$SUITE")
+if $LEAN_ONLY; then
+    RUN_ARGS+=(--lean-only)
+fi
 
 if [[ "$EFFECTIVE_DOC_COUNT" -gt 0 ]]; then
     RUN_ARGS+=(--doccount "$EFFECTIVE_DOC_COUNT")
     export BENCH_DOC_COUNT="$EFFECTIVE_DOC_COUNT"
 fi
 
-ALL_EXTRA_ARGS=("${STRAT_JOB_ARGS[@]}" "${EXTRA_ARGS[@]}")
+ALL_EXTRA_ARGS=("${STRAT_JOB_ARGS[@]}")
+if [[ ${#EXTRA_ARGS[@]} -gt 0 ]]; then
+    ALL_EXTRA_ARGS+=("${EXTRA_ARGS[@]}")
+fi
 
-# ── Print summary ──────────────────────────────────────────────────────────────
-echo "Suite:   $SUITE"
-echo "Type:    $EFFECTIVE_TYPE"
-echo "Strat:   $STRAT"
+echo "Suite:    $SUITE"
+echo "Strat:    $STRAT"
+if $LEAN_ONLY; then
+    echo "LeanOnly: enabled"
+fi
 if [[ "$EFFECTIVE_DOC_COUNT" -gt 0 ]]; then
-    echo "Docs:    $EFFECTIVE_DOC_COUNT"
+    echo "Docs:     $EFFECTIVE_DOC_COUNT"
 fi
-if [[ "${#ALL_EXTRA_ARGS[@]}" -gt 0 ]]; then
-    echo "Extra:   ${ALL_EXTRA_ARGS[*]}"
+if [[ ${#ALL_EXTRA_ARGS[@]} -gt 0 ]]; then
+    echo "Extra:    ${ALL_EXTRA_ARGS[*]}"
 fi
 
-# ── Dry run ────────────────────────────────────────────────────────────────────
 if $DRY; then
     echo ""
-    echo "Dry run - command that would execute:"
-    printf "  dotnet run -c Release --project \"%s\" -- %s" \
-        "$PROJECT_PATH" "${RUN_ARGS[*]}"
-    if [[ "${#ALL_EXTRA_ARGS[@]}" -gt 0 ]]; then
-        printf " %s" "${ALL_EXTRA_ARGS[*]}"
+    cmd_display="dotnet run -c Release --project \"$PROJECT_PATH\" -- ${RUN_ARGS[*]}"
+    if [[ ${#ALL_EXTRA_ARGS[@]} -gt 0 ]]; then
+        cmd_display+=" ${ALL_EXTRA_ARGS[*]}"
     fi
-    echo ""
+    echo "Dry run - command that would execute:"
+    echo "  $cmd_display"
     if [[ "$EFFECTIVE_DOC_COUNT" -gt 0 ]]; then
         echo "  env: BENCH_DOC_COUNT=$EFFECTIVE_DOC_COUNT"
     fi
@@ -287,16 +333,315 @@ if $DRY; then
     exit 0
 fi
 
-# ── GC dump tool check ─────────────────────────────────────────────────────────
 if $GCDUMP; then
     RUN_ARGS+=(--gcdump)
     if ! command -v dotnet-gcdump &>/dev/null; then
         echo "Installing dotnet-gcdump global tool..."
         dotnet tool install -g dotnet-gcdump
     fi
-    echo "GcDump: enabled"
+    echo "GcDump:   enabled"
 fi
 
-# ── Execute ────────────────────────────────────────────────────────────────────
+echo ""
+dotnet run -c Release --project "$PROJECT_PATH" -- "${RUN_ARGS[@]}" "${ALL_EXTRA_ARGS[@]}"
+
+# Unified LeanLucene benchmark runner.
+#
+# Usage:
+#   ./scripts/benchmark.sh [options] [BenchmarkDotNet args...]
+#
+# Options:
+#   --suite <name>      Benchmark suite to run (default: all)
+#   --strat <name>      Predefined strategy (default: default)
+#   --doccount <n>      Override document count (overrides --strat)
+#   --lean-only         Skip Lucene.NET comparison benchmarks
+#   --list              List available suites and strategies and exit
+#   --dry               Print the command that would run without executing it
+#   --gcdump            Collect GC heap dumps (requires dotnet-gcdump)
+#   --help              Show help and exit
+#
+# Extra arguments after -- are passed through to BenchmarkDotNet.
+#
+# Examples:
+#   ./scripts/benchmark.sh
+#   ./scripts/benchmark.sh --suite query
+#   ./scripts/benchmark.sh --suite gutenberg-search --lean-only
+#   ./scripts/benchmark.sh --strat fast --suite boolean
+#   ./scripts/benchmark.sh --strat intense --doccount 20000
+#   ./scripts/benchmark.sh --list
+#   ./scripts/benchmark.sh --dry --suite index --strat fast
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+PROJECT_PATH="$REPO_ROOT/src/Rowles.LeanLucene.Benchmarks/Rowles.LeanLucene.Benchmarks.csproj"
+
+SUITE="all"
+STRAT="default"
+DOC_COUNT=0
+LEAN_ONLY=false
+DRY=false
+LIST=false
+HELP=false
+GCDUMP=false
+EXTRA_ARGS=()
+
+declare -A SUITE_DESC=(
+    [all]="Run all standard benchmark suites (default)"
+    [index]="IndexingBenchmarks        -- bulk indexing throughput (vs Lucene.NET)"
+    [query]="TermQueryBenchmarks       -- single-term search (vs Lucene.NET)"
+    [analysis]="AnalysisBenchmarks        -- tokenisation pipeline"
+    [boolean]="BooleanQueryBenchmarks    -- Must / Should / MustNot"
+    [phrase]="PhraseQueryBenchmarks     -- exact and slop phrase"
+    [prefix]="PrefixQueryBenchmarks      -- prefix matching (vs Lucene.NET)"
+    [fuzzy]="FuzzyQueryBenchmarks      -- fuzzy/edit-distance"
+    [wildcard]="WildcardQueryBenchmarks   -- wildcard patterns"
+    [deletion]="DeletionBenchmarks        -- delete throughput (vs Lucene.NET)"
+    [suggester]="SuggesterBenchmarks       -- DidYouMean spelling (vs Lucene.NET)"
+    [schemajson]="SchemaAndJsonBenchmarks   -- schema validation + JSON mapping"
+    [compound]="CompoundFileIndex/Search  -- compound file read/write (vs Lucene.NET)"
+    [indexsort]="IndexSortIndex/Search     -- index-time sort + early termination"
+    [blockjoin]="BlockJoinBenchmarks       -- block-join queries (vs Lucene.NET)"
+    ["gutenberg-analysis"]="GutenbergAnalysis         -- analysis on real ebook text (explicit only)"
+    ["gutenberg-index"]="GutenbergIndex            -- indexing real ebook data (explicit only)"
+    ["gutenberg-search"]="GutenbergSearch           -- search on real ebook data (explicit only)"
+    [tokenbudget]="TokenBudgetBenchmarks     -- token budget enforcement overhead (explicit only)"
+    [diagnostics]="DiagnosticsBenchmarks     -- SlowQueryLog + Analytics overhead (explicit only)"
+)
+
+SUITE_ORDER=(
+    all index query analysis boolean phrase prefix fuzzy wildcard deletion
+    suggester schemajson compound indexsort blockjoin
+    gutenberg-analysis gutenberg-index gutenberg-search tokenbudget diagnostics
+)
+
+declare -A STRAT_DESC=(
+    [default]="No overrides, uses BDN defaults."
+    [fast]="500 docs, --job dry (minimal smoke-test)."
+    [quick-compare]="1000 docs, --job short (quick comparison)."
+    [intense]="10000 docs, default BDN job."
+    [stress]="50000 docs, default BDN job."
+)
+
+STRAT_ORDER=(default fast quick-compare intense stress)
+
+contains() {
+    local needle="$1"
+    shift
+    local item
+    for item in "$@"; do
+        if [[ "$item" == "$needle" ]]; then
+            return 0
+        fi
+    done
+    return 1
+}
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --suite)
+            SUITE="${2:-}"
+            shift 2
+            ;;
+        --strat)
+            STRAT="${2:-}"
+            shift 2
+            ;;
+        --doccount)
+            DOC_COUNT="${2:-}"
+            shift 2
+            ;;
+        --lean-only)
+            LEAN_ONLY=true
+            shift
+            ;;
+        --dry)
+            DRY=true
+            shift
+            ;;
+        --list)
+            LIST=true
+            shift
+            ;;
+        --gcdump)
+            GCDUMP=true
+            shift
+            ;;
+        --help|-h)
+            HELP=true
+            shift
+            ;;
+        --)
+            shift
+            EXTRA_ARGS+=("$@")
+            break
+            ;;
+        *)
+            EXTRA_ARGS+=("$1")
+            shift
+            ;;
+    esac
+done
+
+if ! contains "$SUITE" "${SUITE_ORDER[@]}"; then
+    echo "Error: invalid suite '$SUITE'. Valid: ${SUITE_ORDER[*]}" >&2
+    exit 1
+fi
+
+if ! contains "$STRAT" "${STRAT_ORDER[@]}"; then
+    echo "Error: invalid strat '$STRAT'. Valid: ${STRAT_ORDER[*]}" >&2
+    exit 1
+fi
+
+if $HELP; then
+    echo ""
+    echo "  LeanLucene Benchmark Runner"
+    echo "  ============================"
+    echo ""
+    echo "  Usage:"
+    echo "    ./scripts/benchmark.sh [options] [BenchmarkDotNet args...]"
+    echo ""
+    echo "  Options:"
+    echo "    --suite <name>      Benchmark suite to run (default: all)"
+    echo "    --strat <name>      Predefined strategy (default: default)"
+    echo "    --doccount <n>      Override document count (overrides --strat)"
+    echo "    --lean-only         Skip Lucene.NET comparison benchmarks"
+    echo "    --list              List available suites and strategies and exit"
+    echo "    --dry               Print the command that would run without executing it"
+    echo "    --gcdump            Collect GC heap dumps (requires dotnet-gcdump)"
+    echo "    --help              Show this help message and exit"
+    echo ""
+    echo "  Suites (--suite):"
+    for name in "${SUITE_ORDER[@]}"; do
+        printf "    %-22s %s\n" "$name" "${SUITE_DESC[$name]}"
+    done
+    echo ""
+    echo "  Strategies (--strat):"
+    for name in "${STRAT_ORDER[@]}"; do
+        printf "    %-16s %s\n" "$name" "${STRAT_DESC[$name]}"
+    done
+    echo ""
+    echo "  Output:"
+    echo "    benches/{machine-name}/{yyyy-MM-dd}/{HH-mm}/"
+    echo "    benches/{machine-name}/index.json   Per-machine run index"
+    echo ""
+    echo "  BenchmarkDotNet pass-through examples:"
+    echo "    --filter *Lean*            Run only methods whose name contains Lean"
+    echo "    --job short                Use the Short job instead of Default"
+    echo "    --runtimes net10.0         Override the target runtime"
+    echo ""
+    echo "  Examples:"
+    echo "    ./scripts/benchmark.sh                                     # all suites"
+    echo "    ./scripts/benchmark.sh --suite query                       # query only"
+    echo "    ./scripts/benchmark.sh --suite gutenberg-search --lean-only # real data, lean only"
+    echo "    ./scripts/benchmark.sh --strat fast --suite boolean        # smoke: boolean"
+    echo "    ./scripts/benchmark.sh --strat intense --doccount 20000    # full: 20K docs"
+    echo "    ./scripts/benchmark.sh --list                               # list suites"
+    echo "    ./scripts/benchmark.sh --dry --suite index --strat fast    # dry run"
+    echo ""
+    exit 0
+fi
+
+if $LIST; then
+    echo ""
+    echo "  Available benchmark suites (--suite):"
+    echo ""
+    for name in "${SUITE_ORDER[@]}"; do
+        printf "    %-22s %s\n" "$name" "${SUITE_DESC[$name]}"
+    done
+    echo ""
+    echo "  Available strategies (--strat):"
+    echo ""
+    for name in "${STRAT_ORDER[@]}"; do
+        printf "    %-16s %s\n" "$name" "${STRAT_DESC[$name]}"
+    done
+    echo ""
+    exit 0
+fi
+
+STRAT_DOC_COUNT=0
+STRAT_JOB_ARGS=()
+
+case "$STRAT" in
+    fast)
+        STRAT_DOC_COUNT=500
+        STRAT_JOB_ARGS=(--job dry)
+        ;;
+    quick-compare)
+        STRAT_DOC_COUNT=1000
+        STRAT_JOB_ARGS=(--job short)
+        ;;
+    intense)
+        STRAT_DOC_COUNT=10000
+        ;;
+    stress)
+        STRAT_DOC_COUNT=50000
+        ;;
+esac
+
+EFFECTIVE_DOC_COUNT=0
+if [[ "$DOC_COUNT" -gt 0 ]]; then
+    EFFECTIVE_DOC_COUNT="$DOC_COUNT"
+elif [[ "$STRAT_DOC_COUNT" -gt 0 ]]; then
+    EFFECTIVE_DOC_COUNT="$STRAT_DOC_COUNT"
+fi
+
+if [[ ! -f "$PROJECT_PATH" ]]; then
+    echo "Error: benchmark project not found at: $PROJECT_PATH" >&2
+    exit 1
+fi
+
+RUN_ARGS=(--suite "$SUITE")
+if $LEAN_ONLY; then
+    RUN_ARGS+=(--lean-only)
+fi
+
+if [[ "$EFFECTIVE_DOC_COUNT" -gt 0 ]]; then
+    RUN_ARGS+=(--doccount "$EFFECTIVE_DOC_COUNT")
+    export BENCH_DOC_COUNT="$EFFECTIVE_DOC_COUNT"
+fi
+
+ALL_EXTRA_ARGS=("${STRAT_JOB_ARGS[@]}")
+if [[ ${#EXTRA_ARGS[@]} -gt 0 ]]; then
+    ALL_EXTRA_ARGS+=("${EXTRA_ARGS[@]}")
+fi
+
+echo "Suite:    $SUITE"
+echo "Strat:    $STRAT"
+if $LEAN_ONLY; then
+    echo "LeanOnly: enabled"
+fi
+if [[ "$EFFECTIVE_DOC_COUNT" -gt 0 ]]; then
+    echo "Docs:     $EFFECTIVE_DOC_COUNT"
+fi
+if [[ ${#ALL_EXTRA_ARGS[@]} -gt 0 ]]; then
+    echo "Extra:    ${ALL_EXTRA_ARGS[*]}"
+fi
+
+if $DRY; then
+    echo ""
+    cmd_display="dotnet run -c Release --project \"$PROJECT_PATH\" -- ${RUN_ARGS[*]}"
+    if [[ ${#ALL_EXTRA_ARGS[@]} -gt 0 ]]; then
+        cmd_display+=" ${ALL_EXTRA_ARGS[*]}"
+    fi
+    echo "Dry run - command that would execute:"
+    echo "  $cmd_display"
+    if [[ "$EFFECTIVE_DOC_COUNT" -gt 0 ]]; then
+        echo "  env: BENCH_DOC_COUNT=$EFFECTIVE_DOC_COUNT"
+    fi
+    echo ""
+    exit 0
+fi
+
+if $GCDUMP; then
+    RUN_ARGS+=(--gcdump)
+    if ! command -v dotnet-gcdump &>/dev/null; then
+        echo "Installing dotnet-gcdump global tool..."
+        dotnet tool install -g dotnet-gcdump
+    fi
+    echo "GcDump:   enabled"
+fi
+
 echo ""
 dotnet run -c Release --project "$PROJECT_PATH" -- "${RUN_ARGS[@]}" "${ALL_EXTRA_ARGS[@]}"

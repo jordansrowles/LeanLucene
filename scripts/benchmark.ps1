@@ -26,6 +26,14 @@
 .PARAMETER DocCount
     Override document count for all suites.
 
+.PARAMETER PrepareData
+    Check for benchmark data and download if absent. Runs download-gutenberg.ps1
+    and download-news.ps1 before benchmarking. Safe to re-run; existing files are
+    skipped. Pass -BookCount to control how many Gutenberg books to fetch.
+
+.PARAMETER BookCount
+    Number of Gutenberg books to download when -PrepareData is used. Defaults to 200.
+
 .PARAMETER LeanOnly
     Skip Lucene.NET comparison benchmarks; run LeanLucene methods only.
 
@@ -86,6 +94,10 @@ param(
 
     [int]$DocCount = 0,
 
+    [switch]$PrepareData,
+
+    [int]$BookCount = 200,
+
     [switch]$LeanOnly,
 
     [switch]$Help,
@@ -143,6 +155,8 @@ if ($Help) {
     Write-Host '    -Suite <name>      Benchmark suite to run (default: all)'
     Write-Host '    -Strat <name>      Predefined strategy (default: default)'
     Write-Host '    -DocCount <n>      Override document count (overrides -Strat)'
+    Write-Host '    -PrepareData       Download benchmark data if not already present'
+    Write-Host '    -BookCount <n>     Number of Gutenberg books to fetch with -PrepareData (default: 200)'
     Write-Host '    -LeanOnly          Skip Lucene.NET comparison benchmarks'
     Write-Host '    -List              List available suites and strategies and exit'
     Write-Host '    -Dry               Print the command that would run without executing it'
@@ -233,6 +247,33 @@ $projectPath = [System.IO.Path]::GetFullPath(
 if (-not (Test-Path $projectPath)) {
     Write-Error "Benchmark project not found at: $projectPath"
     exit 1
+}
+
+# --- Prepare data if requested ---
+if ($PrepareData) {
+    $dataDir      = [System.IO.Path]::GetFullPath(Join-Path $PSScriptRoot "..\bench\data")
+    $gutenbergDir = Join-Path $dataDir "gutenberg-ebooks"
+    $newsDir      = Join-Path $dataDir "20newsgroups"
+
+    $gutenbergCount = if (Test-Path $gutenbergDir) {
+        (Get-ChildItem -Path $gutenbergDir -Filter "*.txt" -ErrorAction SilentlyContinue).Count
+    } else { 0 }
+
+    if ($gutenbergCount -lt 10) {
+        Write-Host "Preparing Gutenberg data (BookCount=$BookCount)..." -ForegroundColor Cyan
+        & (Join-Path $PSScriptRoot "download-gutenberg.ps1") -BookCount $BookCount
+    } else {
+        Write-Host "Gutenberg data present ($gutenbergCount books), skipping download." -ForegroundColor DarkGray
+    }
+
+    if (-not (Test-Path $newsDir)) {
+        Write-Host "Preparing news data..." -ForegroundColor Cyan
+        & (Join-Path $PSScriptRoot "download-news.ps1")
+    } else {
+        Write-Host "News data present, skipping download." -ForegroundColor DarkGray
+    }
+
+    Write-Host ""
 }
 
 # Build argument list
