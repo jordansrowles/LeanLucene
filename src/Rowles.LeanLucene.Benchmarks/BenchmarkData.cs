@@ -1,33 +1,10 @@
 using System.Globalization;
+using System.Text.Json;
 
 namespace Rowles.LeanLucene.Benchmarks;
 
 internal static class BenchmarkData
 {
-    private static readonly string[] Topics =
-    [
-        "catalog",
-        "ranking",
-        "analytics",
-        "ingestion",
-        "compression",
-        "vectorization",
-        "querying",
-        "throughput"
-    ];
-
-    private static readonly string[] Domains =
-    [
-        "ecommerce",
-        "observability",
-        "knowledgebase",
-        "documentation",
-        "telemetry",
-        "support",
-        "security",
-        "monitoring"
-    ];
-
     /// <summary>Default document count used by all benchmark suites when <c>BENCH_DOC_COUNT</c> is not set.</summary>
     public const int DefaultDocCount = 100_000;
 
@@ -44,100 +21,84 @@ internal static class BenchmarkData
         return [defaultCount];
     }
 
+    /// <summary>Returns real-world document bodies from the data pool, wrapping round-robin if needed.</summary>
     public static string[] BuildDocuments(int count)
-    {
-        var docs = new string[count];
-        for (int i = 0; i < count; i++)
-        {
-            var keyword = (i % 3) switch
-            {
-                0 => "search",
-                1 => "vector",
-                _ => "performance"
-            };
-
-            var topic = Topics[i % Topics.Length];
-            var domain = Domains[(i * 7) % Domains.Length];
-
-            docs[i] =
-                $"doc {i} {keyword} benchmark for {domain} {topic} " +
-                "dotnet segment index bm25 retrieval latency throughput memory mapped files";
-        }
-
-        return docs;
-    }
+        => RealDataPool.GetBodies(count);
 
     /// <summary>Builds documents with a numeric "price" field for index sort benchmarks.</summary>
     public static (string Body, double Price)[] BuildDocumentsWithPrices(int count)
     {
+        var bodies = RealDataPool.GetBodies(count);
         var rng = new Random(42);
         var docs = new (string Body, double Price)[count];
         for (int i = 0; i < count; i++)
-        {
-            var topic = Topics[i % Topics.Length];
-            var domain = Domains[(i * 7) % Domains.Length];
-            docs[i] = (
-                $"product {i} {topic} {domain} benchmark item search retrieval",
-                Math.Round(rng.NextDouble() * 999 + 1, 2)
-            );
-        }
+            docs[i] = (bodies[i], Math.Round(rng.NextDouble() * 999 + 1, 2));
         return docs;
     }
 
     /// <summary>Builds parent-child document blocks for block join benchmarks.</summary>
     public static (string ParentTitle, string[] ChildBodies)[] BuildParentChildBlocks(int blockCount, int childrenPerBlock = 3)
     {
+        var bodies = RealDataPool.GetBodies(blockCount * (childrenPerBlock + 1));
         var blocks = new (string ParentTitle, string[] ChildBodies)[blockCount];
+        var idx = 0;
         for (int i = 0; i < blockCount; i++)
         {
-            var topic = Topics[i % Topics.Length];
+            var parentBody = bodies[idx++];
+            var dot = parentBody.IndexOf('.', StringComparison.Ordinal);
+            var title = dot > 0 && dot <= 80
+                ? parentBody[..dot]
+                : parentBody[..Math.Min(80, parentBody.Length)];
+
             var children = new string[childrenPerBlock];
             for (int c = 0; c < childrenPerBlock; c++)
-                children[c] = $"child {c} comment on {topic} discussion reply search content";
-            blocks[i] = ($"parent {i} {topic} post article", children);
+                children[c] = bodies[idx++];
+
+            blocks[i] = (title, children);
         }
         return blocks;
     }
 
-    /// <summary>Builds misspelled term variants for suggester benchmarks.</summary>
+    /// <summary>Builds misspelled term variants for suggester benchmarks against real-corpus vocabulary.</summary>
     public static (string Original, string Misspelled)[] BuildMisspelledTerms()
     {
         return
         [
-            ("search", "serch"),
-            ("vector", "vecor"),
-            ("performance", "performnce"),
-            ("benchmark", "benchmrk"),
-            ("throughput", "througput"),
-            ("analytics", "anlytics"),
-            ("compression", "compresion"),
-            ("retrieval", "retreival"),
-            ("ingestion", "ingesion"),
-            ("querying", "queryin"),
-            ("catalog", "catlog"),
-            ("monitoring", "monitring"),
-            ("security", "secrity"),
-            ("telemetry", "telmetry"),
-            ("documentation", "documention"),
-            ("latency", "lateny"),
-            ("segment", "segmnt"),
-            ("memory", "memry"),
-            ("indexing", "indexng"),
-            ("mapping", "mappng"),
+            ("government", "goverment"),
+            ("president", "presiden"),
+            ("market", "markts"),
+            ("company", "compny"),
+            ("million", "milion"),
+            ("financial", "finanical"),
+            ("reported", "reportd"),
+            ("political", "politcal"),
+            ("economic", "econmic"),
+            ("hospital", "hosptal"),
+            ("computer", "computr"),
+            ("network", "netork"),
+            ("message", "mesage"),
+            ("article", "artcle"),
+            ("because", "becuase"),
+            ("people", "pepole"),
+            ("national", "nationl"),
+            ("through", "throgh"),
+            ("without", "withut"),
+            ("believe", "beleive"),
         ];
     }
 
     /// <summary>Builds JSON document strings for JSON mapping benchmarks.</summary>
     public static string[] BuildJsonDocuments(int count)
     {
+        var bodies = RealDataPool.GetBodies(count);
+        var rng = new Random(42);
         var docs = new string[count];
         for (int i = 0; i < count; i++)
         {
-            var topic = Topics[i % Topics.Length];
-            var domain = Domains[(i * 7) % Domains.Length];
-            docs[i] = $$"""
-                {"id":{{i}},"title":"{{topic}} article {{i}}","body":"{{domain}} {{topic}} search benchmark content","price":{{(i * 9.99 + 1):F2}},"active":true,"tags":["{{topic}}","{{domain}}"]}
-                """;
+            var body = JsonSerializer.Serialize(bodies[i]);
+            var price = Math.Round(rng.NextDouble() * 999 + 1, 2)
+                            .ToString("F2", CultureInfo.InvariantCulture);
+            docs[i] = $$$"""{"id":{{{i}}},"body":{{{body}}},"price":{{{price}}},"active":true}""";
         }
         return docs;
     }
