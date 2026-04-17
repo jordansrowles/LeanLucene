@@ -1,0 +1,5 @@
+# Ensure Unix line endings for shell scripts
+*.sh text eol=lf
+
+# Normalise all other text files
+* text=auto
