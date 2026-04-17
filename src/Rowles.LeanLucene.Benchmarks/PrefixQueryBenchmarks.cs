@@ -35,8 +35,8 @@ public class PrefixQueryBenchmarks
     [ParamsSource(nameof(DocCounts))]
     public int DocumentCount { get; set; }
 
-    [Params("sear", "vec", "perf")]
-    public string QueryPrefix { get; set; } = "sear";
+    [Params("gov", "pres", "mark")]
+    public string QueryPrefix { get; set; } = "gov";
 
     private string _leanIndexPath = string.Empty;
     private LeanMMapDirectory? _leanDirectory;

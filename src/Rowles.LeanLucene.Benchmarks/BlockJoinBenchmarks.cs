@@ -104,7 +104,7 @@ public class BlockJoinBenchmarks
     [MethodImpl(MethodImplOptions.NoInlining)]
     public int LeanLucene_BlockJoinQuery()
     {
-        var childQuery = new LeanTermQuery("body", "comment");
+        var childQuery = new LeanTermQuery("body", "said");
         var blockJoin = new BlockJoinQuery(childQuery);
         var topDocs = _leanSearcher!.Search(blockJoin, TopN);
         return topDocs.TotalHits;
@@ -151,7 +151,7 @@ public class BlockJoinBenchmarks
     [MethodImpl(MethodImplOptions.NoInlining)]
     public int LuceneNet_ToParentBlockJoinQuery()
     {
-        var childQuery = new Lucene.Net.Search.TermQuery(new Term("body", "comment"));
+        var childQuery = new Lucene.Net.Search.TermQuery(new Term("body", "said"));
         var parentQuery = new ToParentBlockJoinQuery(childQuery, _luceneParentFilter!, Lucene.Net.Search.Join.ScoreMode.Max);
         var topDocs = _luceneSearcher!.Search(parentQuery, TopN);
         return topDocs.TotalHits;

@@ -75,16 +75,16 @@ public class BooleanQueryBenchmarks
         switch (BooleanType)
         {
             case "Must":
-                bq.Add(new Rowles.LeanLucene.Search.Queries.TermQuery("body", "search"), Rowles.LeanLucene.Search.Occur.Must);
-                bq.Add(new Rowles.LeanLucene.Search.Queries.TermQuery("body", "benchmark"), Rowles.LeanLucene.Search.Occur.Must);
+                bq.Add(new Rowles.LeanLucene.Search.Queries.TermQuery("body", "government"), Rowles.LeanLucene.Search.Occur.Must);
+                bq.Add(new Rowles.LeanLucene.Search.Queries.TermQuery("body", "said"), Rowles.LeanLucene.Search.Occur.Must);
                 break;
             case "Should":
-                bq.Add(new Rowles.LeanLucene.Search.Queries.TermQuery("body", "search"), Rowles.LeanLucene.Search.Occur.Should);
-                bq.Add(new Rowles.LeanLucene.Search.Queries.TermQuery("body", "vector"), Rowles.LeanLucene.Search.Occur.Should);
+                bq.Add(new Rowles.LeanLucene.Search.Queries.TermQuery("body", "market"), Rowles.LeanLucene.Search.Occur.Should);
+                bq.Add(new Rowles.LeanLucene.Search.Queries.TermQuery("body", "people"), Rowles.LeanLucene.Search.Occur.Should);
                 break;
             case "MustNot":
-                bq.Add(new Rowles.LeanLucene.Search.Queries.TermQuery("body", "benchmark"), Rowles.LeanLucene.Search.Occur.Must);
-                bq.Add(new Rowles.LeanLucene.Search.Queries.TermQuery("body", "vector"), Rowles.LeanLucene.Search.Occur.MustNot);
+                bq.Add(new Rowles.LeanLucene.Search.Queries.TermQuery("body", "government"), Rowles.LeanLucene.Search.Occur.Must);
+                bq.Add(new Rowles.LeanLucene.Search.Queries.TermQuery("body", "market"), Rowles.LeanLucene.Search.Occur.MustNot);
                 break;
         }
         return _leanSearcher!.Search(bq, TopN).TotalHits;
@@ -98,16 +98,16 @@ public class BooleanQueryBenchmarks
         switch (BooleanType)
         {
             case "Must":
-                bq.Add(new Lucene.Net.Search.TermQuery(new Term("body", "search")), Occur.MUST);
-                bq.Add(new Lucene.Net.Search.TermQuery(new Term("body", "benchmark")), Occur.MUST);
+                bq.Add(new Lucene.Net.Search.TermQuery(new Term("body", "government")), Occur.MUST);
+                bq.Add(new Lucene.Net.Search.TermQuery(new Term("body", "said")), Occur.MUST);
                 break;
             case "Should":
-                bq.Add(new Lucene.Net.Search.TermQuery(new Term("body", "search")), Occur.SHOULD);
-                bq.Add(new Lucene.Net.Search.TermQuery(new Term("body", "vector")), Occur.SHOULD);
+                bq.Add(new Lucene.Net.Search.TermQuery(new Term("body", "market")), Occur.SHOULD);
+                bq.Add(new Lucene.Net.Search.TermQuery(new Term("body", "people")), Occur.SHOULD);
                 break;
             case "MustNot":
-                bq.Add(new Lucene.Net.Search.TermQuery(new Term("body", "benchmark")), Occur.MUST);
-                bq.Add(new Lucene.Net.Search.TermQuery(new Term("body", "vector")), Occur.MUST_NOT);
+                bq.Add(new Lucene.Net.Search.TermQuery(new Term("body", "government")), Occur.MUST);
+                bq.Add(new Lucene.Net.Search.TermQuery(new Term("body", "market")), Occur.MUST_NOT);
                 break;
         }
         return _luceneSearcher!.Search(bq, TopN).TotalHits;

@@ -35,8 +35,8 @@ public class TermQueryBenchmarks
     [ParamsSource(nameof(DocCounts))]
     public int DocumentCount { get; set; }
 
-    [Params("search", "vector", "performance")]
-    public string QueryTerm { get; set; } = "search";
+    [Params("said", "government", "people")]
+    public string QueryTerm { get; set; } = "said";
 
     private string[] _documents = [];
     private string _leanIndexPath = string.Empty;

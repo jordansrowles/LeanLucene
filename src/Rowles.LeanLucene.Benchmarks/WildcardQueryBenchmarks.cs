@@ -36,8 +36,8 @@ public class WildcardQueryBenchmarks
     [ParamsSource(nameof(DocCounts))]
     public int DocumentCount { get; set; }
 
-    [Params("sea*", "bench*k", "vec?or")]
-    public string WildcardPattern { get; set; } = "sea*";
+    [Params("gov*", "m*rket", "pre*dent")]
+    public string WildcardPattern { get; set; } = "gov*";
 
     private string _leanIndexPath = string.Empty;
     private LeanMMapDirectory? _leanDirectory;

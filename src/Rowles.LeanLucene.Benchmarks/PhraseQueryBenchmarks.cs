@@ -75,11 +75,11 @@ public class PhraseQueryBenchmarks
         return PhraseType switch
         {
             "ExactTwoWord" => _leanSearcher!.Search(
-                new Rowles.LeanLucene.Search.Queries.PhraseQuery("body", "search", "benchmark"), TopN).TotalHits,
+                new Rowles.LeanLucene.Search.Queries.PhraseQuery("body", "new", "york"), TopN).TotalHits,
             "ExactThreeWord" => _leanSearcher!.Search(
-                new Rowles.LeanLucene.Search.Queries.PhraseQuery("body", "segment", "index", "bm25"), TopN).TotalHits,
+                new Rowles.LeanLucene.Search.Queries.PhraseQuery("body", "new", "york", "stock"), TopN).TotalHits,
             "SlopTwoWord" => _leanSearcher!.Search(
-                new Rowles.LeanLucene.Search.Queries.PhraseQuery("body", slop: 2, "search", "latency"), TopN).TotalHits,
+                new Rowles.LeanLucene.Search.Queries.PhraseQuery("body", slop: 2, "said", "government"), TopN).TotalHits,
             _ => 0
         };
     }
@@ -92,18 +92,18 @@ public class PhraseQueryBenchmarks
         switch (PhraseType)
         {
             case "ExactTwoWord":
-                pq.Add(new Term("body", "search"));
-                pq.Add(new Term("body", "benchmark"));
+                pq.Add(new Term("body", "new"));
+                pq.Add(new Term("body", "york"));
                 break;
             case "ExactThreeWord":
-                pq.Add(new Term("body", "segment"));
-                pq.Add(new Term("body", "index"));
-                pq.Add(new Term("body", "bm25"));
+                pq.Add(new Term("body", "new"));
+                pq.Add(new Term("body", "york"));
+                pq.Add(new Term("body", "stock"));
                 break;
             case "SlopTwoWord":
                 pq.Slop = 2;
-                pq.Add(new Term("body", "search"));
-                pq.Add(new Term("body", "latency"));
+                pq.Add(new Term("body", "said"));
+                pq.Add(new Term("body", "government"));
                 break;
         }
         return _luceneSearcher!.Search(pq, TopN).TotalHits;

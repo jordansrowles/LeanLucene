@@ -35,8 +35,8 @@ public class FuzzyQueryBenchmarks
     [ParamsSource(nameof(DocCounts))]
     public int DocumentCount { get; set; }
 
-    [Params("serch", "vectr", "banchmark")]
-    public string QueryTerm { get; set; } = "serch";
+    [Params("goverment", "presiden", "markts")]
+    public string QueryTerm { get; set; } = "goverment";
 
     private string _leanIndexPath = string.Empty;
     private LeanMMapDirectory? _leanDirectory;
