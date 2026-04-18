@@ -39,6 +39,13 @@ param(
     [string]$OutputDir = ''
 )
 
+if ($BookCount -lt 1) {
+    throw [System.ArgumentOutOfRangeException]::new(
+        'BookCount',
+        $BookCount,
+        'BookCount must be greater than zero.')
+}
+
 $repoRoot = Split-Path -Parent $PSScriptRoot
 
 if ([string]::IsNullOrEmpty($OutputDir)) {
@@ -49,6 +56,7 @@ $catalogCacheDir  = Join-Path $repoRoot "bench\data"
 $catalogCachePath = Join-Path $catalogCacheDir ".gutenberg-catalog.csv"
 
 New-Item -ItemType Directory -Force -Path $OutputDir | Out-Null
+New-Item -ItemType Directory -Force -Path $catalogCacheDir | Out-Null
 
 # Curated seed list of public-domain books by Gutenberg ID.
 # Covers a wide range of genres, authors, and writing styles.
@@ -239,7 +247,7 @@ foreach ($id in $booksToDownload.Keys) {
     $downloaded = $false
     foreach ($url in $urls) {
         try {
-            Write-Host "[$index/$total] Fetching $id: $title" -ForegroundColor Cyan
+            Write-Host ("[{0}/{1}] Fetching {2}: {3}" -f $index, $total, $id, $title) -ForegroundColor Cyan
             Invoke-WebRequest -Uri $url -OutFile $outputPath -UseBasicParsing `
                 -UserAgent "Mozilla/5.0 (compatible; BenchmarkDataBot/1.0)"
             Write-Host "  Saved $outputPath" -ForegroundColor Green

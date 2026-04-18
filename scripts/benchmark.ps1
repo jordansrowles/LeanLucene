@@ -251,26 +251,35 @@ if (-not (Test-Path $projectPath)) {
 
 # --- Prepare data if requested ---
 if ($PrepareData) {
-    $dataDir      = [System.IO.Path]::GetFullPath(Join-Path $PSScriptRoot "..\bench\data")
+    $dataDir      = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot "..\bench\data"))
     $gutenbergDir = Join-Path $dataDir "gutenberg-ebooks"
     $newsDir      = Join-Path $dataDir "20newsgroups"
+    $reutersDir   = Join-Path $dataDir "reuters21578"
 
     $gutenbergCount = if (Test-Path $gutenbergDir) {
         (Get-ChildItem -Path $gutenbergDir -Filter "*.txt" -ErrorAction SilentlyContinue).Count
     } else { 0 }
 
-    if ($gutenbergCount -lt 10) {
+    if ($gutenbergCount -lt $BookCount) {
         Write-Host "Preparing Gutenberg data (BookCount=$BookCount)..." -ForegroundColor Cyan
         & (Join-Path $PSScriptRoot "download-gutenberg.ps1") -BookCount $BookCount
     } else {
         Write-Host "Gutenberg data present ($gutenbergCount books), skipping download." -ForegroundColor DarkGray
     }
 
-    if (-not (Test-Path $newsDir)) {
+    $newsCount = if (Test-Path $newsDir) {
+        (Get-ChildItem -Path $newsDir -File -Recurse -ErrorAction SilentlyContinue).Count
+    } else { 0 }
+
+    $reutersCount = if (Test-Path $reutersDir) {
+        (Get-ChildItem -Path $reutersDir -Filter "*.sgm" -File -ErrorAction SilentlyContinue).Count
+    } else { 0 }
+
+    if ($newsCount -eq 0 -or $reutersCount -eq 0) {
         Write-Host "Preparing news data..." -ForegroundColor Cyan
         & (Join-Path $PSScriptRoot "download-news.ps1")
     } else {
-        Write-Host "News data present, skipping download." -ForegroundColor DarkGray
+        Write-Host "News data present ($newsCount posts, $reutersCount Reuters files), skipping download." -ForegroundColor DarkGray
     }
 
     Write-Host ""
