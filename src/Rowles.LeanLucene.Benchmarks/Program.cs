@@ -98,13 +98,13 @@ internal static class Program
         if (runAll || suites.Contains(BenchmarkSuite.BlockJoin))
             RunSuite<BlockJoinBenchmarks>("blockjoin", runDir, benchmarkArgs, suiteSummaries, gcDump);
 
-        if (suites.Contains(BenchmarkSuite.GutenbergAnalysis))
+        if (runAll || suites.Contains(BenchmarkSuite.GutenbergAnalysis))
             RunSuite<GutenbergAnalysisBenchmarks>("gutenberg-analysis", runDir, benchmarkArgs, suiteSummaries, gcDump);
 
-        if (suites.Contains(BenchmarkSuite.GutenbergIndex))
+        if (runAll || suites.Contains(BenchmarkSuite.GutenbergIndex))
             RunSuite<GutenbergIndexingBenchmarks>("gutenberg-index", runDir, benchmarkArgs, suiteSummaries, gcDump);
 
-        if (suites.Contains(BenchmarkSuite.GutenbergSearch))
+        if (runAll || suites.Contains(BenchmarkSuite.GutenbergSearch))
             RunSuite<GutenbergSearchBenchmarks>("gutenberg-search", runDir, benchmarkArgs, suiteSummaries, gcDump);
 
         if (suiteSummaries.Count == 0)
@@ -193,7 +193,7 @@ internal static class Program
               --help, -h       Show this help message
 
             Suites:
-              all              Run all standard benchmark suites (default)
+              all              Run all primary benchmark suites, including Gutenberg (default)
               index            IndexingBenchmarks -- bulk indexing throughput (vs Lucene.NET)
               query            TermQueryBenchmarks -- single-term search (vs Lucene.NET)
               analysis         AnalysisBenchmarks -- tokenisation pipeline throughput
@@ -209,9 +209,9 @@ internal static class Program
               indexsort        IndexSortIndex/SearchBenchmarks -- index-time sort + early termination
               blockjoin        BlockJoinBenchmarks -- block-join queries (vs Lucene.NET)
 
-              gutenberg-analysis  GutenbergAnalysisBenchmarks -- analysis on real ebook text (explicit only)
-              gutenberg-index     GutenbergIndexingBenchmarks -- indexing real ebook data (explicit only)
-              gutenberg-search    GutenbergSearchBenchmarks -- search on real ebook data (explicit only)
+              gutenberg-analysis  GutenbergAnalysisBenchmarks -- analysis on real ebook text
+              gutenberg-index     GutenbergIndexingBenchmarks -- indexing real ebook data
+              gutenberg-search    GutenbergSearchBenchmarks -- search on real ebook data
               tokenbudget         TokenBudgetBenchmarks -- token budget enforcement overhead (explicit only)
               diagnostics         DiagnosticsBenchmarks -- SlowQueryLog + Analytics hook overhead (explicit only)
 

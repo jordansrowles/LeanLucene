@@ -47,7 +47,7 @@ BOOK_COUNT=200
 EXTRA_ARGS=()
 
 declare -A SUITE_DESC=(
-    [all]="Run all standard benchmark suites (default)"
+    [all]="Run all primary benchmark suites, including Gutenberg (default)"
     [index]="IndexingBenchmarks        -- bulk indexing throughput (vs Lucene.NET)"
     [query]="TermQueryBenchmarks       -- single-term search (vs Lucene.NET)"
     [analysis]="AnalysisBenchmarks        -- tokenisation pipeline"
@@ -62,9 +62,9 @@ declare -A SUITE_DESC=(
     [compound]="CompoundFileIndex/Search  -- compound file read/write (vs Lucene.NET)"
     [indexsort]="IndexSortIndex/Search     -- index-time sort + early termination"
     [blockjoin]="BlockJoinBenchmarks       -- block-join queries (vs Lucene.NET)"
-    ["gutenberg-analysis"]="GutenbergAnalysis         -- analysis on real ebook text (explicit only)"
-    ["gutenberg-index"]="GutenbergIndex            -- indexing real ebook data (explicit only)"
-    ["gutenberg-search"]="GutenbergSearch           -- search on real ebook data (explicit only)"
+    ["gutenberg-analysis"]="GutenbergAnalysis         -- analysis on real ebook text"
+    ["gutenberg-index"]="GutenbergIndex            -- indexing real ebook data"
+    ["gutenberg-search"]="GutenbergSearch           -- search on real ebook data"
     [tokenbudget]="TokenBudgetBenchmarks     -- token budget enforcement overhead (explicit only)"
     [diagnostics]="DiagnosticsBenchmarks     -- SlowQueryLog + Analytics overhead (explicit only)"
 )
