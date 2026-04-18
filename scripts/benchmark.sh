@@ -34,13 +34,6 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 PROJECT_PATH="$REPO_ROOT/src/Rowles.LeanLucene.Benchmarks/Rowles.LeanLucene.Benchmarks.csproj"
 
-POWERSHELL_CMD=""
-if command -v pwsh >/dev/null 2>&1; then
-    POWERSHELL_CMD="pwsh"
-elif command -v powershell >/dev/null 2>&1; then
-    POWERSHELL_CMD="powershell"
-fi
-
 SUITE="all"
 STRAT="default"
 DOC_COUNT=0
@@ -271,32 +264,38 @@ fi
 
 # Prepare benchmark data if requested.
 if $PREPARE_DATA; then
-    if [[ -z "$POWERSHELL_CMD" ]]; then
-        echo "Error: PowerShell is required for --prepare-data, but neither 'pwsh' nor 'powershell' was found in PATH." >&2
-        exit 1
-    fi
-
     DATA_DIR="$REPO_ROOT/bench/data"
     GUTENBERG_DIR="$DATA_DIR/gutenberg-ebooks"
     NEWS_DIR="$DATA_DIR/20newsgroups"
+    REUTERS_DIR="$DATA_DIR/reuters21578"
 
     GUTENBERG_COUNT=0
     if [[ -d "$GUTENBERG_DIR" ]]; then
         GUTENBERG_COUNT=$(find "$GUTENBERG_DIR" -maxdepth 1 -name "*.txt" | wc -l)
     fi
 
-    if [[ "$GUTENBERG_COUNT" -lt 10 ]]; then
+    if [[ "$GUTENBERG_COUNT" -lt "$BOOK_COUNT" ]]; then
         echo "Preparing Gutenberg data (book-count=$BOOK_COUNT)..."
-        "$POWERSHELL_CMD" -File "$SCRIPT_DIR/download-gutenberg.ps1" -BookCount "$BOOK_COUNT"
+        bash "$SCRIPT_DIR/download-gutenberg.sh" --book-count "$BOOK_COUNT"
     else
         echo "Gutenberg data present ($GUTENBERG_COUNT books), skipping download."
     fi
 
-    if [[ ! -d "$NEWS_DIR" ]]; then
+    NEWS_COUNT=0
+    if [[ -d "$NEWS_DIR" ]]; then
+        NEWS_COUNT=$(find "$NEWS_DIR" -type f | wc -l)
+    fi
+
+    REUTERS_COUNT=0
+    if [[ -d "$REUTERS_DIR" ]]; then
+        REUTERS_COUNT=$(find "$REUTERS_DIR" -maxdepth 1 -type f -name "*.sgm" | wc -l)
+    fi
+
+    if [[ "$NEWS_COUNT" -eq 0 || "$REUTERS_COUNT" -eq 0 ]]; then
         echo "Preparing news data..."
-        "$POWERSHELL_CMD" -File "$SCRIPT_DIR/download-news.ps1"
+        bash "$SCRIPT_DIR/download-news.sh"
     else
-        echo "News data present, skipping download."
+        echo "News data present ($NEWS_COUNT posts, $REUTERS_COUNT Reuters files), skipping download."
     fi
 
     echo ""
