@@ -1,3 +1,4 @@
+using System.Buffers;
 using Rowles.LeanLucene.Analysis.Stemmers;
 using Rowles.LeanLucene.Analysis.Tokenisers;
 
@@ -8,13 +9,17 @@ namespace Rowles.LeanLucene.Analysis;
 /// stop-word removal, and optional stemming. Used by <see cref="AnalyserFactory"/>
 /// for language-specific analysis pipelines.
 /// </summary>
+/// <remarks>
+/// Instances are safe to share across threads provided the supplied
+/// <see cref="ITokeniser"/> and <see cref="IStemmer"/> are also thread-safe.
+/// Per-call scratch buffers are rented from <see cref="ArrayPool{T}"/> and
+/// returned before the method exits.
+/// </remarks>
 public sealed class LanguageAnalyser : IAnalyser
 {
     private readonly ITokeniser _tokeniser;
     private readonly StopWordFilter _stopWordFilter;
     private readonly IStemmer? _stemmer;
-    private char[] _lowerBuf = new char[64];
-    private readonly List<Token> _resultBuffer = new(32);
 
     /// <summary>
     /// Initialises a new <see cref="LanguageAnalyser"/> with the specified tokeniser, stop words, and optional stemmer.
@@ -34,31 +39,40 @@ public sealed class LanguageAnalyser : IAnalyser
     public List<Token> Analyse(ReadOnlySpan<char> input)
     {
         var rawTokens = _tokeniser.Tokenise(input);
-        _resultBuffer.Clear();
+        var result = new List<Token>(rawTokens.Count);
 
-        for (int i = 0; i < rawTokens.Count; i++)
+        char[]? rented = null;
+        try
         {
-            var t = rawTokens[i];
-            var span = t.Text.AsSpan();
+            for (int i = 0; i < rawTokens.Count; i++)
+            {
+                var t = rawTokens[i];
+                var span = t.Text.AsSpan();
+                int len = span.Length;
 
-            // Lowercase
-            int len = span.Length;
-            if (len > _lowerBuf.Length)
-                _lowerBuf = new char[Math.Max(_lowerBuf.Length * 2, len)];
-            span.ToLowerInvariant(_lowerBuf.AsSpan(0, len));
-            string text = new string(_lowerBuf, 0, len);
+                if (rented is null || rented.Length < len)
+                {
+                    if (rented is not null) ArrayPool<char>.Shared.Return(rented);
+                    rented = ArrayPool<char>.Shared.Rent(Math.Max(len, 64));
+                }
 
-            // Stop-word check
-            if (_stopWordFilter.IsStopWord(text))
-                continue;
+                span.ToLowerInvariant(rented.AsSpan(0, len));
+                string text = new string(rented, 0, len);
 
-            // Stem
-            if (_stemmer is not null)
-                text = _stemmer.Stem(text);
+                if (_stopWordFilter.IsStopWord(text))
+                    continue;
 
-            _resultBuffer.Add(new Token(text, t.StartOffset, t.EndOffset));
+                if (_stemmer is not null)
+                    text = _stemmer.Stem(text);
+
+                result.Add(new Token(text, t.StartOffset, t.EndOffset));
+            }
+        }
+        finally
+        {
+            if (rented is not null) ArrayPool<char>.Shared.Return(rented);
         }
 
-        return new List<Token>(_resultBuffer);
+        return result;
     }
 }
