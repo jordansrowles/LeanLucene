@@ -16,17 +16,14 @@ public sealed partial class IndexWriter
             {
                 if (ct.IsCancellationRequested) return;
 
-                SpinWait sw = default;
-                while (!_writeLock.TryEnter())
+                lock (_writeLock)
                 {
                     if (ct.IsCancellationRequested) return;
-                    sw.SpinOnce();
-                }
-                try
-                {
+
                     var merger = new SegmentMerger(_directory, _config.MergeThreshold, _config.PostingsSkipInterval);
                     var sourceSegments = _committedSegments.ToArray();
-                    var merged = merger.MaybeMerge(_committedSegments, ref _nextSegmentOrdinal);
+                    var protectedSegments = GetSnapshotProtectedSegments();
+                    var merged = merger.MaybeMerge(_committedSegments, ref _nextSegmentOrdinal, protectedSegments);
                     if (!ReferenceEquals(merged, _committedSegments))
                     {
                         _committedSegments.Clear();
@@ -35,21 +32,20 @@ public sealed partial class IndexWriter
                         _commitGeneration++;
                         WriteCommitFile(_commitGeneration);
                         WriteCommitStats(_commitGeneration);
-                        _config.DeletionPolicy.OnCommit(_directory.DirectoryPath, _commitGeneration);
+                        _config.DeletionPolicy.OnCommit(_directory.DirectoryPath, _commitGeneration, GetSnapshotProtectedSegments());
 
                         var activeSegments = new HashSet<string>(
                             _committedSegments.Select(static segment => segment.SegmentId),
                             StringComparer.Ordinal);
                         foreach (var segment in sourceSegments)
                         {
-                            if (!activeSegments.Contains(segment.SegmentId))
+                            if (!activeSegments.Contains(segment.SegmentId) &&
+                                !protectedSegments.Contains(segment.SegmentId))
+                            {
                                 merger.CleanupSegmentFiles(segment);
+                            }
                         }
                     }
-                }
-                finally
-                {
-                    _writeLock.Exit();
                 }
             }, ct);
         }

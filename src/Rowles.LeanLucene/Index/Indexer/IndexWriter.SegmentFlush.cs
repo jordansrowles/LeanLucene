@@ -175,6 +175,8 @@ public sealed partial class IndexWriter
             lengthsReturnList.Add(lengths);
         }
         FieldLengthWriter.Write(basePath + ".fln", fieldLengths, _bufferedDocCount);
+        SegmentStats.FromFieldLengths(_bufferedDocCount, _bufferedDocCount, fieldNames, fieldLengths)
+            .WriteTo(SegmentStats.GetStatsPath(_directory.DirectoryPath, segId));
         foreach (var arr in lengthsReturnList) ArrayPool<int>.Shared.Return(arr, clearArray: false);
 
         // Write stored fields (.fdt + .fdx) from flat buffer

@@ -85,6 +85,34 @@ public sealed class IndexStatsPersistenceTests : IDisposable
     }
 
     [Fact]
+    public void CommitStats_UsesPerSegmentStatsWithoutOpeningOldSegmentData()
+    {
+        var dir = new MMapDirectory(_dir);
+        using var writer = new IndexWriter(dir, new IndexWriterConfig
+        {
+            MaxBufferedDocs = 100,
+            MergeThreshold = 100,
+        });
+
+        writer.AddDocument(CreateDoc("alpha"));
+        writer.Commit();
+
+        var firstSegmentStatsPath = SegmentStats.GetStatsPath(_dir, "seg_0");
+        Assert.True(File.Exists(firstSegmentStatsPath));
+
+        File.Delete(Path.Combine(_dir, "seg_0.dic"));
+        File.Delete(Path.Combine(_dir, "seg_0.pos"));
+
+        writer.AddDocument(CreateDoc("beta"));
+        writer.Commit();
+
+        var stats = IndexStats.TryLoadFrom(IndexStats.GetStatsPath(_dir, 2));
+        Assert.NotNull(stats);
+        Assert.Equal(2, stats.TotalDocCount);
+        Assert.Equal(2, stats.LiveDocCount);
+    }
+
+    [Fact]
     public void MissingStatsFile_FallsBackToRecomputation()
     {
         var dir = new MMapDirectory(_dir);

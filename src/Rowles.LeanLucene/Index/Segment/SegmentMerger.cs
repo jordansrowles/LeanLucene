@@ -4,6 +4,7 @@ using Rowles.LeanLucene.Codecs;
 using Rowles.LeanLucene.Codecs.DocValues;
 using Rowles.LeanLucene.Codecs.Postings;
 using Rowles.LeanLucene.Codecs.StoredFields;
+using Rowles.LeanLucene.Search.Scoring;
 using Rowles.LeanLucene.Store;
 
 namespace Rowles.LeanLucene.Index.Segment;
@@ -37,6 +38,19 @@ public sealed class SegmentMerger
     /// Checks if a merge is needed and performs it. Returns the updated segment list.
     /// </summary>
     public List<SegmentInfo> MaybeMerge(List<SegmentInfo> segments, ref int nextSegmentOrdinal)
+        => MaybeMerge(segments, ref nextSegmentOrdinal, new HashSet<string>(StringComparer.Ordinal));
+
+    /// <summary>
+    /// Checks if a merge is needed and performs it, excluding segments protected by held snapshots.
+    /// </summary>
+    /// <param name="segments">The committed segments currently visible to the writer.</param>
+    /// <param name="nextSegmentOrdinal">The next segment ordinal to allocate if a merge is performed.</param>
+    /// <param name="protectedSegmentIds">Segment IDs that must not be merged or deleted while snapshots are held.</param>
+    /// <returns>The original list when no merge is needed; otherwise, a new list containing merged replacements.</returns>
+    public List<SegmentInfo> MaybeMerge(
+        List<SegmentInfo> segments,
+        ref int nextSegmentOrdinal,
+        IReadOnlySet<string> protectedSegmentIds)
     {
         if (segments.Count < _mergeThreshold)
             return segments;
@@ -58,7 +72,14 @@ public sealed class SegmentMerger
         var eligibleTiers = new List<int>();
         foreach (var (tier, bucket) in tierBuckets)
         {
-            if (bucket.Count >= _mergeThreshold)
+            int mergeableCount = 0;
+            foreach (var segment in bucket)
+            {
+                if (!protectedSegmentIds.Contains(segment.SegmentId))
+                    mergeableCount++;
+            }
+
+            if (mergeableCount >= _mergeThreshold)
                 eligibleTiers.Add(tier);
         }
 
@@ -71,9 +92,13 @@ public sealed class SegmentMerger
         foreach (var tierKey in eligibleTiers)
         {
             var bucket = tierBuckets[tierKey];
+            var mergeable = bucket
+                .Where(segment => !protectedSegmentIds.Contains(segment.SegmentId))
+                .ToList();
+
             // Take the smallest segments in this tier
-            bucket.Sort(static (a, b) => a.DocCount.CompareTo(b.DocCount));
-            var toMerge = bucket.Count <= _mergeThreshold ? bucket : bucket.GetRange(0, _mergeThreshold);
+            mergeable.Sort(static (a, b) => a.DocCount.CompareTo(b.DocCount));
+            var toMerge = mergeable.Count <= _mergeThreshold ? mergeable : mergeable.GetRange(0, _mergeThreshold);
 
             if (toMerge.Count < 2)
                 continue;
@@ -381,6 +406,9 @@ public sealed class SegmentMerger
         // matches the unmerged segments precisely (no quantisation loss).
         if (allFieldLengths.Count > 0)
             FieldLengthWriter.Write(basePath + ".fln", allFieldLengths, totalDocs);
+
+        SegmentStats.FromFieldLengths(totalDocs, totalDocs, fieldNames, allFieldLengths)
+            .WriteTo(SegmentStats.GetStatsPath(_directory.DirectoryPath, newSegId));
 
         // Write column-stride numeric DocValues (.dvn) — used by sort, collapse, aggregations.
         if (allNumericDocValues.Count > 0)

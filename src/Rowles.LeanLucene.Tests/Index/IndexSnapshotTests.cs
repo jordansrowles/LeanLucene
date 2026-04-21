@@ -93,6 +93,33 @@ public sealed class IndexSnapshotTests : IDisposable
     }
 
     [Fact]
+    public void HeldSnapshot_ProtectsCommitFilesAndSegmentsDuringBackgroundMerge()
+    {
+        var directory = new MMapDirectory(_dir);
+        using var writer = new IndexWriter(directory, new IndexWriterConfig
+        {
+            MaxBufferedDocs = 1,
+            MergeThreshold = 2,
+        });
+
+        writer.AddDocument(CreateDocument("alpha anchor"));
+        writer.Commit();
+
+        var snapshot = writer.CreateSnapshot();
+        var protectedSegmentId = snapshot.Segments[0].SegmentId;
+
+        writer.AddDocument(CreateDocument("bravo anchor"));
+        writer.Commit();
+
+        Assert.True(File.Exists(Path.Combine(_dir, "segments_1")));
+        Assert.True(File.Exists(Path.Combine(_dir, "stats_1.json")));
+        Assert.True(File.Exists(Path.Combine(_dir, protectedSegmentId + ".dic")));
+        Assert.True(File.Exists(Path.Combine(_dir, protectedSegmentId + ".pos")));
+
+        writer.ReleaseSnapshot(snapshot);
+    }
+
+    [Fact]
     public void ReleaseSnapshot_AllowsRepeatedRelease()
     {
         var directory = new MMapDirectory(_dir);
@@ -107,5 +134,12 @@ public sealed class IndexSnapshotTests : IDisposable
         writer.ReleaseSnapshot(snapshot);
         // Second release should not throw
         writer.ReleaseSnapshot(snapshot);
+    }
+
+    private static LeanDocument CreateDocument(string body)
+    {
+        var document = new LeanDocument();
+        document.Add(new TextField("body", body));
+        return document;
     }
 }

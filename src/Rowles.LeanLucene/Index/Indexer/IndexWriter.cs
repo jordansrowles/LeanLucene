@@ -378,7 +378,7 @@ public sealed partial class IndexWriter : IDisposable
         WriteCommitStats(_commitGeneration);
 
         // Apply deletion policy to prune old commit files
-        _config.DeletionPolicy.OnCommit(_directory.DirectoryPath, _commitGeneration);
+        _config.DeletionPolicy.OnCommit(_directory.DirectoryPath, _commitGeneration, GetSnapshotProtectedSegments());
 
         // Schedule merge in background (non-blocking) only after every reader of
         // _committedSegments and its files has completed. Scheduling earlier allowed
@@ -445,19 +445,18 @@ public sealed partial class IndexWriter : IDisposable
 
         foreach (var seg in _committedSegments)
         {
-            using var reader = new SegmentReader(_directory, seg);
-            totalDocCount += reader.MaxDoc;
-            for (int docId = 0; docId < reader.MaxDoc; docId++)
+            var segmentStats = SegmentStats.TryLoadFrom(SegmentStats.GetStatsPath(_directory.DirectoryPath, seg.SegmentId));
+            if (segmentStats is not null &&
+                segmentStats.TotalDocCount == seg.DocCount &&
+                segmentStats.LiveDocCount == seg.LiveDocCount)
             {
-                if (!reader.IsLive(docId)) continue;
-                liveDocCount++;
-                foreach (var field in seg.FieldNames)
-                {
-                    int len = reader.GetFieldLength(docId, field);
-                    fieldLengthSums[field] = fieldLengthSums.GetValueOrDefault(field) + len;
-                    fieldDocCounts[field] = fieldDocCounts.GetValueOrDefault(field) + 1;
-                }
+                AccumulateSegmentStats(segmentStats, fieldLengthSums, fieldDocCounts);
+                totalDocCount += segmentStats.TotalDocCount;
+                liveDocCount += segmentStats.LiveDocCount;
+                continue;
             }
+
+            AccumulateSegmentStatsByScan(seg, fieldLengthSums, fieldDocCounts, ref totalDocCount, ref liveDocCount);
         }
 
         var avgFieldLengths = new Dictionary<string, float>(StringComparer.Ordinal);
@@ -469,6 +468,42 @@ public sealed partial class IndexWriter : IDisposable
 
         var stats = new IndexStats(totalDocCount, liveDocCount, avgFieldLengths, fieldDocCounts);
         stats.WriteTo(IndexStats.GetStatsPath(_directory.DirectoryPath, generation));
+    }
+
+    private static void AccumulateSegmentStats(
+        SegmentStats segmentStats,
+        Dictionary<string, long> fieldLengthSums,
+        Dictionary<string, int> fieldDocCounts)
+    {
+        foreach (var (field, sum) in segmentStats.FieldLengthSums)
+            fieldLengthSums[field] = fieldLengthSums.GetValueOrDefault(field) + sum;
+
+        foreach (var (field, count) in segmentStats.FieldDocCounts)
+            fieldDocCounts[field] = fieldDocCounts.GetValueOrDefault(field) + count;
+    }
+
+    private void AccumulateSegmentStatsByScan(
+        SegmentInfo segment,
+        Dictionary<string, long> fieldLengthSums,
+        Dictionary<string, int> fieldDocCounts,
+        ref int totalDocCount,
+        ref int liveDocCount)
+    {
+        using var reader = new SegmentReader(_directory, segment);
+        totalDocCount += reader.MaxDoc;
+        for (int docId = 0; docId < reader.MaxDoc; docId++)
+        {
+            if (!reader.IsLive(docId))
+                continue;
+
+            liveDocCount++;
+            foreach (var field in segment.FieldNames)
+            {
+                int length = reader.GetFieldLength(docId, field);
+                fieldLengthSums[field] = fieldLengthSums.GetValueOrDefault(field) + length;
+                fieldDocCounts[field] = fieldDocCounts.GetValueOrDefault(field) + 1;
+            }
+        }
     }
 
     /// <summary>
