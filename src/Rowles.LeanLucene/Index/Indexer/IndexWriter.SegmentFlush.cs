@@ -286,35 +286,6 @@ public sealed partial class IndexWriter
             pbs.WriteTo(basePath + ".pbs");
         }
 
-        // Write compound file (.cfs) when enabled
-        if (_config.UseCompoundFile)
-        {
-            string[] extensions = [".dic", ".pos", ".fdt", ".fdx", ".nrm", ".num", ".dvn", ".dvs", ".fln", ".vec", ".tvd", ".tvx", ".bkd", ".del", ".pbs"];
-            var existingExtensions = extensions.Where(ext => File.Exists(basePath + ext)).ToArray();
-            if (existingExtensions.Length > 0)
-            {
-                CompoundFileWriter.Write(basePath + ".cfs", basePath, existingExtensions);
-                // Delete the original individual files now that the compound file exists
-                foreach (var ext in existingExtensions)
-                {
-                    try { File.Delete(basePath + ext); } catch { /* best-effort */ }
-                }
-            }
-            // Re-write .seg with the updated IsCompoundFile flag
-            var compoundSegInfo = new SegmentInfo
-            {
-                SegmentId = segInfo.SegmentId,
-                DocCount = segInfo.DocCount,
-                LiveDocCount = segInfo.LiveDocCount,
-                CommitGeneration = segInfo.CommitGeneration,
-                FieldNames = segInfo.FieldNames,
-                IsCompoundFile = true,
-                IndexSortFields = segInfo.IndexSortFields
-            };
-            compoundSegInfo.WriteTo(basePath + ".seg");
-            segInfo = compoundSegInfo;
-        }
-
         _committedSegments.Add(segInfo);
         ResetBuffer();
 

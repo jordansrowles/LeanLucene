@@ -57,6 +57,7 @@ public sealed partial class IndexWriter
         if (numericDoc is not null)
             _numericFields.Add(numericDoc);
         _bufferedDocCount++;
+        _contentChangedSinceCommit = true;
 
         // Track stored-field RAM (postings tracked accurately via EstimatedBytes)
         for (int i = storedEntryStart; i < _sfFieldIds.Count; i++)

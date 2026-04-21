@@ -17,6 +17,7 @@ public sealed partial class IndexWriter
         lock (_writeLock)
         {
             _pendingDeletes.Add((query.Field, query.Term));
+            _contentChangedSinceCommit = true;
         }
     }
 

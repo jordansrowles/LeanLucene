@@ -40,9 +40,6 @@ public sealed class IndexWriterConfig
     /// <summary>Whether to store term vectors for text fields.</summary>
     public bool StoreTermVectors { get; set; }
 
-    /// <summary>Whether to write a compound file (.cfs) after segment flush.</summary>
-    public bool UseCompoundFile { get; set; }
-
     /// <summary>
     /// When <c>true</c> (default), <see cref="IndexWriter.Commit"/> flushes file contents and
     /// directory metadata to disk via <c>fsync</c> before and after the <c>segments_N</c> rename,

@@ -83,12 +83,6 @@ internal static class Program
         if (runAll || suites.Contains(BenchmarkSuite.SchemaJson))
             RunSuite<SchemaAndJsonBenchmarks>("schemajson", runDir, benchmarkArgs, suiteSummaries, gcDump);
 
-        if (runAll || suites.Contains(BenchmarkSuite.Compound))
-        {
-            RunSuite<CompoundFileIndexBenchmarks>("compound-index", runDir, benchmarkArgs, suiteSummaries, gcDump);
-            RunSuite<CompoundFileSearchBenchmarks>("compound-search", runDir, benchmarkArgs, suiteSummaries, gcDump);
-        }
-
         if (runAll || suites.Contains(BenchmarkSuite.IndexSort))
         {
             RunSuite<IndexSortIndexBenchmarks>("indexsort-index", runDir, benchmarkArgs, suiteSummaries, gcDump);
@@ -205,7 +199,6 @@ internal static class Program
               deletion         DeletionBenchmarks -- delete throughput (vs Lucene.NET)
               suggester        SuggesterBenchmarks -- DidYouMean spelling correction (vs Lucene.NET)
               schemajson       SchemaAndJsonBenchmarks -- schema validation + JSON mapping
-              compound         CompoundFileIndex/SearchBenchmarks -- compound file read/write (vs Lucene.NET)
               indexsort        IndexSortIndex/SearchBenchmarks -- index-time sort + early termination
               blockjoin        BlockJoinBenchmarks -- block-join queries (vs Lucene.NET)
 
@@ -331,8 +324,6 @@ internal static class Program
             return BenchmarkSuite.Suggester;
         if (value.Equals("schemajson", StringComparison.OrdinalIgnoreCase))
             return BenchmarkSuite.SchemaJson;
-        if (value.Equals("compound", StringComparison.OrdinalIgnoreCase))
-            return BenchmarkSuite.Compound;
         if (value.Equals("indexsort", StringComparison.OrdinalIgnoreCase))
             return BenchmarkSuite.IndexSort;
         if (value.Equals("blockjoin", StringComparison.OrdinalIgnoreCase))
@@ -384,7 +375,6 @@ internal static class Program
         Diagnostics,
         Suggester,
         SchemaJson,
-        Compound,
         IndexSort,
         BlockJoin,
         GutenbergAnalysis,

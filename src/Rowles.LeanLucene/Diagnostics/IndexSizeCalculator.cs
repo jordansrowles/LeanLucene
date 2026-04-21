@@ -7,7 +7,7 @@ public static class IndexSizeCalculator
 {
     private static readonly string[] SegmentExtensions =
         [".seg", ".dic", ".pos", ".fdt", ".fdx", ".nrm", ".fln", ".num", ".dvn", ".dvs",
-         ".bkd", ".del", ".tvd", ".tvx", ".vec", ".cfs"];
+         ".bkd", ".del", ".tvd", ".tvx", ".vec"];
 
     /// <summary>
     /// Calculates the total index size and per-segment breakdown.

@@ -238,37 +238,14 @@ public sealed class Stage2IndexTests : IClassFixture<TestDirectoryFixture>
         Assert.NotEmpty(tvdFiles);
     }
 
-    // ── S2-10: Compound File ────────────────────────────────────────────────
-
+    // Compound files were removed because the old implementation packed files
+    // and then extracted them back to disc on read, doubling storage.
     [Fact]
-    public void CompoundFile_WriteAndRead_RoundTrips()
+    public void CompoundFileFeature_IsRemoved()
     {
-        var sub = SubDir("cfs_rw");
-        var basePath = Path.Combine(sub, "seg_0");
+        var dir = new MMapDirectory(SubDir("cfs_removed"));
 
-        // Create some component files
-        File.WriteAllText(basePath + ".seg", "segment metadata");
-        File.WriteAllText(basePath + ".dic", "dictionary data");
-        File.WriteAllBytes(basePath + ".pos", [1, 2, 3, 4, 5]);
-
-        CompoundFileWriter.Write(basePath + ".cfs", basePath, [".seg", ".dic", ".pos"]);
-        Assert.True(File.Exists(basePath + ".cfs"));
-
-        using var reader = CompoundFileReader.Open(basePath + ".cfs");
-        var segData = reader.ReadFile(".seg");
-        Assert.Equal("segment metadata", System.Text.Encoding.UTF8.GetString(segData));
-
-        var posData = reader.ReadFile(".pos");
-        Assert.Equal(new byte[] { 1, 2, 3, 4, 5 }, posData);
-    }
-
-    [Fact]
-    public void CompoundFile_IntegrationWithIndexWriter()
-    {
-        var dir = new MMapDirectory(SubDir("cfs_integration"));
-        var config = new IndexWriterConfig { UseCompoundFile = true };
-
-        using (var writer = new IndexWriter(dir, config))
+        using (var writer = new IndexWriter(dir, new IndexWriterConfig()))
         {
             var doc = new LeanDocument();
             doc.Add(new TextField("body", "hello world"));
@@ -276,9 +253,9 @@ public sealed class Stage2IndexTests : IClassFixture<TestDirectoryFixture>
             writer.Commit();
         }
 
-        // .cfs file should exist and individual files should be cleaned up
-        var cfsFiles = Directory.GetFiles(dir.DirectoryPath, "*.cfs");
-        Assert.NotEmpty(cfsFiles);
+        Assert.Empty(Directory.GetFiles(dir.DirectoryPath, "*.cfs"));
+        Assert.Null(Type.GetType("Rowles.LeanLucene.Codecs.CompoundFileWriter, Rowles.LeanLucene"));
+        Assert.Null(Type.GetType("Rowles.LeanLucene.Codecs.CompoundFileReader, Rowles.LeanLucene"));
     }
 
     // ── S2-9: Payload Support (data model) ──────────────────────────────────

@@ -12,7 +12,7 @@ public sealed partial class IndexWriter
                 return;
 
             var ct = _mergeCts.Token;
-            _mergeTask = Task.Run(() =>
+            _mergeTask = Task.Factory.StartNew(() =>
             {
                 if (ct.IsCancellationRequested) return;
 
@@ -47,7 +47,7 @@ public sealed partial class IndexWriter
                         }
                     }
                 }
-            }, ct);
+            }, ct, TaskCreationOptions.LongRunning, TaskScheduler.Default);
         }
     }
 

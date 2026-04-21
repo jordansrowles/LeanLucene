@@ -12,7 +12,7 @@ public static class IndexRecovery
     /// <summary>Known segment file extensions that should be cleaned up when orphaned.</summary>
     private static readonly string[] SegmentExtensions =
         [".seg", ".dic", ".pos", ".nrm", ".fdt", ".fdx", ".del",
-         ".dvn", ".dvs", ".bkd", ".vec", ".tvd", ".tvx", ".cfs", ".num"];
+         ".dvn", ".dvs", ".bkd", ".vec", ".tvd", ".tvx", ".num"];
 
     /// <summary>
     /// Attempts to load the latest valid commit from the index directory.
@@ -110,6 +110,7 @@ public static class IndexRecovery
             return new RecoveryResult
             {
                 Generation = generation,
+                ContentToken = commitData.ContentToken,
                 SegmentIds = validSegments,
                 CommitFilePath = commitFilePath,
                 WasFallback = false
@@ -168,6 +169,9 @@ public static class IndexRecovery
         /// <summary>Gets the generation number of the recovered commit.</summary>
         public int Generation { get; init; }
 
+        /// <summary>Gets the logical content token stored in the recovered commit.</summary>
+        public long ContentToken { get; init; }
+
         /// <summary>Gets the segment IDs referenced by the recovered commit.</summary>
         public List<string> SegmentIds { get; init; } = [];
 
@@ -182,5 +186,6 @@ public static class IndexRecovery
     {
         public List<string> Segments { get; set; } = [];
         public int Generation { get; set; }
+        public long ContentToken { get; set; }
     }
 }

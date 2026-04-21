@@ -99,6 +99,26 @@ public sealed class SearcherManagerTests : IDisposable
     }
 
     [Fact]
+    public void MaybeRefresh_ReturnsFalse_WhenGenerationChangesWithoutContentChange()
+    {
+        var dir = new MMapDirectory(_dir);
+        using var writer = new IndexWriter(dir, new IndexWriterConfig());
+
+        writer.AddDocument(Doc("first"));
+        writer.Commit();
+
+        using var mgr = new SearcherManager(dir);
+        writer.Commit();
+
+        Assert.False(mgr.MaybeRefresh());
+
+        writer.AddDocument(Doc("second"));
+        writer.Commit();
+
+        Assert.True(mgr.MaybeRefresh());
+    }
+
+    [Fact]
     public async Task MaybeRefreshAsync_Works()
     {
         var dir = new MMapDirectory(_dir);

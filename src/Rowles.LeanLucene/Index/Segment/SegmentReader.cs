@@ -22,13 +22,10 @@ public sealed partial class SegmentReader : IDisposable
     private readonly FrozenDictionary<string, byte[]> _fieldNorms;
     private readonly FrozenDictionary<string, int[]> _fieldLengthsPerField;
     private readonly VectorReader? _vectorReader;
-    private readonly ConcurrentDictionary<(string, string), string> _qualifiedTermCache = new();
-    private const int MaxQualifiedTermCacheSize = 8192;
     private LiveDocs? _liveDocs;
-    private readonly CompoundFileReader? _cfsReader;
 
-    // Thread-safe term offset cache (dictionary lookup, replaces racy open-addressing array)
-    private readonly ConcurrentDictionary<string, (long Offset, bool Found)> _termOffsetCache = new(StringComparer.Ordinal);
+    private const int MaxTermOffsetCacheSize = 1024;
+    private readonly TermOffsetCache _termOffsetCache = new(MaxTermOffsetCacheSize);
 
     // Lazy-loaded Stage 2 features (thread-safe via LazyInitializer)
     private Dictionary<string, Dictionary<int, double>>? _numericIndex;
@@ -62,17 +59,6 @@ public sealed partial class SegmentReader : IDisposable
         _directory = directory;
         _info = info;
         _basePath = Path.Combine(directory.DirectoryPath, info.SegmentId);
-
-        // Open compound file reader if this is a compound segment
-        if (info.IsCompoundFile)
-        {
-            var cfsPath = _basePath + ".cfs";
-            if (File.Exists(cfsPath))
-            {
-                _cfsReader = CompoundFileReader.Open(cfsPath);
-                ExtractCompoundFiles();
-            }
-        }
 
         ValidateSegmentFiles(_basePath, info.DocCount);
         _dicReader = TermDictionaryReader.Open(_basePath + ".dic");
@@ -240,7 +226,7 @@ public sealed partial class SegmentReader : IDisposable
     /// </summary>
     private string GetQualifiedTerm(string field, string term)
     {
-        return _qualifiedTermCache.GetOrAdd((field, term), static k => string.Concat(k.Item1, "\x00", k.Item2));
+        return string.Concat(field, "\x00", term);
     }
 
     /// <summary>
@@ -249,7 +235,7 @@ public sealed partial class SegmentReader : IDisposable
     public int[] GetDocIds(string field, string term)
     {
         var qualifiedTerm = GetQualifiedTerm(field, term);
-        if (!_dicReader.TryGetPostingsOffset(qualifiedTerm, out long offset))
+        if (!TryGetCachedOffset(qualifiedTerm, out long offset))
             return [];
 
         return ReadPostingsAtOffset(offset);
@@ -260,7 +246,7 @@ public sealed partial class SegmentReader : IDisposable
     /// </summary>
     internal int[] GetDocIds(string qualifiedTerm)
     {
-        if (!_dicReader.TryGetPostingsOffset(qualifiedTerm, out long offset))
+        if (!TryGetCachedOffset(qualifiedTerm, out long offset))
             return [];
 
         return ReadPostingsAtOffset(offset);
@@ -300,16 +286,20 @@ public sealed partial class SegmentReader : IDisposable
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private bool TryGetCachedOffset(string qualifiedTerm, out long offset)
     {
-        if (_termOffsetCache.TryGetValue(qualifiedTerm, out var entry))
+        if (_termOffsetCache.TryGet(qualifiedTerm, out var entry))
         {
             offset = entry.Offset;
             return entry.Found;
         }
 
         bool found = _dicReader.TryGetPostingsOffset(qualifiedTerm, out offset);
-        _termOffsetCache.TryAdd(qualifiedTerm, (offset, found));
+        _termOffsetCache.Set(qualifiedTerm, (offset, found));
         return found;
     }
+
+    internal int TermOffsetCacheCount => _termOffsetCache.Count;
+
+    internal long TermOffsetCacheHits => _termOffsetCache.Hits;
 
     /// <inheritdoc/>
     public void Dispose()
@@ -319,23 +309,79 @@ public sealed partial class SegmentReader : IDisposable
         _storedReader?.Dispose();
         _vectorReader?.Dispose();
         _termVectorsReader?.Dispose();
-        _cfsReader?.Dispose();
     }
 
-    /// <summary>
-    /// Extracts sub-files from the compound file to individual files on disc so existing
-    /// readers (TermDictionaryReader, NormsReader, etc.) can open them normally.
-    /// Only extracts files that don't already exist.
-    /// </summary>
-    private void ExtractCompoundFiles()
+    private sealed class TermOffsetCache
     {
-        if (_cfsReader is null) return;
-        foreach (var ext in _cfsReader.ListFiles())
+        private readonly int _capacity;
+        private readonly Dictionary<string, LinkedListNode<(string Key, (long Offset, bool Found) Value)>> _entries;
+        private readonly LinkedList<(string Key, (long Offset, bool Found) Value)> _lru = new();
+        private readonly Lock _lock = new();
+        private long _hits;
+
+        internal TermOffsetCache(int capacity)
         {
-            var targetPath = _basePath + ext;
-            if (File.Exists(targetPath)) continue;
-            var data = _cfsReader.ReadFile(ext);
-            File.WriteAllBytes(targetPath, data);
+            _capacity = capacity;
+            _entries = new Dictionary<string, LinkedListNode<(string, (long, bool))>>(capacity, StringComparer.Ordinal);
+        }
+
+        internal int Count
+        {
+            get
+            {
+                lock (_lock)
+                {
+                    return _entries.Count;
+                }
+            }
+        }
+
+        internal long Hits => Volatile.Read(ref _hits);
+
+        internal bool TryGet(string key, out (long Offset, bool Found) value)
+        {
+            lock (_lock)
+            {
+                if (_entries.TryGetValue(key, out var node))
+                {
+                    _lru.Remove(node);
+                    _lru.AddFirst(node);
+                    Interlocked.Increment(ref _hits);
+                    value = node.Value.Value;
+                    return true;
+                }
+            }
+
+            value = default;
+            return false;
+        }
+
+        internal void Set(string key, (long Offset, bool Found) value)
+        {
+            lock (_lock)
+            {
+                if (_entries.TryGetValue(key, out var existing))
+                {
+                    existing.Value = (key, value);
+                    _lru.Remove(existing);
+                    _lru.AddFirst(existing);
+                    return;
+                }
+
+                var node = new LinkedListNode<(string, (long, bool))>((key, value));
+                _lru.AddFirst(node);
+                _entries[key] = node;
+
+                if (_entries.Count <= _capacity)
+                    return;
+
+                var last = _lru.Last;
+                if (last is null)
+                    return;
+
+                _lru.RemoveLast();
+                _entries.Remove(last.Value.Key);
+            }
         }
     }
 

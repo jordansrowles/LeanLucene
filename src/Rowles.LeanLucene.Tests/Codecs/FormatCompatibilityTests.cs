@@ -249,7 +249,6 @@ public sealed class FormatCompatibilityTests : IDisposable
         Assert.True(CodecConstants.VectorVersion > 0);
         Assert.True(CodecConstants.StoredFieldsVersion > 0);
         Assert.True(CodecConstants.TermVectorsVersion > 0);
-        Assert.True(CodecConstants.CompoundFileVersion > 0);
         Assert.True(CodecConstants.NumericDocValuesVersion > 0);
         Assert.True(CodecConstants.SortedDocValuesVersion > 0);
         Assert.True(CodecConstants.BKDVersion > 0);

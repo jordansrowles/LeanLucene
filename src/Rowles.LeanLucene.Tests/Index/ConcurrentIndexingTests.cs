@@ -152,4 +152,81 @@ public sealed class ConcurrentIndexingTests : IDisposable
             Assert.Equal(i.ToString(), idValues![0]);
         }
     }
+
+    [Fact]
+    public void AddDocumentsConcurrent_PreservesFieldLengthsForBm25Scoring()
+    {
+        const int DocCount = 200;
+
+        var singlePath = Path.Combine(_dir, "single");
+        var concurrentPath = Path.Combine(_dir, "concurrent");
+        Directory.CreateDirectory(singlePath);
+        Directory.CreateDirectory(concurrentPath);
+
+        var docs = new List<LeanDocument>(DocCount);
+        for (int i = 0; i < DocCount; i++)
+        {
+            var doc = new LeanDocument();
+            doc.Add(new StringField("id", i.ToString()));
+            doc.Add(new TextField("body", BuildBody(i)));
+            docs.Add(doc);
+        }
+
+        var singleScores = IndexAndScoreSingleThreaded(singlePath, docs);
+        var concurrentScores = IndexAndScoreConcurrent(concurrentPath, docs);
+
+        Assert.Equal(singleScores.Count, concurrentScores.Count);
+        foreach (var (id, score) in singleScores)
+        {
+            Assert.True(concurrentScores.TryGetValue(id, out var concurrentScore));
+            Assert.Equal(score, concurrentScore, precision: 5);
+        }
+    }
+
+    private static Dictionary<string, float> IndexAndScoreSingleThreaded(string path, IReadOnlyList<LeanDocument> docs)
+    {
+        var directory = new MMapDirectory(path);
+        using (var writer = new IndexWriter(directory, new IndexWriterConfig { MaxBufferedDocs = docs.Count + 1 }))
+        {
+            foreach (var doc in docs)
+                writer.AddDocument(doc);
+            writer.Commit();
+        }
+
+        return ScoreSharedTerm(directory, docs.Count);
+    }
+
+    private static Dictionary<string, float> IndexAndScoreConcurrent(string path, IReadOnlyList<LeanDocument> docs)
+    {
+        var directory = new MMapDirectory(path);
+        using (var writer = new IndexWriter(directory, new IndexWriterConfig { MaxBufferedDocs = docs.Count + 1 }))
+        {
+            writer.AddDocumentsConcurrent(docs);
+            writer.Commit();
+        }
+
+        return ScoreSharedTerm(directory, docs.Count);
+    }
+
+    private static Dictionary<string, float> ScoreSharedTerm(MMapDirectory directory, int count)
+    {
+        using var searcher = new IndexSearcher(directory);
+        var hits = searcher.Search(new TermQuery("body", "shared"), count);
+        var scores = new Dictionary<string, float>(StringComparer.Ordinal);
+
+        foreach (var hit in hits.ScoreDocs)
+        {
+            var fields = searcher.GetStoredFields(hit.DocId);
+            scores[fields["id"][0]] = hit.Score;
+        }
+
+        return scores;
+    }
+
+    private static string BuildBody(int id)
+    {
+        var extras = Enumerable.Range(0, id % 11)
+            .Select(i => $"extra{id}_{i}");
+        return string.Join(' ', extras.Prepend("shared"));
+    }
 }

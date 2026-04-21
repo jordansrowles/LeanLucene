@@ -128,4 +128,41 @@ public sealed class SegmentReaderThreadSafetyTests : IDisposable
 
         Assert.Empty(errors);
     }
+
+    [Fact]
+    public void TermOffsetCache_HighCardinality_RemainsBoundedAndHitsByValue()
+    {
+        const int docCount = 1_500;
+
+        var subDir = Path.Combine(_dir, "lru");
+        Directory.CreateDirectory(subDir);
+
+        var directory = new MMapDirectory(subDir);
+        using var writer = new IndexWriter(directory, new IndexWriterConfig { MaxBufferedDocs = docCount + 1 });
+
+        for (int i = 0; i < docCount; i++)
+        {
+            var doc = new LeanDocument();
+            doc.Add(new TextField("body", $"uniquecache{i}"));
+            writer.AddDocument(doc);
+        }
+        writer.Commit();
+
+        using var searcher = new IndexSearcher(directory);
+        var reader = searcher.GetSegmentReaders()[0];
+
+        for (int i = 0; i < docCount; i++)
+            Assert.Equal(1, reader.GetDocFreq("body", $"uniquecache{i}"));
+
+        Assert.InRange(reader.TermOffsetCacheCount, 1, 1024);
+
+        long hitsBefore = reader.TermOffsetCacheHits;
+        for (int i = 0; i < 1_000; i++)
+        {
+            var term = new string("uniquecache1499".ToCharArray());
+            Assert.Equal(1, reader.GetDocFreq("body", term));
+        }
+
+        Assert.True(reader.TermOffsetCacheHits - hitsBefore >= 1_000);
+    }
 }

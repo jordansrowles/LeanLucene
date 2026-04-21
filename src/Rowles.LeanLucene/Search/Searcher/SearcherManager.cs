@@ -35,9 +35,10 @@ public sealed class SearcherManager : IDisposable
         // Determine the current commit generation so we don't falsely refresh
         var latestCommit = Index.IndexRecovery.RecoverLatestCommit(directory.DirectoryPath, cleanupOrphans: false);
         int initialGen = latestCommit?.Generation ?? 0;
+        long initialContentToken = latestCommit?.ContentToken ?? 0;
 
         var initialSearcher = new IndexSearcher(directory, _config.SearcherConfig);
-        _current = new SearcherRef(initialSearcher, initialGen);
+        _current = new SearcherRef(initialSearcher, initialGen, initialContentToken);
         _searchers.Add(initialSearcher, _current);
         _refreshTask = Task.Run(() => RefreshLoop(_cts.Token));
     }
@@ -148,8 +149,14 @@ public sealed class SearcherManager : IDisposable
             if (latestCommit.Generation <= _current.Generation)
                 return false;
 
+            if (latestCommit.ContentToken == _current.ContentToken)
+            {
+                _current.Generation = latestCommit.Generation;
+                return false;
+            }
+
             var newSearcher = new IndexSearcher(_directory, _config.SearcherConfig);
-            var newRef = new SearcherRef(newSearcher, latestCommit.Generation);
+            var newRef = new SearcherRef(newSearcher, latestCommit.Generation, latestCommit.ContentToken);
             _searchers.Add(newSearcher, newRef);
 
             var oldRef = _current;
@@ -163,13 +170,15 @@ public sealed class SearcherManager : IDisposable
     private sealed class SearcherRef
     {
         public IndexSearcher Searcher { get; }
-        public int Generation { get; }
+        public int Generation { get; set; }
+        public long ContentToken { get; }
         private int _refCount = 1; // 1 = the owner/publish reference held by _current
 
-        public SearcherRef(IndexSearcher searcher, int generation = 0)
+        public SearcherRef(IndexSearcher searcher, int generation = 0, long contentToken = 0)
         {
             Searcher = searcher;
             Generation = generation;
+            ContentToken = contentToken;
         }
 
         /// <summary>

@@ -54,6 +54,8 @@ public sealed partial class IndexWriter : IDisposable
     private long _postingsRamBytes; // incrementally tracked sum of all PostingAccumulator.EstimatedBytes
     private int _nextSegmentOrdinal;
     private int _commitGeneration;
+    private long _contentToken;
+    private bool _contentChangedSinceCommit;
     private readonly List<SegmentInfo> _committedSegments = [];
     // Pending deletions: field → term → set of matching terms to delete
     private readonly List<(string field, string term)> _pendingDeletes = [];
@@ -369,9 +371,13 @@ public sealed partial class IndexWriter : IDisposable
         if (_pendingDeletes.Count > 0)
             ApplyPendingDeletions(_committedSegments);
 
+        if (_contentChangedSinceCommit)
+            _contentToken++;
+
         // Write segments_N commit file (atomic: write to temp, then rename)
         _commitGeneration++;
         WriteCommitFile(_commitGeneration);
+        _contentChangedSinceCommit = false;
 
         // Persist index statistics alongside the commit so IndexSearcher can
         // skip the expensive full-segment scan on construction.
@@ -393,7 +399,12 @@ public sealed partial class IndexWriter : IDisposable
         var segmentIds = new List<string>(_committedSegments.Count);
         foreach (var seg in _committedSegments)
             segmentIds.Add(seg.SegmentId);
-        var commitData = JsonSerializer.Serialize(new CommitData { Segments = segmentIds, Generation = generation });
+        var commitData = JsonSerializer.Serialize(new CommitData
+        {
+            Segments = segmentIds,
+            Generation = generation,
+            ContentToken = _contentToken
+        });
 
         if (_config.DurableCommits)
         {
@@ -596,6 +607,7 @@ public sealed partial class IndexWriter : IDisposable
         if (recovery is null) return;
 
         _commitGeneration = recovery.Generation;
+        _contentToken = recovery.ContentToken;
         _nextSegmentOrdinal = recovery.SegmentIds.Count;
 
         foreach (var segId in recovery.SegmentIds)
@@ -612,5 +624,6 @@ public sealed partial class IndexWriter : IDisposable
     {
         public List<string> Segments { get; set; } = [];
         public int Generation { get; set; }
+        public long ContentToken { get; set; }
     }
 }

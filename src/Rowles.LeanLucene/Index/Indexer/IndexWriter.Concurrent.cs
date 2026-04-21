@@ -258,6 +258,7 @@ public sealed partial class IndexWriter
         }
 
         _bufferedDocCount += dwpt.DocCount;
+        _contentChangedSinceCommit = true;
         // Stored-field overhead already tracked; postings tracked via EstimatedBytes
 
         if (ShouldFlush())
