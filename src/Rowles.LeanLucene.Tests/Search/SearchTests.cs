@@ -267,15 +267,15 @@ public sealed class SearchTests : IClassFixture<TestDirectoryFixture>
         writer.AddDocument(docA);
 
         var docB = new LeanDocument();
-        docB.Add(new TextField("body", "filler content only"));
+        docB.Add(new TextField("body", "filler content material"));
         writer.AddDocument(docB);
 
         var docC = new LeanDocument();
-        docC.Add(new TextField("body", "relevance here once"));
+        docC.Add(new TextField("body", "relevance topic alphabet"));
         writer.AddDocument(docC);
 
         var docD = new LeanDocument();
-        docD.Add(new TextField("body", "more filler text"));
+        docD.Add(new TextField("body", "extra filler text"));
         writer.AddDocument(docD);
 
         writer.Commit();

@@ -10,10 +10,11 @@ public class StandardAnalyserTests
     [Fact]
     public void Analyse_AllStopWords_ReturnsOnlyNonStopWords()
     {
-        var result = _analyser.Analyse("to be or not to be");
+        // "to", "be", "or", "not" are all stop words in the extended list; only "live" survives.
+        var result = _analyser.Analyse("to be or not to live");
 
         Assert.Single(result);
-        Assert.Equal("not", result[0].Text);
+        Assert.Equal("live", result[0].Text);
     }
 
     [Fact]

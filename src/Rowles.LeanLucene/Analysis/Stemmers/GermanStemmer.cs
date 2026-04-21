@@ -2,8 +2,9 @@ namespace Rowles.LeanLucene.Analysis.Stemmers;
 
 /// <summary>
 /// German Snowball-inspired stemmer. Handles common German inflectional and
-/// derivational suffixes. Operates on lowercased input; does not handle
-/// umlaut normalisation (ä→ae etc.) — apply that upstream if required.
+/// derivational suffixes. Operates on lowercased input and folds umlauts
+/// (ä→a, ö→o, ü→u) and ß→ss as a preliminary step, mirroring Snowball's
+/// approach for German.
 /// </summary>
 public sealed class GermanStemmer : IStemmer
 {
@@ -12,11 +13,27 @@ public sealed class GermanStemmer : IStemmer
     {
         if (word.Length <= 3) return word;
 
-        Span<char> buf = word.Length <= 64
-            ? stackalloc char[word.Length]
-            : new char[word.Length];
-        word.AsSpan().CopyTo(buf);
-        int len = buf.Length;
+        // Fold umlauts and sharp s. ß expands to "ss" so we need a slightly
+        // larger buffer than the input length in the worst case.
+        int maxLen = word.Length;
+        for (int i = 0; i < word.Length; i++) if (word[i] == 'ß') maxLen++;
+
+        Span<char> buf = maxLen <= 64
+            ? stackalloc char[maxLen]
+            : new char[maxLen];
+
+        int len = 0;
+        foreach (var ch in word)
+        {
+            switch (ch)
+            {
+                case 'ä': buf[len++] = 'a'; break;
+                case 'ö': buf[len++] = 'o'; break;
+                case 'ü': buf[len++] = 'u'; break;
+                case 'ß': buf[len++] = 's'; buf[len++] = 's'; break;
+                default:  buf[len++] = ch; break;
+            }
+        }
 
         // Step 1: Derivational suffixes
         len = RemoveSuffix(buf, len, "erungen", "")
