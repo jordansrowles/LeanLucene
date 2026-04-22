@@ -119,6 +119,71 @@ public sealed class SearcherManagerTests : IDisposable
     }
 
     [Fact]
+    public void HeldSearcher_RemainsUsableAfterRefreshAndRelease()
+    {
+        var dir = new MMapDirectory(_dir);
+        using var writer = new IndexWriter(dir, new IndexWriterConfig());
+
+        writer.AddDocument(Doc("first"));
+        writer.Commit();
+
+        using var mgr = new SearcherManager(dir);
+        var held = mgr.Acquire();
+        try
+        {
+            writer.AddDocument(Doc("second"));
+            writer.Commit();
+
+            Assert.True(mgr.MaybeRefresh());
+            Assert.Equal(1, held.Search(new TermQuery("body", "first"), 10).TotalHits);
+            Assert.Equal(0, held.Search(new TermQuery("body", "second"), 10).TotalHits);
+            Assert.Equal(2, mgr.UsingSearcher(s => s.Search(new TermQuery("body", "first"), 10).TotalHits
+                + s.Search(new TermQuery("body", "second"), 10).TotalHits));
+        }
+        finally
+        {
+            mgr.Release(held);
+        }
+    }
+
+    [Fact]
+    public void Dispose_WithOutstandingAcquire_KeepsHeldSearcherUsableUntilRelease()
+    {
+        var dir = new MMapDirectory(_dir);
+        using (var writer = new IndexWriter(dir, new IndexWriterConfig()))
+        {
+            writer.AddDocument(Doc("held"));
+            writer.Commit();
+        }
+
+        var mgr = new SearcherManager(dir);
+        var held = mgr.Acquire();
+
+        mgr.Dispose();
+
+        Assert.Throws<ObjectDisposedException>(() => mgr.Acquire());
+        Assert.Equal(1, held.Search(new TermQuery("body", "held"), 10).TotalHits);
+
+        mgr.Release(held);
+    }
+
+    [Fact]
+    public void Release_UnknownSearcher_DoesNotThrow()
+    {
+        var dir = new MMapDirectory(_dir);
+        using (var writer = new IndexWriter(dir, new IndexWriterConfig()))
+        {
+            writer.AddDocument(Doc("known"));
+            writer.Commit();
+        }
+
+        using var mgr = new SearcherManager(dir);
+        using var unknownSearcher = new IndexSearcher(dir);
+
+        mgr.Release(unknownSearcher);
+    }
+
+    [Fact]
     public async Task MaybeRefreshAsync_Works()
     {
         var dir = new MMapDirectory(_dir);
@@ -195,6 +260,7 @@ public sealed class SearcherManagerTests : IDisposable
                 {
                     searcher = mgr.Acquire();
                     _ = searcher.Stats.TotalDocCount;
+                    _ = searcher.Search(new TermQuery("body", "initial"), 10).TotalHits;
                 }
                 catch (ObjectDisposedException ex)
                 {

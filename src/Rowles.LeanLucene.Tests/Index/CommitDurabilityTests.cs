@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Rowles.LeanLucene.Document;
 using Rowles.LeanLucene.Document.Fields;
 using Rowles.LeanLucene.Index;
@@ -62,9 +63,8 @@ public class CommitDurabilityTests : IDisposable
     }
 
     [Fact]
-    public void DurableCommit_AllSegmentFilesPresentAfterDispose()
+    public void DurableCommit_AllReferencedSegmentFilesPresentAfterDispose()
     {
-        // Arrange — durable commit must leave a fully readable segments_N + every referenced segment file on disk
         var config = new IndexWriterConfig { DurableCommits = true };
         using (var writer = new IndexWriter(new MMapDirectory(_dir), config))
         {
@@ -77,14 +77,21 @@ public class CommitDurabilityTests : IDisposable
             writer.Commit();
         }
 
-        // Assert — at least one segments_N file exists and every .seg referenced by it is present and non-empty
-        var segmentsFiles = Directory.GetFiles(_dir, "segments_*");
-        Assert.NotEmpty(segmentsFiles);
+        var segmentsFile = Path.Combine(_dir, "segments_1");
+        AssertNonEmptyFile(segmentsFile);
+        AssertNonEmptyFile(Path.Combine(_dir, "stats_1.json"));
 
-        var segFiles = Directory.GetFiles(_dir, "*.seg");
-        Assert.NotEmpty(segFiles);
-        foreach (var seg in segFiles)
-            Assert.True(new FileInfo(seg).Length > 0, $"Segment file {seg} is empty");
+        var json = File.ReadAllText(segmentsFile);
+        var commit = JsonSerializer.Deserialize<JsonElement>(json);
+        var segments = commit.GetProperty("Segments");
+        Assert.NotEmpty(segments.EnumerateArray());
+
+        foreach (var segmentElement in segments.EnumerateArray())
+        {
+            var segmentId = segmentElement.GetString()!;
+            foreach (var extension in new[] { ".seg", ".dic", ".pos", ".nrm", ".fdt", ".fdx", ".fln", ".stats.json" })
+                AssertNonEmptyFile(Path.Combine(_dir, segmentId + extension));
+        }
     }
 
     [Fact]
@@ -103,5 +110,11 @@ public class CommitDurabilityTests : IDisposable
         using var searcher = new IndexSearcher(new MMapDirectory(_dir));
         var results = searcher.Search(new TermQuery("body", "valid"), 10);
         Assert.Equal(1, results.TotalHits);
+    }
+
+    private static void AssertNonEmptyFile(string path)
+    {
+        Assert.True(File.Exists(path), $"Expected {path} to exist");
+        Assert.True(new FileInfo(path).Length > 0, $"Expected {path} to be non-empty");
     }
 }

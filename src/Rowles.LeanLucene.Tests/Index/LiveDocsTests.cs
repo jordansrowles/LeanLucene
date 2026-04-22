@@ -107,4 +107,104 @@ public sealed class LiveDocsTests : IClassFixture<TestDirectoryFixture>
             Assert.Equal(1, doc3Results.TotalHits);
         }
     }
+
+    [Fact]
+    public void DeleteDocuments_WhileMergeEligible_DoesNotResurrectDeletedDocs()
+    {
+        var subDir = System.IO.Path.Combine(_fixture.Path, "delete_merge_eligible");
+        System.IO.Directory.CreateDirectory(subDir);
+
+        var dir = new MMapDirectory(subDir);
+        using (var writer = new IndexWriter(dir, new IndexWriterConfig
+        {
+            MaxBufferedDocs = 1,
+            MergeThreshold = 2,
+        }))
+        {
+            for (int i = 0; i < 6; i++)
+            {
+                var doc = new LeanDocument();
+                doc.Add(new StringField("id", i % 2 == 0 ? "victim" : "survivor"));
+                doc.Add(new TextField("body", i % 2 == 0 ? "delete target" : "keep target"));
+                writer.AddDocument(doc);
+                writer.Commit();
+            }
+
+            writer.DeleteDocuments(new TermQuery("id", "victim"));
+            writer.Commit();
+        }
+
+        using var searcher = new IndexSearcher(dir);
+
+        Assert.Equal(0, searcher.Search(new TermQuery("id", "victim"), 10).TotalHits);
+        Assert.Equal(3, searcher.Search(new TermQuery("id", "survivor"), 10).TotalHits);
+    }
+
+    [Fact]
+    public void UpdateDocument_AfterImmediateReplacementFlush_ReplacesExactlyOnce()
+    {
+        var subDir = System.IO.Path.Combine(_fixture.Path, "update_merge_eligible");
+        System.IO.Directory.CreateDirectory(subDir);
+
+        var dir = new MMapDirectory(subDir);
+        using (var writer = new IndexWriter(dir, new IndexWriterConfig
+        {
+            MaxBufferedDocs = 1,
+            MergeThreshold = 100,
+        }))
+        {
+            for (int i = 0; i < 4; i++)
+            {
+                var doc = new LeanDocument();
+                doc.Add(new StringField("id", $"doc-{i}"));
+                doc.Add(new TextField("body", $"old body {i}"));
+                writer.AddDocument(doc);
+                writer.Commit();
+            }
+
+            var replacement = new LeanDocument();
+            replacement.Add(new StringField("id", "doc-1"));
+            replacement.Add(new TextField("body", "new replacement body"));
+            writer.UpdateDocument("id", "doc-1", replacement);
+            writer.Commit();
+        }
+
+        using var searcher = new IndexSearcher(dir);
+
+        Assert.Equal(0, searcher.Search(new TermQuery("body", "old"), 10).ScoreDocs
+            .Count(hit => searcher.GetStoredFields(hit.DocId)["id"][0] == "doc-1"));
+        Assert.Equal(1, searcher.Search(new TermQuery("body", "replacement"), 10).TotalHits);
+        Assert.Equal(4, searcher.Stats.LiveDocCount);
+    }
+
+    [Fact]
+    public void DeleteDocuments_MultipleTermsAcrossSegments_AppliesToAllLiveSegments()
+    {
+        var subDir = System.IO.Path.Combine(_fixture.Path, "delete_multi_terms");
+        System.IO.Directory.CreateDirectory(subDir);
+
+        var dir = new MMapDirectory(subDir);
+        using (var writer = new IndexWriter(dir, new IndexWriterConfig { MaxBufferedDocs = 1 }))
+        {
+            foreach (var id in new[] { "alpha", "bravo", "charlie", "delta" })
+            {
+                var doc = new LeanDocument();
+                doc.Add(new StringField("id", id));
+                doc.Add(new TextField("body", $"document {id}"));
+                writer.AddDocument(doc);
+                writer.Commit();
+            }
+
+            writer.DeleteDocuments(new TermQuery("id", "alpha"));
+            writer.DeleteDocuments(new TermQuery("id", "charlie"));
+            writer.Commit();
+        }
+
+        using var searcher = new IndexSearcher(dir);
+
+        Assert.Equal(0, searcher.Search(new TermQuery("id", "alpha"), 10).TotalHits);
+        Assert.Equal(0, searcher.Search(new TermQuery("id", "charlie"), 10).TotalHits);
+        Assert.Equal(1, searcher.Search(new TermQuery("id", "bravo"), 10).TotalHits);
+        Assert.Equal(1, searcher.Search(new TermQuery("id", "delta"), 10).TotalHits);
+    }
 }

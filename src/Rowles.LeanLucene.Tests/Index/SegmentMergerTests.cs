@@ -333,6 +333,47 @@ public sealed class SegmentMergerTests : IClassFixture<TestDirectoryFixture>
         }
     }
 
+    [Fact]
+    public void MaybeMerge_WithProtectedSegment_KeepsProtectedFilesAndStats()
+    {
+        var dir = SubDir(nameof(MaybeMerge_WithProtectedSegment_KeepsProtectedFilesAndStats));
+        var mmap = new MMapDirectory(dir);
+
+        using (var writer = new IndexWriter(mmap, SmallSegmentMergeConfig()))
+        {
+            for (int i = 0; i < 3; i++)
+            {
+                var doc = new LeanDocument();
+                doc.Add(new TextField("body", $"merge protection {i}"));
+                writer.AddDocument(doc);
+                writer.Commit();
+            }
+        }
+
+        var sourceSegments = Directory.GetFiles(dir, "seg_*.seg")
+            .Select(SegmentInfo.ReadFrom)
+            .OrderBy(segment => SegmentOrdinal(segment.SegmentId))
+            .ToList();
+        var protectedSegment = sourceSegments[0];
+        var protectedSegmentIds = new HashSet<string>([protectedSegment.SegmentId], StringComparer.Ordinal);
+        var nextSegmentOrdinal = sourceSegments.Max(segment => SegmentOrdinal(segment.SegmentId)) + 1;
+        var merger = new SegmentMerger(mmap, mergeThreshold: 2);
+
+        var mergedSegments = merger.MaybeMerge(sourceSegments, ref nextSegmentOrdinal, protectedSegmentIds);
+
+        Assert.Contains(mergedSegments, segment => segment.SegmentId == protectedSegment.SegmentId);
+
+        var activeSegments = new HashSet<string>(mergedSegments.Select(static segment => segment.SegmentId), StringComparer.Ordinal);
+        foreach (var segment in sourceSegments)
+        {
+            if (!activeSegments.Contains(segment.SegmentId) && !protectedSegmentIds.Contains(segment.SegmentId))
+                merger.CleanupSegmentFiles(segment);
+        }
+
+        Assert.True(File.Exists(Path.Combine(dir, protectedSegment.SegmentId + ".seg")));
+        Assert.True(File.Exists(Path.Combine(dir, protectedSegment.SegmentId + ".stats.json")));
+    }
+
     private static LeanDocument MakeChild(string body)
     {
         var doc = new LeanDocument();

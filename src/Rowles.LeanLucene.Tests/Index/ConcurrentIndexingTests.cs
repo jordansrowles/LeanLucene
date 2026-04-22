@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using Rowles.LeanLucene.Document;
 using Rowles.LeanLucene.Document.Fields;
 using Rowles.LeanLucene.Index;
@@ -183,6 +184,137 @@ public sealed class ConcurrentIndexingTests : IDisposable
         }
     }
 
+    [Fact(Timeout = 30_000)]
+    public async Task AddDocumentLockFree_CommitWhileProducersRunning_AllCommittedDocsSearchable()
+    {
+        const int ProducerCount = 4;
+        const int DocsPerProducer = 50;
+        var directory = new MMapDirectory(_dir);
+        using var writer = new IndexWriter(directory, new IndexWriterConfig { MaxBufferedDocs = 1_000 });
+        writer.InitialiseDwptPool(threadCount: ProducerCount);
+
+        var errors = new ConcurrentBag<Exception>();
+        var producers = Enumerable.Range(0, ProducerCount)
+            .Select(producer => Task.Run(async () =>
+            {
+                for (int i = 0; i < DocsPerProducer; i++)
+                {
+                    try
+                    {
+                        int id = producer * DocsPerProducer + i;
+                        writer.AddDocumentLockFree(BuildDoc(id, "shared lockfree"));
+                        if (i % 5 == 0)
+                            await Task.Yield();
+                    }
+                    catch (Exception ex)
+                    {
+                        errors.Add(ex);
+                        return;
+                    }
+                }
+            }))
+            .ToArray();
+
+        while (!Task.WhenAll(producers).IsCompleted)
+        {
+            writer.Commit();
+            await Task.Delay(5);
+        }
+
+        await Task.WhenAll(producers);
+        writer.Commit();
+
+        Assert.Empty(errors);
+        using var searcher = new IndexSearcher(directory);
+        Assert.Equal(ProducerCount * DocsPerProducer, searcher.Search(new TermQuery("body", "shared"), 1_000).TotalHits);
+    }
+
+    [Fact]
+    public void AddDocumentsConcurrent_WithDeletesAfterCommit_LiveDocsRemainCorrect()
+    {
+        const int DocCount = 120;
+        var directory = new MMapDirectory(_dir);
+        using (var writer = new IndexWriter(directory, new IndexWriterConfig { MaxBufferedDocs = DocCount + 1 }))
+        {
+            var docs = Enumerable.Range(0, DocCount)
+                .Select(i =>
+                {
+                    var doc = BuildDoc(i, "concurrent deletecheck");
+                    doc.Add(new StringField("group", i % 3 == 0 ? "victim" : "keeper"));
+                    return doc;
+                })
+                .ToList();
+
+            writer.AddDocumentsConcurrent(docs);
+            writer.Commit();
+            writer.DeleteDocuments(new TermQuery("group", "victim"));
+            writer.Commit();
+        }
+
+        using var searcher = new IndexSearcher(directory);
+
+        Assert.Equal(0, searcher.Search(new TermQuery("group", "victim"), DocCount).TotalHits);
+        Assert.Equal(80, searcher.Search(new TermQuery("group", "keeper"), DocCount).TotalHits);
+        Assert.Equal(80, searcher.Stats.LiveDocCount);
+    }
+
+    [Fact(Timeout = 30_000)]
+    public async Task ConcurrentReadersDuringWriterCommits_NeverThrowAndEventuallySeeCommittedDocs()
+    {
+        var directory = new MMapDirectory(_dir);
+        using var writer = new IndexWriter(directory, new IndexWriterConfig { MaxBufferedDocs = 20 });
+        writer.AddDocument(BuildDoc(0, "initial reader"));
+        writer.Commit();
+
+        using var manager = new SearcherManager(directory);
+        var errors = new ConcurrentBag<Exception>();
+        using var cts = new CancellationTokenSource();
+
+        var readers = Enumerable.Range(0, 8)
+            .Select(_ => Task.Run(() =>
+            {
+                while (!cts.Token.IsCancellationRequested)
+                {
+                    IndexSearcher? searcher = null;
+                    try
+                    {
+                        searcher = manager.Acquire();
+                        _ = searcher.Search(new TermQuery("body", "reader"), 100).TotalHits;
+                        _ = searcher.Stats.LiveDocCount;
+                    }
+                    catch (Exception ex) when (ex is not OperationCanceledException)
+                    {
+                        errors.Add(ex);
+                        return;
+                    }
+                    finally
+                    {
+                        if (searcher is not null)
+                            manager.Release(searcher);
+                    }
+                }
+            }))
+            .ToArray();
+
+        for (int i = 1; i <= 40; i++)
+        {
+            writer.AddDocument(BuildDoc(i, "reader committed"));
+            if (i % 5 == 0)
+            {
+                writer.Commit();
+                manager.MaybeRefresh();
+            }
+        }
+
+        writer.Commit();
+        manager.MaybeRefresh();
+        cts.Cancel();
+        await Task.WhenAll(readers);
+
+        Assert.Empty(errors);
+        Assert.Equal(41, manager.UsingSearcher(s => s.Search(new TermQuery("body", "reader"), 100).TotalHits));
+    }
+
     private static Dictionary<string, float> IndexAndScoreSingleThreaded(string path, IReadOnlyList<LeanDocument> docs)
     {
         var directory = new MMapDirectory(path);
@@ -228,5 +360,13 @@ public sealed class ConcurrentIndexingTests : IDisposable
         var extras = Enumerable.Range(0, id % 11)
             .Select(i => $"extra{id}_{i}");
         return string.Join(' ', extras.Prepend("shared"));
+    }
+
+    private static LeanDocument BuildDoc(int id, string body)
+    {
+        var doc = new LeanDocument();
+        doc.Add(new StringField("id", id.ToString()));
+        doc.Add(new TextField("body", $"{body} uniquedoc{id}"));
+        return doc;
     }
 }

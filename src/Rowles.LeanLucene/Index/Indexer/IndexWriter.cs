@@ -325,7 +325,12 @@ public sealed partial class IndexWriter : IDisposable
         ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
         lock (_writeLock)
         {
+            FlushDwptPool();
+            if (_bufferedDocCount > 0)
+                FlushSegment();
+
             _pendingDeletes.Add((field, term));
+            ApplyPendingDeletions(_committedSegments);
             AddDocumentCore(replacement);
         }
     }

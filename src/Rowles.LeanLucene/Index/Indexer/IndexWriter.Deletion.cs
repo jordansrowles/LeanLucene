@@ -14,6 +14,7 @@ public sealed partial class IndexWriter
     /// <param name="query">The term query identifying documents to delete.</param>
     public void DeleteDocuments(TermQuery query)
     {
+        ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
         lock (_writeLock)
         {
             _pendingDeletes.Add((query.Field, query.Term));

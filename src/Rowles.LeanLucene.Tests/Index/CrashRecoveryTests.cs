@@ -75,6 +75,73 @@ public class CrashRecoveryTests : IDisposable
     }
 
     [Fact]
+    public void LatestCommitWithMismatchedGeneration_FallsBackToPreviousGeneration()
+    {
+        var config = new IndexWriterConfig
+        {
+            DeletionPolicy = new KeepLastNCommitsPolicy(2)
+        };
+        using (var writer = new IndexWriter(new MMapDirectory(_dir), config))
+        {
+            writer.AddDocument(CreateDocument("first generation"));
+            writer.Commit();
+
+            writer.AddDocument(CreateDocument("second generation"));
+            writer.Commit();
+        }
+
+        var segments2 = Path.Combine(_dir, "segments_2");
+        var json = File.ReadAllText(segments2);
+        var commit = JsonSerializer.Deserialize<JsonElement>(json);
+        var corruptCommit = JsonSerializer.Serialize(new
+        {
+            Segments = commit.GetProperty("Segments"),
+            Generation = 999,
+            ContentToken = commit.GetProperty("ContentToken").GetInt64()
+        });
+        File.WriteAllText(segments2, corruptCommit);
+
+        using var searcher = new IndexSearcher(new MMapDirectory(_dir));
+        Assert.Equal(1, searcher.Search(new TermQuery("body", "first"), 10).TotalHits);
+        Assert.Equal(0, searcher.Search(new TermQuery("body", "second"), 10).TotalHits);
+    }
+
+    [Fact]
+    public void PartialTempCommit_IsIgnoredAndStableCommitRemainsSearchable()
+    {
+        using (var writer = new IndexWriter(new MMapDirectory(_dir), new IndexWriterConfig()))
+        {
+            writer.AddDocument(CreateDocument("stable commit"));
+            writer.Commit();
+        }
+
+        File.WriteAllText(Path.Combine(_dir, "segments_99.tmp"), "{\"Segments\":[\"missing\"],");
+
+        using var searcher = new IndexSearcher(new MMapDirectory(_dir));
+        var results = searcher.Search(new TermQuery("body", "stable"), 10);
+
+        Assert.Equal(1, results.TotalHits);
+    }
+
+    [Fact]
+    public void CorruptStatsFile_FallsBackToRecomputedSearchStats()
+    {
+        using (var writer = new IndexWriter(new MMapDirectory(_dir), new IndexWriterConfig()))
+        {
+            writer.AddDocument(CreateDocument("alpha"));
+            writer.AddDocument(CreateDocument("bravo"));
+            writer.Commit();
+        }
+
+        File.WriteAllText(Path.Combine(_dir, "stats_1.json"), "not valid json");
+
+        using var searcher = new IndexSearcher(new MMapDirectory(_dir));
+
+        Assert.Equal(2, searcher.Stats.LiveDocCount);
+        Assert.Equal(1, searcher.Search(new TermQuery("body", "alpha"), 10).TotalHits);
+    }
+
+    [Fact]
     public void OrphanedSegmentFiles_CleanedUpOnStartup()
     {
         // Arrange — create an index with 1 commit
@@ -128,6 +195,26 @@ public class CrashRecoveryTests : IDisposable
     }
 
     [Fact]
+    public void DeleteCommitAndReopen_DeletedDocumentRemainsDeleted()
+    {
+        using (var writer = new IndexWriter(new MMapDirectory(_dir), new IndexWriterConfig()))
+        {
+            writer.AddDocument(CreateDocument("keep survivor"));
+            writer.AddDocument(CreateDocument("delete victim"));
+            writer.Commit();
+
+            writer.DeleteDocuments(new TermQuery("body", "victim"));
+            writer.Commit();
+        }
+
+        using var searcher = new IndexSearcher(new MMapDirectory(_dir));
+
+        Assert.Equal(1, searcher.Search(new TermQuery("body", "survivor"), 10).TotalHits);
+        Assert.Equal(0, searcher.Search(new TermQuery("body", "victim"), 10).TotalHits);
+        Assert.Equal(1, searcher.Stats.LiveDocCount);
+    }
+
+    [Fact]
     public void LatestCommitMissingSegment_FallsBackToPreviousGeneration()
     {
         // Arrange — create 2 commits, keeping both generations
@@ -176,5 +263,12 @@ public class CrashRecoveryTests : IDisposable
         {
             try { Directory.Delete(emptyDir, true); } catch { }
         }
+    }
+
+    private static LeanDocument CreateDocument(string body)
+    {
+        var doc = new LeanDocument();
+        doc.Add(new TextField("body", body));
+        return doc;
     }
 }

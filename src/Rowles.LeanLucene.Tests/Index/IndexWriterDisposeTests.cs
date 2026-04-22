@@ -112,4 +112,25 @@ public sealed class IndexWriterDisposeTests : IClassFixture<TestDirectoryFixture
 
         Assert.Throws<ObjectDisposedException>(() => writer.AddDocumentLockFree(doc));
     }
+
+    [Fact]
+    public void Commit_AfterDispose_ThrowsObjectDisposedException()
+    {
+        var dir = SubDir("commit_after_dispose");
+        var writer = new IndexWriter(new MMapDirectory(dir), new IndexWriterConfig());
+        writer.Dispose();
+
+        Assert.Throws<ObjectDisposedException>(() => writer.Commit());
+    }
+
+    [Fact]
+    public void DeleteDocuments_AfterDispose_ThrowsObjectDisposedException()
+    {
+        var dir = SubDir("delete_after_dispose");
+        var writer = new IndexWriter(new MMapDirectory(dir), new IndexWriterConfig());
+        writer.Dispose();
+
+        Assert.Throws<ObjectDisposedException>(() =>
+            writer.DeleteDocuments(new TermQuery("body", "anything")));
+    }
 }

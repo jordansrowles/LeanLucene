@@ -120,6 +120,109 @@ public sealed class IndexSnapshotTests : IDisposable
     }
 
     [Fact]
+    public void HeldSnapshot_SearcherStillWorksAfterMultipleLaterCommits()
+    {
+        var directory = new MMapDirectory(_dir);
+        using var writer = new IndexWriter(directory, new IndexWriterConfig
+        {
+            DeletionPolicy = new KeepLatestCommitPolicy(),
+            MaxBufferedDocs = 1,
+            MergeThreshold = 2,
+        });
+
+        writer.AddDocument(CreateDocument("alpha snapshot-only"));
+        writer.Commit();
+
+        var snapshot = writer.CreateSnapshot();
+        try
+        {
+            for (int i = 0; i < 4; i++)
+            {
+                writer.AddDocument(CreateDocument($"later document {i}"));
+                writer.Commit();
+            }
+
+            using var snapshotSearcher = new IndexSearcher(directory, snapshot.Segments);
+
+            Assert.Equal(1, snapshotSearcher.Search(new TermQuery("body", "alpha"), 10).TotalHits);
+            Assert.Equal(0, snapshotSearcher.Search(new TermQuery("body", "later"), 10).TotalHits);
+            Assert.All(snapshot.Segments, segment =>
+            {
+                Assert.True(File.Exists(Path.Combine(_dir, segment.SegmentId + ".seg")));
+                Assert.True(File.Exists(Path.Combine(_dir, segment.SegmentId + ".stats.json")));
+            });
+        }
+        finally
+        {
+            writer.ReleaseSnapshot(snapshot);
+        }
+    }
+
+    [Fact]
+    public void ReleasingSnapshot_AllowsOldCommitFilesToBePrunedByLaterCommit()
+    {
+        var directory = new MMapDirectory(_dir);
+        using var writer = new IndexWriter(directory, new IndexWriterConfig
+        {
+            DeletionPolicy = new KeepLatestCommitPolicy(),
+            MaxBufferedDocs = 1,
+        });
+
+        writer.AddDocument(CreateDocument("first generation"));
+        writer.Commit();
+
+        var snapshot = writer.CreateSnapshot();
+
+        writer.AddDocument(CreateDocument("second generation"));
+        writer.Commit();
+
+        Assert.True(File.Exists(Path.Combine(_dir, "segments_1")));
+        Assert.True(File.Exists(Path.Combine(_dir, "stats_1.json")));
+
+        writer.ReleaseSnapshot(snapshot);
+
+        writer.AddDocument(CreateDocument("third generation"));
+        writer.Commit();
+
+        Assert.False(File.Exists(Path.Combine(_dir, "segments_1")));
+        Assert.False(File.Exists(Path.Combine(_dir, "stats_1.json")));
+    }
+
+    [Fact]
+    public void ReleasingOneSnapshot_DoesNotUnprotectSegmentsHeldByAnotherSnapshot()
+    {
+        var directory = new MMapDirectory(_dir);
+        using var writer = new IndexWriter(directory, new IndexWriterConfig
+        {
+            DeletionPolicy = new KeepLatestCommitPolicy(),
+            MaxBufferedDocs = 1,
+            MergeThreshold = 2,
+        });
+
+        writer.AddDocument(CreateDocument("shared protected generation"));
+        writer.Commit();
+
+        var firstSnapshot = writer.CreateSnapshot();
+        var secondSnapshot = writer.CreateSnapshot();
+        var protectedSegmentIds = firstSnapshot.Segments.Select(segment => segment.SegmentId).ToArray();
+
+        writer.ReleaseSnapshot(secondSnapshot);
+
+        writer.AddDocument(CreateDocument("newer generation"));
+        writer.Commit();
+
+        Assert.True(File.Exists(Path.Combine(_dir, "segments_1")));
+        Assert.True(File.Exists(Path.Combine(_dir, "stats_1.json")));
+        Assert.All(protectedSegmentIds, segmentId =>
+        {
+            Assert.True(File.Exists(Path.Combine(_dir, segmentId + ".seg")));
+            Assert.True(File.Exists(Path.Combine(_dir, segmentId + ".stats.json")));
+        });
+
+        writer.ReleaseSnapshot(firstSnapshot);
+    }
+
+    [Fact]
     public void ReleaseSnapshot_AllowsRepeatedRelease()
     {
         var directory = new MMapDirectory(_dir);
