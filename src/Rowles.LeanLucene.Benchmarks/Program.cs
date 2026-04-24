@@ -25,7 +25,7 @@ internal static class Program
         var repoRoot = FindRepositoryRoot();
         var now = DateTimeOffset.UtcNow;
 
-        var machineDir = Path.Combine(repoRoot, "benches", Environment.MachineName);
+        var machineDir = Path.Combine(repoRoot, "bench", Environment.MachineName);
         var runDir = Path.Combine(
             machineDir,
             now.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
@@ -209,7 +209,7 @@ internal static class Program
               diagnostics         DiagnosticsBenchmarks -- SlowQueryLog + Analytics hook overhead (explicit only)
 
             Output:
-              Results are written to benches/{machine-name}/{yyyy-MM-dd}/{HH-mm}/
+              Results are written to bench/{machine-name}/{yyyy-MM-dd}/{HH-mm}/
               A consolidated JSON report and per-machine index.json are maintained.
 
             Examples:

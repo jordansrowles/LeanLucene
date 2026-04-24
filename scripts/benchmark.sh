@@ -192,8 +192,8 @@ if $HELP; then
     done
     echo ""
     echo "  Output:"
-    echo "    benches/{machine-name}/{yyyy-MM-dd}/{HH-mm}/"
-    echo "    benches/{machine-name}/index.json   Per-machine run index"
+    echo "    bench/{machine-name}/{yyyy-MM-dd}/{HH-mm}/"
+    echo "    bench/{machine-name}/index.json   Per-machine run index"
     echo ""
     echo "  BenchmarkDotNet pass-through examples:"
     echo "    --filter *Lean*            Run only methods whose name contains Lean"
@@ -533,8 +533,8 @@ if $HELP; then
     done
     echo ""
     echo "  Output:"
-    echo "    benches/{machine-name}/{yyyy-MM-dd}/{HH-mm}/"
-    echo "    benches/{machine-name}/index.json   Per-machine run index"
+    echo "    bench/{machine-name}/{yyyy-MM-dd}/{HH-mm}/"
+    echo "    bench/{machine-name}/index.json   Per-machine run index"
     echo ""
     echo "  BenchmarkDotNet pass-through examples:"
     echo "    --filter *Lean*            Run only methods whose name contains Lean"

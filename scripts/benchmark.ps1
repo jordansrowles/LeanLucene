@@ -4,7 +4,7 @@
 
 .DESCRIPTION
     Runs BenchmarkDotNet suites for LeanLucene. Results are written to
-    benches/{machine}/{date}/{time}/ with JSON, Markdown, and HTML output.
+    bench/{machine}/{date}/{time}/ with JSON, Markdown, and HTML output.
     A consolidated report.json and per-machine index.json are generated.
 
 .PARAMETER Suite
@@ -174,8 +174,8 @@ if ($Help) {
     }
     Write-Host ''
     Write-Host '  Output:'
-    Write-Host '    benches/{machine-name}/{yyyy-MM-dd}/{HH-mm}/'
-    Write-Host '    benches/{machine-name}/index.json   Per-machine run index'
+    Write-Host '    bench/{machine-name}/{yyyy-MM-dd}/{HH-mm}/'
+    Write-Host '    bench/{machine-name}/index.json   Per-machine run index'
     Write-Host ''
     Write-Host '  BenchmarkDotNet pass-through examples:'
     Write-Host '    --filter *Lean*            Run only methods whose name contains Lean'

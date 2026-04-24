@@ -4,7 +4,6 @@
 ## Get latest from `dotnet new gitignore`
 
 bench/*
-benches/
 
 .netcoredbg_hist
 
@@ -61,6 +60,10 @@ nunit-*.xml
 [Dd]ebugPS/
 [Rr]eleasePS/
 dlldata.c
+
+# DocFX generated artefacts
+docs/api/
+docs/site/
 
 # Benchmark Results
 BenchmarkDotNet.Artifacts/
