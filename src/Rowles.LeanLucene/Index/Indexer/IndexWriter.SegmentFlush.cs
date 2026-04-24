@@ -13,6 +13,10 @@ public sealed partial class IndexWriter
     {
         if (_bufferedDocCount == 0) return;
 
+        var flushSw = System.Diagnostics.Stopwatch.StartNew();
+        using var flushActivity = Diagnostics.LeanLuceneActivitySource.Source
+            .StartActivity(Diagnostics.LeanLuceneActivitySource.Flush);
+
         // Compute sort permutation if index-time sort is configured
         int[]? sortPerm = null;       // sortPerm[newDocId] = oldDocId
         int[]? inversePerm = null;    // inversePerm[oldDocId] = newDocId
@@ -32,6 +36,8 @@ public sealed partial class IndexWriter
 
         var segId = $"seg_{_nextSegmentOrdinal++}";
         var basePath = Path.Combine(_directory.DirectoryPath, segId);
+        flushActivity?.SetTag("index.segment_id", segId);
+        flushActivity?.SetTag("index.doc_count", docCountToFlush);
 
         // Collect all field names
         var fieldNames = _fieldNames.ToList();
@@ -299,6 +305,9 @@ public sealed partial class IndexWriter
                 _semaphoreSlotsHeld -= toRelease;
             }
         }
+
+        flushSw.Stop();
+        _config.Metrics.RecordFlush(flushSw.Elapsed);
     }
 
     /// <summary>

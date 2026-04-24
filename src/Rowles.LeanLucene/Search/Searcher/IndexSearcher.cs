@@ -144,6 +144,10 @@ public sealed partial class IndexSearcher : IDisposable
         if (topN <= 0 || _readers.Count == 0)
             return TopDocs.Empty;
 
+        using var activity = Diagnostics.LeanLuceneActivitySource.Source
+            .StartActivity(Diagnostics.LeanLuceneActivitySource.Search);
+        activity?.SetTag("query.type", query.GetType().Name);
+
         // Check query cache
         if (_queryCache is not null)
         {
@@ -151,6 +155,8 @@ public sealed partial class IndexSearcher : IDisposable
             if (cached is not null)
             {
                 _config.Metrics.RecordCacheHit();
+                activity?.SetTag("search.cache_hit", true);
+                activity?.SetTag("search.total_hits", cached.TotalHits);
                 return cached;
             }
             _config.Metrics.RecordCacheMiss();
@@ -160,6 +166,9 @@ public sealed partial class IndexSearcher : IDisposable
         var result = SearchCore(query, topN);
         sw.Stop();
         _config.Metrics.RecordSearchLatency(sw.Elapsed);
+
+        activity?.SetTag("search.cache_hit", false);
+        activity?.SetTag("search.total_hits", result.TotalHits);
 
         _config.SlowQueryLog?.MaybeLog(query, sw.Elapsed, result.TotalHits);
         _config.SearchAnalytics?.Record(query, sw.Elapsed, result.TotalHits,

@@ -20,10 +20,23 @@ public sealed partial class IndexWriter
                 {
                     if (ct.IsCancellationRequested) return;
 
+                    using var mergeActivity = Diagnostics.LeanLuceneActivitySource.Source
+                        .StartActivity(Diagnostics.LeanLuceneActivitySource.Merge);
+                    var mergeSw = System.Diagnostics.Stopwatch.StartNew();
+
                     var merger = new SegmentMerger(_directory, _config.MergeThreshold, _config.PostingsSkipInterval);
                     var sourceSegments = _committedSegments.ToArray();
                     var protectedSegments = GetSnapshotProtectedSegments();
                     var merged = merger.MaybeMerge(_committedSegments, ref _nextSegmentOrdinal, protectedSegments);
+
+                    mergeSw.Stop();
+                    int segmentsMerged = merged != _committedSegments
+                        ? sourceSegments.Length - merged.Count + 1
+                        : 0;
+                    mergeActivity?.SetTag("index.segments_merged", segmentsMerged);
+                    if (segmentsMerged > 0)
+                        _config.Metrics.RecordMerge(mergeSw.Elapsed, segmentsMerged);
+
                     if (!ReferenceEquals(merged, _committedSegments))
                     {
                         _committedSegments.Clear();

@@ -346,10 +346,16 @@ public sealed partial class IndexWriter : IDisposable
         ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
         lock (_writeLock)
         {
+            using var activity = Diagnostics.LeanLuceneActivitySource.Source
+                .StartActivity(Diagnostics.LeanLuceneActivitySource.Commit);
+            activity?.SetTag("index.commit_generation", _commitGeneration + 1);
+
             var sw = System.Diagnostics.Stopwatch.StartNew();
             CommitCore();
             sw.Stop();
             _config.Metrics.RecordCommit(sw.Elapsed);
+
+            activity?.SetTag("index.segment_count", _committedSegments.Count);
         }
     }
 
