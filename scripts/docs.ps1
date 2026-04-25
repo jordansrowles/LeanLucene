@@ -55,7 +55,7 @@ if (-not (Get-Command docfx -ErrorAction SilentlyContinue)) {
     }
     Write-Host "docfx installed." -ForegroundColor Green
 } else {
-    $version = (docfx --version 2>&1 | Select-Object -First 1)
+    $version = @(docfx --version 2>&1)[0]
     Write-Host "docfx found: $version" -ForegroundColor DarkGray
 }
 
