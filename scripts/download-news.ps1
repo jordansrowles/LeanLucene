@@ -53,6 +53,7 @@ New-Item -ItemType Directory -Force -Path $OutputDir | Out-Null
 function Download-And-Extract {
     param(
         [string]$Url,
+        [string]$FallbackUrl,
         [string]$ArchivePath,
         [string]$ExtractDir,
         [string]$DatasetName
@@ -61,8 +62,14 @@ function Download-And-Extract {
     if (-not (Test-Path $ArchivePath)) {
         Write-Host "Downloading $DatasetName..." -ForegroundColor Cyan
         Write-Host "  Source: $Url"
-        Invoke-WebRequest -Uri $Url -OutFile $ArchivePath -UseBasicParsing `
-            -UserAgent "Mozilla/5.0 (compatible; BenchmarkDataBot/1.0)"
+        try {
+            Invoke-WebRequest -Uri $Url -OutFile $ArchivePath -UseBasicParsing `
+                -UserAgent "Mozilla/5.0 (compatible; BenchmarkDataBot/1.0)"
+        } catch {
+            Write-Host "  Primary source failed, trying fallback: $FallbackUrl" -ForegroundColor Yellow
+            Invoke-WebRequest -Uri $FallbackUrl -OutFile $ArchivePath -UseBasicParsing `
+                -UserAgent "Mozilla/5.0 (compatible; BenchmarkDataBot/1.0)"
+        }
         Write-Host "  Downloaded: $ArchivePath" -ForegroundColor Green
     } else {
         Write-Host "$DatasetName archive already present." -ForegroundColor DarkGray
@@ -88,6 +95,7 @@ if (-not $Skip20News) {
 
     Download-And-Extract `
         -Url "http://qwone.com/~jason/20Newsgroups/20news-bydate.tar.gz" `
+        -FallbackUrl "https://ndownloader.figshare.com/files/5975967" `
         -ArchivePath $newsArchive `
         -ExtractDir $newsDir `
         -DatasetName "20 Newsgroups"
@@ -108,6 +116,7 @@ if (-not $SkipReuters) {
 
     Download-And-Extract `
         -Url "http://www.daviddlewis.com/resources/testcollections/reuters21578/reuters21578.tar.gz" `
+        -FallbackUrl "https://archive.ics.uci.edu/ml/machine-learning-databases/reuters21578-mld/reuters21578.tar.gz" `
         -ArchivePath $reutersArchive `
         -ExtractDir $reutersDir `
         -DatasetName "Reuters-21578"

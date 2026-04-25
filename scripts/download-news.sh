@@ -34,17 +34,24 @@ require_command() {
 
 download_and_extract() {
     local url="$1"
-    local archive_path="$2"
-    local extract_dir="$3"
-    local dataset_name="$4"
+    local fallback_url="$2"
+    local archive_path="$3"
+    local extract_dir="$4"
+    local dataset_name="$5"
 
     if [[ ! -f "$archive_path" ]]; then
         echo "Downloading $dataset_name..."
         echo "  Source: $url"
-        curl -fL --retry 3 --retry-delay 2 \
-            -A "Mozilla/5.0 (compatible; BenchmarkDataBot/1.0)" \
-            -o "$archive_path" \
-            "$url"
+        if ! curl -fL --retry 3 --retry-delay 2 \
+                -A "Mozilla/5.0 (compatible; BenchmarkDataBot/1.0)" \
+                -o "$archive_path" \
+                "$url" 2>/dev/null; then
+            echo "  Primary source failed, trying fallback: $fallback_url"
+            curl -fL --retry 3 --retry-delay 2 \
+                -A "Mozilla/5.0 (compatible; BenchmarkDataBot/1.0)" \
+                -o "$archive_path" \
+                "$fallback_url"
+        fi
         echo "  Downloaded: $archive_path"
     else
         echo "$dataset_name archive already present."
@@ -104,6 +111,7 @@ if [[ "$SKIP_20NEWS" != true ]]; then
 
     download_and_extract \
         "http://qwone.com/~jason/20Newsgroups/20news-bydate.tar.gz" \
+        "https://ndownloader.figshare.com/files/5975967" \
         "$news_archive" \
         "$news_dir" \
         "20 Newsgroups"
@@ -122,6 +130,7 @@ if [[ "$SKIP_REUTERS" != true ]]; then
 
     download_and_extract \
         "http://www.daviddlewis.com/resources/testcollections/reuters21578/reuters21578.tar.gz" \
+        "https://archive.ics.uci.edu/ml/machine-learning-databases/reuters21578-mld/reuters21578.tar.gz" \
         "$reuters_archive" \
         "$reuters_dir" \
         "Reuters-21578"
