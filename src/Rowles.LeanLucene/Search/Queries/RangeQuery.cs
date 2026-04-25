@@ -31,5 +31,6 @@ public sealed class RangeQuery : Query
         string.Equals(Field, other.Field, StringComparison.Ordinal) &&
         Min == other.Min && Max == other.Max && Boost == other.Boost;
 
+    /// <inheritdoc/>
     public override int GetHashCode() => CombineBoost(HashCode.Combine(nameof(RangeQuery), Field, Min, Max));
 }

@@ -24,6 +24,7 @@ public sealed class SpanOrQuery : SpanQuery
         Clauses.Count == other.Clauses.Count &&
         Clauses.SequenceEqual(other.Clauses);
 
+    /// <inheritdoc/>
     public override int GetHashCode()
     {
         var h = new HashCode();

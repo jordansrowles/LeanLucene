@@ -34,5 +34,6 @@ public sealed class RegexpQuery : Query
         string.Equals(Pattern, other.Pattern, StringComparison.Ordinal) &&
         Boost == other.Boost;
 
+    /// <inheritdoc/>
     public override int GetHashCode() => CombineBoost(HashCode.Combine(nameof(RegexpQuery), Field, Pattern));
 }

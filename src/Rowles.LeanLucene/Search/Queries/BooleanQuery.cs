@@ -29,6 +29,7 @@ public sealed class BooleanQuery : Query
         _clauses.Count == other._clauses.Count &&
         _clauses.SequenceEqual(other._clauses);
 
+    /// <inheritdoc/>
     public override int GetHashCode()
     {
         var h = new HashCode();

@@ -13,6 +13,7 @@ namespace Rowles.LeanLucene.Codecs.Postings;
 public struct BlockPostingsEnum : IDisposable
 {
     private const int BlockSize = PackedIntCodec.BlockSize;
+    /// <summary>Sentinel returned by <see cref="DocId"/> once the iterator is exhausted.</summary>
     public const int NoMoreDocs = int.MaxValue;
     private const int MaxPreloadedSkipEntries = 4096;
 
@@ -48,6 +49,7 @@ public struct BlockPostingsEnum : IDisposable
     /// <summary>Total number of documents in this posting list.</summary>
     public int DocFreqCount => _docFreq;
 
+    /// <summary>True once every block has been consumed and no further docs are available.</summary>
     public bool IsExhausted => _exhausted;
 
     /// <summary>Returns the skip entries for WAND scoring. Each entry has MaxFreqInBlock and MaxNormInBlock.</summary>

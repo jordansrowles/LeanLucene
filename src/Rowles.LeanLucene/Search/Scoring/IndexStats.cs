@@ -22,6 +22,11 @@ public sealed class IndexStats
     /// <summary>Per-field total document frequency (number of docs containing the field).</summary>
     private readonly Dictionary<string, int> _fieldDocCounts;
 
+    /// <summary>Initialises a new <see cref="IndexStats"/> with pre-computed corpus statistics.</summary>
+    /// <param name="totalDocCount">Total number of documents across all segments, including deleted.</param>
+    /// <param name="liveDocCount">Total number of live (non-deleted) documents across all segments.</param>
+    /// <param name="avgFieldLengths">Per-field average document length in token count.</param>
+    /// <param name="fieldDocCounts">Per-field document frequency.</param>
     public IndexStats(
         int totalDocCount,
         int liveDocCount,
@@ -50,6 +55,7 @@ public sealed class IndexStats
     internal Dictionary<string, int> GetFieldDocCounts()
         => new(_fieldDocCounts, StringComparer.Ordinal);
 
+    /// <summary>An empty stats instance used for new or unreadable indexes.</summary>
     public static IndexStats Empty => new(0, 0, [], []);
 
     // --- Persistence ---

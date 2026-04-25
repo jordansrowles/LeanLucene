@@ -43,4 +43,4 @@ var results = searcher.Search(new TermQuery("title", "hello"), 10);
 
 ## API Reference
 
-Browse the full API in the [API section](api/).
+Browse the full API in the [API section](api/index.md).

@@ -35,6 +35,7 @@ public sealed class VectorQuery : Query
         TopK == other.TopK && Boost == other.Boost &&
         QueryVector.AsSpan().SequenceEqual(other.QueryVector);
 
+    /// <inheritdoc/>
     public override int GetHashCode()
     {
         var h = new HashCode();

@@ -7,7 +7,7 @@ namespace Rowles.LeanLucene.Store;
 
 /// <summary>
 /// Readable input over a memory-mapped file. Maintains a position cursor
-/// and uses <see cref="Unsafe.ReadUnaligned{T}"/> for primitive reads.
+/// and uses <see cref="Unsafe.ReadUnaligned{T}(ref readonly byte)"/> for primitive reads.
 /// Acquired pointer is held for the lifetime of the accessor to avoid
 /// repeated acquire/release overhead.
 /// </summary>
@@ -472,7 +472,7 @@ public sealed unsafe class IndexInput : IDisposable
     /// Unrolled VarInt decoder with a single per-value bounds check. If at least 5 bytes
     /// remain, uses the branchless unrolled path. Otherwise falls back to the safe
     /// per-byte checked path. This eliminates up to 4 bounds checks per VarInt value
-    /// compared to <see cref="ReadVarInt"/>.
+    /// compared to <see cref="ReadVarInt()"/>.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     internal int ReadVarIntFast()

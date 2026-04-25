@@ -5,7 +5,7 @@ namespace Rowles.LeanLucene.Diagnostics;
 
 /// <summary>
 /// Thread-safe ring buffer of per-search events. Events are captured in
-/// <see cref="Search.Searcher.IndexSearcher.Search"/> when wired via
+/// <see cref="Search.Searcher.IndexSearcher.Search(Search.Query, int)"/> when wired via
 /// <see cref="Search.Searcher.IndexSearcherConfig.SearchAnalytics"/>.
 /// </summary>
 public sealed class SearchAnalytics

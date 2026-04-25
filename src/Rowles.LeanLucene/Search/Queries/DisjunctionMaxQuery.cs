@@ -42,6 +42,7 @@ public sealed class DisjunctionMaxQuery : Query
         return this;
     }
 
+    /// <inheritdoc/>
     public override bool Equals(object? obj) =>
         obj is DisjunctionMaxQuery other &&
         TieBreakerMultiplier == other.TieBreakerMultiplier &&
@@ -49,6 +50,7 @@ public sealed class DisjunctionMaxQuery : Query
         _disjuncts.Count == other._disjuncts.Count &&
         _disjuncts.SequenceEqual(other._disjuncts);
 
+    /// <inheritdoc/>
     public override int GetHashCode()
     {
         var h = new HashCode();

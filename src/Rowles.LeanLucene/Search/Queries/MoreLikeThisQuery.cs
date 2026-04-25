@@ -36,6 +36,7 @@ public sealed class MoreLikeThisQuery : Query
         Boost == other.Boost &&
         Fields.AsSpan().SequenceEqual(other.Fields);
 
+    /// <inheritdoc/>
     public override int GetHashCode()
     {
         var h = new HashCode();

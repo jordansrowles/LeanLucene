@@ -62,6 +62,7 @@ public sealed class PhraseQuery : Query
         Boost == other.Boost &&
         Terms.AsSpan().SequenceEqual(other.Terms);
 
+    /// <inheritdoc/>
     public override int GetHashCode()
     {
         var h = new HashCode();

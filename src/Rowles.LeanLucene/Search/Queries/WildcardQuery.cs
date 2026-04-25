@@ -27,6 +27,7 @@ public sealed class WildcardQuery : Query
         string.Equals(Pattern, other.Pattern, StringComparison.Ordinal) &&
         Boost == other.Boost;
 
+    /// <inheritdoc/>
     public override int GetHashCode() => CombineBoost(HashCode.Combine(nameof(WildcardQuery), Field, Pattern));
 
     /// <summary>Tests whether a term matches the wildcard pattern.</summary>

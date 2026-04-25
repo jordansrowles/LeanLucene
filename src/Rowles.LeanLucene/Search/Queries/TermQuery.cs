@@ -30,5 +30,6 @@ public sealed class TermQuery : Query
         string.Equals(Term, other.Term, StringComparison.Ordinal) &&
         Boost == other.Boost;
 
+    /// <inheritdoc/>
     public override int GetHashCode() => CombineBoost(HashCode.Combine(nameof(TermQuery), Field, Term));
 }

@@ -33,5 +33,6 @@ public sealed class ConstantScoreQuery : Query
         ConstantScore == other.ConstantScore &&
         Boost == other.Boost;
 
+    /// <inheritdoc/>
     public override int GetHashCode() => CombineBoost(HashCode.Combine(nameof(ConstantScoreQuery), Inner, ConstantScore));
 }

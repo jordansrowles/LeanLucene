@@ -32,6 +32,7 @@ public sealed class SpanNotQuery : SpanQuery
         Include.Equals(other.Include) && Exclude.Equals(other.Exclude) &&
         Boost == other.Boost;
 
+    /// <inheritdoc/>
     public override int GetHashCode() =>
         CombineBoost(HashCode.Combine(nameof(SpanNotQuery), Include, Exclude));
 }

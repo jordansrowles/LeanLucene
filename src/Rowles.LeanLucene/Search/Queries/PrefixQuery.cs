@@ -27,5 +27,6 @@ public sealed class PrefixQuery : Query
         string.Equals(Prefix, other.Prefix, StringComparison.Ordinal) &&
         Boost == other.Boost;
 
+    /// <inheritdoc/>
     public override int GetHashCode() => CombineBoost(HashCode.Combine(nameof(PrefixQuery), Field, Prefix));
 }

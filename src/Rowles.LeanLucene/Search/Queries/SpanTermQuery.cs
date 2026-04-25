@@ -28,5 +28,6 @@ public sealed class SpanTermQuery : SpanQuery
         string.Equals(Term, other.Term, StringComparison.Ordinal) &&
         Boost == other.Boost;
 
+    /// <inheritdoc/>
     public override int GetHashCode() => CombineBoost(HashCode.Combine(nameof(SpanTermQuery), Field, Term));
 }

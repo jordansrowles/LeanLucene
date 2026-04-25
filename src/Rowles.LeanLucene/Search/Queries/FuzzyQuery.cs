@@ -43,5 +43,6 @@ public sealed class FuzzyQuery : Query
         string.Equals(Term, other.Term, StringComparison.Ordinal) &&
         MaxEdits == other.MaxEdits && MaxExpansions == other.MaxExpansions && Boost == other.Boost;
 
+    /// <inheritdoc/>
     public override int GetHashCode() => CombineBoost(HashCode.Combine(nameof(FuzzyQuery), Field, Term, MaxEdits, MaxExpansions));
 }

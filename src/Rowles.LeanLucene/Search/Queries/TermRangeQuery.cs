@@ -47,6 +47,7 @@ public sealed class TermRangeQuery : Query
         IncludeUpper == other.IncludeUpper &&
         Boost == other.Boost;
 
+    /// <inheritdoc/>
     public override int GetHashCode() =>
         CombineBoost(HashCode.Combine(nameof(TermRangeQuery), Field, LowerTerm, UpperTerm, IncludeLower, IncludeUpper));
 }

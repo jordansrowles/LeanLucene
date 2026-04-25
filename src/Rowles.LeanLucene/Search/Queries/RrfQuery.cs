@@ -73,12 +73,14 @@ public sealed class RrfQuery : Query
         return new Scoring.TopDocs(scores.Count, sorted.ToArray());
     }
 
+    /// <inheritdoc/>
     public override bool Equals(object? obj) =>
         obj is RrfQuery other &&
         K == other.K && Boost == other.Boost &&
         _queries.Count == other._queries.Count &&
         _queries.SequenceEqual(other._queries);
 
+    /// <inheritdoc/>
     public override int GetHashCode()
     {
         var h = new HashCode();

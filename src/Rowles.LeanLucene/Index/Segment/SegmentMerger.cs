@@ -27,6 +27,10 @@ public sealed class SegmentMerger
     /// <summary>Default postings skip interval.</summary>
     public const int DefaultSkipInterval = 128;
 
+    /// <summary>Initialises a merger bound to the given directory.</summary>
+    /// <param name="directory">The directory holding segment files.</param>
+    /// <param name="mergeThreshold">Number of segments at one tier before a merge is triggered.</param>
+    /// <param name="skipInterval">Postings skip interval used when writing the merged segment.</param>
     public SegmentMerger(MMapDirectory directory, int mergeThreshold = DefaultMergeThreshold, int skipInterval = DefaultSkipInterval)
     {
         _directory = directory;
