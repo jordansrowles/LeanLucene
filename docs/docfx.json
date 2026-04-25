@@ -23,6 +23,9 @@
       },
       {
         "files": [ "tutorials/**.md", "tutorials/**/toc.yml", "tutorials/toc.yml" ]
+      },
+      {
+        "files": [ "benchmarks/*.md", "benchmarks/toc.yml" ]
       }
     ],
     "resource": [],

@@ -6,3 +6,5 @@
 - name: API Reference
   href: api/
   homepage: api/index.md
+- name: Benchmarks
+  href: benchmarks/

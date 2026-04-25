@@ -12,6 +12,9 @@
 .PARAMETER MetadataOnly
     Only generate API metadata (docs/api/*.yml); skip the site build.
 
+.PARAMETER SkipBenchmarks
+    Skip benchmark doc generation (faster builds when bench data has not changed).
+
 .EXAMPLE
     .\scripts\docs.ps1
     Builds the documentation site into ./docs/site.
@@ -23,10 +26,15 @@
 .EXAMPLE
     .\scripts\docs.ps1 -MetadataOnly
     Generates API YAML metadata without building the full site.
+
+.EXAMPLE
+    .\scripts\docs.ps1 -SkipBenchmarks
+    Builds the site without regenerating benchmark pages.
 #>
 param(
     [switch]$Serve,
-    [switch]$MetadataOnly
+    [switch]$MetadataOnly,
+    [switch]$SkipBenchmarks
 )
 
 Set-StrictMode -Version Latest
@@ -49,6 +57,16 @@ if (-not (Get-Command docfx -ErrorAction SilentlyContinue)) {
 } else {
     $version = (docfx --version 2>&1 | Select-Object -First 1)
     Write-Host "docfx found: $version" -ForegroundColor DarkGray
+}
+
+# ── Generate benchmark docs ───────────────────────────────────────────────────
+
+if (-not $SkipBenchmarks) {
+    Write-Host "Generating benchmark pages..." -ForegroundColor Cyan
+    & (Join-Path $PSScriptRoot 'generate-benchmark-docs.ps1')
+    if ($LASTEXITCODE -ne 0) {
+        Write-Warning "Benchmark doc generation failed (exit $LASTEXITCODE). Continuing without benchmark pages."
+    }
 }
 
 # ── Build ─────────────────────────────────────────────────────────────────────
