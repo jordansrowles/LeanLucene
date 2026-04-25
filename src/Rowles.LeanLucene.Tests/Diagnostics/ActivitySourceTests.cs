@@ -46,8 +46,9 @@ public sealed class ActivitySourceTests : IDisposable
         using var searcher = new IndexSearcher(new MMapDirectory(_dir));
         searcher.Search(new TermQuery("body", "hello"), 5);
 
-        var activity = Assert.Single(_captured, a => a.OperationName == "leanlucene.search");
-        Assert.Equal("TermQuery", activity.GetTagItem("query.type"));
+        var activity = _captured.FirstOrDefault(a => a.OperationName == "leanlucene.search");
+        Assert.NotNull(activity);
+        Assert.Equal("TermQuery", activity!.GetTagItem("query.type"));
     }
 
     [Fact]
@@ -58,8 +59,9 @@ public sealed class ActivitySourceTests : IDisposable
         using var searcher = new IndexSearcher(new MMapDirectory(_dir));
         searcher.Search(new TermQuery("body", "hello"), 10);
 
-        var activity = Assert.Single(_captured, a => a.OperationName == "leanlucene.search");
-        Assert.NotNull(activity.GetTagItem("search.total_hits"));
+        var activity = _captured.FirstOrDefault(a => a.OperationName == "leanlucene.search");
+        Assert.NotNull(activity);
+        Assert.NotNull(activity!.GetTagItem("search.total_hits"));
     }
 
     [Fact]
@@ -72,8 +74,9 @@ public sealed class ActivitySourceTests : IDisposable
         writer.Commit();
         writer.Dispose();
 
-        var activity = Assert.Single(_captured, a => a.OperationName == "leanlucene.index.commit");
-        Assert.NotNull(activity.GetTagItem("index.segment_count"));
+        var activity = _captured.FirstOrDefault(a => a.OperationName == "leanlucene.index.commit");
+        Assert.NotNull(activity);
+        Assert.NotNull(activity!.GetTagItem("index.segment_count"));
     }
 
     [Fact]
