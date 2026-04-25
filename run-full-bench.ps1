@@ -1,1 +1,0 @@
-./scripts/benchmark.ps1 -Suite all -Type full -Strat intense
