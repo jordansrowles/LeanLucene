@@ -1,5 +1,8 @@
 - name: Home
   href: index.md
+- name: Tutorials
+  href: tutorials/
+  homepage: tutorials/index.md
 - name: API Reference
   href: api/
   homepage: api/index.md

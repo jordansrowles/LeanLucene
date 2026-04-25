@@ -20,6 +20,9 @@
       },
       {
         "files": [ "*.md", "toc.yml" ]
+      },
+      {
+        "files": [ "tutorials/**.md", "tutorials/**/toc.yml", "tutorials/toc.yml" ]
       }
     ],
     "resource": [],
