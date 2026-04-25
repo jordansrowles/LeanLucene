@@ -1,0 +1,36 @@
+{
+  "metadata": [
+    {
+      "src": [
+        {
+          "files": [ "Rowles.LeanLucene.csproj" ],
+          "src": "../src/Rowles.LeanLucene"
+        }
+      ],
+      "dest": "api",
+      "namespaceLayout": "nested",
+      "memberLayout": "separatePages",
+      "allowCompilationErrors": false
+    }
+  ],
+  "build": {
+    "content": [
+      {
+        "files": [ "api/**.yml", "api/index.md" ]
+      },
+      {
+        "files": [ "*.md", "toc.yml" ]
+      }
+    ],
+    "resource": [],
+    "output": "site",
+    "template": [ "default", "modern" ],
+    "globalMetadata": {
+      "_appTitle": "LeanLucene",
+      "_appName": "LeanLucene",
+      "_appFooter": "LeanLucene: a fast, embeddable full-text search engine for .NET",
+      "_enableSearch": true,
+      "categoryLayout": "nested"
+    }
+  }
+}
