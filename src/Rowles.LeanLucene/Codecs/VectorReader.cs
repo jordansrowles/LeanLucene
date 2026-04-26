@@ -65,6 +65,12 @@ internal sealed class VectorReader : IDisposable
         return vector;
     }
 
+    /// <summary>Vector dimension (number of floats per document).</summary>
+    public int Dimension => _dimension;
+
+    /// <summary>Total number of vectors stored.</summary>
+    public int VectorCount => _vectorCount;
+
     public void Dispose()
     {
         if (_disposed) return;

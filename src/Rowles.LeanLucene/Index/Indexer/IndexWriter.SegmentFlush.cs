@@ -195,11 +195,56 @@ public sealed partial class IndexWriter
 
         if (_bufferedVectors.Count > 0)
         {
-            var vectors = new ReadOnlyMemory<float>[_bufferedDocCount];
-            for (int i = 0; i < _bufferedDocCount; i++)
-                vectors[i] = _bufferedVectors.TryGetValue(i, out var entry) ? entry.Vector : ReadOnlyMemory<float>.Empty;
+            foreach (var (fieldName, perField) in _bufferedVectors)
+            {
+                if (perField.Count == 0) continue;
 
-            VectorWriter.Write(basePath + ".vec", vectors);
+                int dimension = 0;
+                foreach (var v in perField.Values)
+                {
+                    if (v.Length > 0) { dimension = v.Length; break; }
+                }
+                if (dimension == 0) continue;
+
+                if (_config.NormaliseVectors)
+                {
+                    var keys = perField.Keys.ToArray();
+                    foreach (var k in keys)
+                    {
+                        var v = perField[k];
+                        if (v.Length != dimension) continue;
+                        var copy = v.ToArray();
+                        if (Search.SimdVectorOps.NormaliseInPlace(copy))
+                            perField[k] = copy;
+                    }
+                }
+
+                var vecPath = Codecs.VectorFilePaths.VectorFile(basePath, fieldName);
+                Codecs.VectorWriter.WriteField(vecPath, _bufferedDocCount, dimension, perField);
+
+                bool hasHnsw = false;
+                if (_config.BuildHnswOnFlush && perField.Count >= 2)
+                {
+                    var memSource = new Dictionary<int, ReadOnlyMemory<float>>(perField);
+                    var source = new Codecs.InMemoryVectorSource(memSource, dimension);
+                    var docIds = perField.Keys.ToArray();
+                    var graph = Codecs.HnswGraphBuilder.Build(source, docIds, _config.HnswBuildConfig, _config.HnswSeed);
+                    var hnswPath = Codecs.VectorFilePaths.HnswFile(basePath, fieldName);
+                    Codecs.HnswWriter.Write(hnswPath, graph, dimension, _config.NormaliseVectors);
+                    hasHnsw = true;
+                }
+
+                segInfo.VectorFields.Add(new VectorFieldInfo
+                {
+                    FieldName = fieldName,
+                    Dimension = dimension,
+                    Normalised = _config.NormaliseVectors,
+                    HasHnsw = hasHnsw,
+                });
+            }
+
+            // Re-write the seg file now that VectorFields are populated.
+            segInfo.WriteTo(basePath + ".seg");
         }
 
         // Write DocValues column-stride files
@@ -435,16 +480,22 @@ public sealed partial class IndexWriter
             _numericIndex[field] = remapped;
         }
 
-        // 7. Remap vectors
+        // 7. Remap vectors (per field)
         if (_bufferedVectors.Count > 0)
         {
-            var remapped = new Dictionary<int, (string FieldName, ReadOnlyMemory<float> Vector)>(_bufferedVectors.Count);
-            foreach (var (oldDoc, entry) in _bufferedVectors)
+            var newOuter = new Dictionary<string, Dictionary<int, ReadOnlyMemory<float>>>(
+                _bufferedVectors.Count, StringComparer.Ordinal);
+            foreach (var (fieldName, docMap) in _bufferedVectors)
             {
-                if (oldDoc < inversePerm.Length)
-                    remapped[inversePerm[oldDoc]] = entry;
+                var remapped = new Dictionary<int, ReadOnlyMemory<float>>(docMap.Count);
+                foreach (var (oldDoc, vec) in docMap)
+                {
+                    if (oldDoc < inversePerm.Length)
+                        remapped[inversePerm[oldDoc]] = vec;
+                }
+                newOuter[fieldName] = remapped;
             }
-            _bufferedVectors = remapped;
+            _bufferedVectors = newOuter;
         }
     }
 

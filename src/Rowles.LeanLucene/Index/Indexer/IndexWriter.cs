@@ -31,7 +31,8 @@ public sealed partial class IndexWriter : IDisposable
     private List<Dictionary<string, double>> _numericFields = [];
     // Per-field numeric values for range indexing: field → docId → value
     private Dictionary<string, Dictionary<int, double>> _numericIndex = new();
-    private Dictionary<int, (string FieldName, ReadOnlyMemory<float> Vector)> _bufferedVectors = new();
+    private Dictionary<string, Dictionary<int, ReadOnlyMemory<float>>> _bufferedVectors =
+        new(StringComparer.Ordinal);
     private readonly HashSet<string> _termPool = new(4096, StringComparer.Ordinal);
     // Per-field per-doc token counts for O(1) per-field norm computation
     private Dictionary<string, int[]> _docTokenCounts = new(StringComparer.Ordinal);

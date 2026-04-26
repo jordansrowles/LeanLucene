@@ -132,7 +132,10 @@ public sealed class SegmentMerger
         var allFreqs = new Dictionary<string, Dictionary<int, int>>();
         var allStoredFields = new List<Dictionary<string, List<string>>>();
         var allNumericFields = new Dictionary<string, Dictionary<int, double>>();
-        var allVectors = new List<float[]>();
+        var allVectors = new Dictionary<string, Dictionary<int, ReadOnlyMemory<float>>>(StringComparer.Ordinal);
+        var vectorFieldDims = new Dictionary<string, int>(StringComparer.Ordinal);
+        var vectorFieldNormalised = new Dictionary<string, bool>(StringComparer.Ordinal);
+        var vectorFieldHadHnsw = new Dictionary<string, bool>(StringComparer.Ordinal);
         var fieldNames = new HashSet<string>(StringComparer.Ordinal);
 
         // Collect the union of all field names across the source segments.
@@ -299,8 +302,25 @@ public sealed class SegmentMerger
 
                 if (reader.HasVectors)
                 {
-                    var vec = reader.GetVector(oldDocId);
-                    allVectors.Add(vec ?? []);
+                    foreach (var vfName in reader.VectorFieldNames)
+                    {
+                        var vec = reader.GetVector(vfName, oldDocId);
+                        if (vec is null || vec.Length == 0) continue;
+                        if (!allVectors.TryGetValue(vfName, out var perField))
+                        {
+                            perField = new Dictionary<int, ReadOnlyMemory<float>>();
+                            allVectors[vfName] = perField;
+                        }
+                        perField[remapDocId] = vec;
+                        vectorFieldDims[vfName] = vec.Length;
+                        // Carry forward source field metadata when present.
+                        var match = reader.Info.VectorFields.FirstOrDefault(vf => vf.FieldName == vfName);
+                        if (match is not null)
+                        {
+                            vectorFieldNormalised[vfName] = match.Normalised;
+                            vectorFieldHadHnsw[vfName] = vectorFieldHadHnsw.GetValueOrDefault(vfName, false) || match.HasHnsw;
+                        }
+                    }
                 }
                 remapDocId++;
             }
@@ -393,13 +413,34 @@ public sealed class SegmentMerger
         // Write .fdt + .fdx
         StoredFieldsWriter.Write(basePath + ".fdt", basePath + ".fdx", allStoredFields.ToArray());
 
-        // Write .vec if any
-        if (allVectors.Count > 0 && allVectors.Any(v => v.Length > 0))
+        // Per-field vectors and HNSW
+        var mergedVectorFields = new List<VectorFieldInfo>();
+        foreach (var (fieldName, perField) in allVectors)
         {
-            var memVectors = new ReadOnlyMemory<float>[allVectors.Count];
-            for (int i = 0; i < allVectors.Count; i++)
-                memVectors[i] = allVectors[i];
-            VectorWriter.Write(basePath + ".vec", memVectors);
+            if (perField.Count == 0) continue;
+            int dimension = vectorFieldDims[fieldName];
+            bool normalised = vectorFieldNormalised.GetValueOrDefault(fieldName, true);
+
+            var vecPath = Codecs.VectorFilePaths.VectorFile(basePath, fieldName);
+            VectorWriter.WriteField(vecPath, totalDocs, dimension, perField);
+
+            bool hasHnsw = false;
+            if (vectorFieldHadHnsw.GetValueOrDefault(fieldName, false) && perField.Count >= 2)
+            {
+                var src = new InMemoryVectorSource(new Dictionary<int, ReadOnlyMemory<float>>(perField), dimension);
+                var graph = HnswGraphBuilder.Build(src, perField.Keys.ToArray(), new HnswBuildConfig());
+                var hnswPath = Codecs.VectorFilePaths.HnswFile(basePath, fieldName);
+                HnswWriter.Write(hnswPath, graph, dimension, normalised);
+                hasHnsw = true;
+            }
+
+            mergedVectorFields.Add(new VectorFieldInfo
+            {
+                FieldName = fieldName,
+                Dimension = dimension,
+                Normalised = normalised,
+                HasHnsw = hasHnsw,
+            });
         }
 
         // Write .num if any numeric fields
@@ -454,7 +495,8 @@ public sealed class SegmentMerger
             LiveDocCount = totalDocs,
             CommitGeneration = 0,
             FieldNames = fieldNames.ToList(),
-            IndexSortFields = segments[0].IndexSortFields
+            IndexSortFields = segments[0].IndexSortFields,
+            VectorFields = mergedVectorFields,
         };
         mergedInfo.WriteTo(basePath + ".seg");
 

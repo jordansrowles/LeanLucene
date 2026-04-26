@@ -14,6 +14,7 @@ internal static class CodecConstants
     public const byte PostingsVersion = 3;
     public const byte NormsVersion = 1;
     public const byte VectorVersion = 1;
+    public const byte HnswVersion = 1;
     public const byte StoredFieldsVersion = 5; // v5: LZ4 block compression (was v4 Brotli)
     public const byte TermVectorsVersion = 1;
     public const byte NumericDocValuesVersion = 1;

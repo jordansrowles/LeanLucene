@@ -17,15 +17,42 @@ public sealed class VectorQuery : Query
     /// <summary>Gets the maximum number of nearest-neighbour results to return.</summary>
     public int TopK { get; }
 
+    /// <summary>
+    /// HNSW search-time candidate pool size (the <c>ef</c> parameter). Larger values increase recall at
+    /// the cost of latency. Defaults to <c>max(64, 4 * topK)</c>.
+    /// </summary>
+    public int EfSearch { get; }
+
+    /// <summary>
+    /// Exact-rerank oversampling factor. The HNSW shortlist returns <c>topK * OversamplingFactor</c>
+    /// candidates which are then exactly rescored. Default: 1 (no oversampling).
+    /// </summary>
+    public int OversamplingFactor { get; }
+
+    /// <summary>Optional pre-filter restricting candidates to documents whose IDs satisfy the predicate.</summary>
+    public Query? Filter { get; }
+
     /// <summary>Initialises a new <see cref="VectorQuery"/> for the given field and query vector.</summary>
     /// <param name="field">The vector field to search.</param>
     /// <param name="queryVector">The query vector for similarity comparison.</param>
     /// <param name="topK">Maximum number of nearest neighbours to return. Default: 10.</param>
-    public VectorQuery(string field, float[] queryVector, int topK = 10)
+    /// <param name="efSearch">HNSW <c>ef</c> parameter. <c>0</c> selects an automatic default.</param>
+    /// <param name="oversamplingFactor">Multiplier for the HNSW shortlist before exact rerank.</param>
+    /// <param name="filter">Optional pre-filter query that constrains the candidate set.</param>
+    public VectorQuery(
+        string field,
+        float[] queryVector,
+        int topK = 10,
+        int efSearch = 0,
+        int oversamplingFactor = 1,
+        Query? filter = null)
     {
         Field = field;
         QueryVector = queryVector;
         TopK = topK;
+        EfSearch = efSearch > 0 ? efSearch : Math.Max(64, 4 * topK);
+        OversamplingFactor = Math.Max(1, oversamplingFactor);
+        Filter = filter;
     }
 
     /// <inheritdoc/>

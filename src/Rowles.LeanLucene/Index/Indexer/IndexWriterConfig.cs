@@ -132,4 +132,26 @@ public sealed class IndexWriterConfig
     /// Provides backpressure to prevent unbounded segment accumulation. Default: 0 (disabled).
     /// </summary>
     public int MergeThrottleSegments { get; set; }
+
+    /// <summary>
+    /// Whether vector fields should be normalised (L2) at index time. When true, dot product
+    /// equals cosine similarity, enabling cheaper search. Default: <c>true</c>.
+    /// </summary>
+    public bool NormaliseVectors { get; set; } = true;
+
+    /// <summary>
+    /// Build an HNSW graph for every vector field at flush time. Disable to fall back to
+    /// flat brute-force scan (useful for tiny indices where the build overhead outweighs benefit).
+    /// Default: <c>true</c>.
+    /// </summary>
+    public bool BuildHnswOnFlush { get; set; } = true;
+
+    /// <summary>HNSW build configuration applied to every vector field. See <see cref="Codecs.HnswBuildConfig"/>.</summary>
+    public Codecs.HnswBuildConfig HnswBuildConfig { get; set; } = new();
+
+    /// <summary>
+    /// Optional deterministic seed for HNSW graph construction. When null, a random seed is generated
+    /// per segment and persisted into the <c>.hnsw</c> file. Set explicitly for reproducible builds.
+    /// </summary>
+    public long? HnswSeed { get; set; }
 }

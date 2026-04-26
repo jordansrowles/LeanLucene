@@ -287,12 +287,50 @@ public sealed partial class IndexSearcher
         if (!reader.HasVectors) return;
 
         int docBase = reader.DocBase;
+
+        // Try HNSW two-phase search first.
+        var graph = reader.GetHnswGraph(query.Field);
+        if (graph is not null && graph.NodeCount > 0)
+        {
+            int shortlistSize = query.TopK * query.OversamplingFactor;
+            var queryVec = query.QueryVector;
+            float[]? normalisedQuery = null;
+            // If the field stored normalised vectors, the query vector must be normalised too.
+            var fieldInfo = reader.Info.VectorFields.FirstOrDefault(f => f.FieldName == query.Field);
+            if (fieldInfo is not null && fieldInfo.Normalised)
+            {
+                normalisedQuery = (float[])queryVec.Clone();
+                if (!Rowles.LeanLucene.Search.SimdVectorOps.NormaliseInPlace(normalisedQuery))
+                    return;
+            }
+            var searchVec = normalisedQuery ?? queryVec;
+
+            var options = new HnswSearchOptions
+            {
+                Ef = query.EfSearch,
+                TopK = shortlistSize,
+            };
+            var shortlist = graph.Search(searchVec, options);
+            if (shortlist.Count == 0) return;
+
+            foreach (var hit in shortlist)
+            {
+                if (!reader.IsLive(hit.DocId)) continue;
+                var docVector = reader.GetVector(query.Field, hit.DocId);
+                if (docVector is null || docVector.Length == 0) continue;
+                float similarity = VectorQuery.CosineSimilarity(queryVec, docVector);
+                collector.Collect(docBase + hit.DocId, similarity);
+            }
+            return;
+        }
+
+        // Fall back to flat scan when no HNSW graph is present.
         for (int docId = 0; docId < reader.MaxDoc; docId++)
         {
             if (!reader.IsLive(docId)) continue;
 
-            var docVector = reader.GetVector(docId);
-            if (docVector == null || docVector.Length == 0) continue;
+            var docVector = reader.GetVector(query.Field, docId);
+            if (docVector is null || docVector.Length == 0) continue;
 
             float similarity = VectorQuery.CosineSimilarity(query.QueryVector, docVector);
             collector.Collect(docBase + docId, similarity);

@@ -43,7 +43,12 @@ public sealed partial class IndexWriter
                     }
                     break;
                 case VectorField vf:
-                    _bufferedVectors[localDocId] = (vf.Name, vf.Value);
+                    if (!_bufferedVectors.TryGetValue(vf.Name, out var perField))
+                    {
+                        perField = new Dictionary<int, ReadOnlyMemory<float>>();
+                        _bufferedVectors[vf.Name] = perField;
+                    }
+                    perField[localDocId] = vf.Value;
                     break;
                 case GeoPointField gf:
                     IndexNumericField(gf.LatFieldName, gf.Latitude, localDocId);

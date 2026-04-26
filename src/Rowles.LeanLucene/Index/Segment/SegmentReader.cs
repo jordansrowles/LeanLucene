@@ -21,7 +21,9 @@ public sealed partial class SegmentReader : IDisposable
     private readonly StoredFieldsReader? _storedReader;
     private readonly FrozenDictionary<string, byte[]> _fieldNorms;
     private readonly FrozenDictionary<string, int[]> _fieldLengthsPerField;
-    private readonly VectorReader? _vectorReader;
+    private readonly Dictionary<string, VectorReader> _vectorReaders = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, HnswGraph?> _hnswGraphs = new(StringComparer.Ordinal);
+    private readonly object _hnswLoadLock = new();
     private LiveDocs? _liveDocs;
 
     private const int MaxTermOffsetCacheSize = 1024;
@@ -99,9 +101,23 @@ public sealed partial class SegmentReader : IDisposable
             _fieldLengthsPerField = tempLengths.ToFrozenDictionary(StringComparer.Ordinal);
         }
 
-        var vecPath = _basePath + ".vec";
-        if (File.Exists(vecPath))
-            _vectorReader = VectorReader.Open(vecPath);
+        // Vector fields: open per-field .vec eagerly, defer .hnsw to first search.
+        if (info.VectorFields.Count > 0)
+        {
+            foreach (var vf in info.VectorFields)
+            {
+                var perFieldVecPath = VectorFilePaths.VectorFile(_basePath, vf.FieldName);
+                if (File.Exists(perFieldVecPath))
+                    _vectorReaders[vf.FieldName] = VectorReader.Open(perFieldVecPath);
+            }
+        }
+        else
+        {
+            // Legacy single-vector segment: pre-multi-vector layout.
+            var legacyVecPath = _basePath + ".vec";
+            if (File.Exists(legacyVecPath))
+                _vectorReaders[string.Empty] = VectorReader.Open(legacyVecPath);
+        }
 
         // Stage 2 features: numeric index, numeric doc values, and sorted doc values are now lazy-loaded
         // to avoid startup regression for simple TermQuery and BooleanQuery operations
@@ -307,7 +323,8 @@ public sealed partial class SegmentReader : IDisposable
         _posInput.Dispose();
         _dicReader.Dispose();
         _storedReader?.Dispose();
-        _vectorReader?.Dispose();
+        foreach (var r in _vectorReaders.Values) r.Dispose();
+        _vectorReaders.Clear();
         _termVectorsReader?.Dispose();
     }
 

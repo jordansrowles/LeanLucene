@@ -1,4 +1,5 @@
 using System.Runtime.CompilerServices;
+using Rowles.LeanLucene.Codecs;
 using Rowles.LeanLucene.Codecs.DocValues;
 
 namespace Rowles.LeanLucene.Index.Segment;
@@ -97,12 +98,49 @@ public sealed partial class SegmentReader
     }
 
     /// <summary>Returns whether this segment has vector data.</summary>
-    public bool HasVectors => _vectorReader is not null;
+    public bool HasVectors => _vectorReaders.Count > 0;
 
-    /// <summary>Reads the vector for a given document.</summary>
+    /// <summary>Reads the vector for a given document from the first available vector field (legacy convenience).</summary>
     public float[]? GetVector(int docId)
     {
-        return _vectorReader?.ReadVector(docId);
+        foreach (var kv in _vectorReaders)
+            return kv.Value.ReadVector(docId);
+        return null;
+    }
+
+    /// <summary>Reads the vector for a given document on the named vector field.</summary>
+    public float[]? GetVector(string fieldName, int docId)
+    {
+        if (_vectorReaders.TryGetValue(fieldName, out var r))
+            return r.ReadVector(docId);
+        if (string.IsNullOrEmpty(fieldName) && _vectorReaders.Count == 1)
+            return GetVector(docId);
+        return null;
+    }
+
+    /// <summary>Returns the field names with vector data in this segment.</summary>
+    public IReadOnlyCollection<string> VectorFieldNames => _vectorReaders.Keys;
+
+    /// <summary>
+    /// Returns the (lazy-loaded) HNSW graph for the given vector field, or null if no graph exists.
+    /// Thread-safe; the first caller materialises the graph and subsequent callers reuse it.
+    /// </summary>
+    internal HnswGraph? GetHnswGraph(string fieldName)
+    {
+        if (_hnswGraphs.TryGetValue(fieldName, out var cached)) return cached;
+        lock (_hnswLoadLock)
+        {
+            if (_hnswGraphs.TryGetValue(fieldName, out cached)) return cached;
+            var path = VectorFilePaths.HnswFile(_basePath, fieldName);
+            HnswGraph? graph = null;
+            if (File.Exists(path) && _vectorReaders.TryGetValue(fieldName, out var vr))
+            {
+                var src = new VectorReaderSource(vr);
+                graph = HnswReader.Read(path, src);
+            }
+            _hnswGraphs[fieldName] = graph;
+            return graph;
+        }
     }
 
     private static Dictionary<string, Dictionary<int, double>> ReadNumericIndex(string filePath)

@@ -28,6 +28,9 @@ public sealed class SegmentInfo
     /// </summary>
     public List<string>? IndexSortFields { get; init; }
 
+    /// <summary>Per-field vector metadata for vectors stored in this segment.</summary>
+    public List<VectorFieldInfo> VectorFields { get; init; } = [];
+
     /// <summary>Writes this segment metadata to a JSON file at the specified path.</summary>
     /// <param name="filePath">The path of the <c>.seg</c> file to write.</param>
     public void WriteTo(string filePath)
