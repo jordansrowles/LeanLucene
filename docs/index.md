@@ -8,7 +8,7 @@ A fast, embeddable, zero-dependency full-text search engine for .NET. No externa
 JVM, no Lucene. Write an index, run a query, ship your app.
 
 ```bash
-dotnet add package Rowles.LeanLucene
+dotnet add package LeanLucene
 ```
 
 [Get started](tutorials/getting-started/01-installation.md) &nbsp;|&nbsp; [API reference](api/index.md)

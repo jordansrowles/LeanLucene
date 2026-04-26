@@ -3,7 +3,7 @@
 ## Install
 
 ```bash
-dotnet add package Rowles.LeanLucene
+dotnet add package LeanLucene
 ```
 
 Targets `net10.0` and `net11.0`.

@@ -9,8 +9,26 @@
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
   </PropertyGroup>
 
+  <PropertyGroup>
+    <PackageId>LeanLucene</PackageId>
+    <Version>1.0.0</Version>
+    <Authors>Jordan Rowles</Authors>
+    <Description>A .NET-native full-text search engine. Segment-centric indexing, memory-mapped reads, and atomic commit semantics. Targets net10.0 and net11.0.</Description>
+    <PackageTags>search;full-text;lucene;indexing;information-retrieval</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageLicenseFile>LICENCE</PackageLicenseFile>
+    <RepositoryUrl>https://github.com/jordanrowles/LeanLucene</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+  </PropertyGroup>
+
   <ItemGroup>
     <InternalsVisibleTo Include="Rowles.LeanLucene.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\..\README.md" Pack="true" PackagePath="\" />
+    <None Include="..\..\LICENCE" Pack="true" PackagePath="\" />
   </ItemGroup>
 
   <ItemGroup>

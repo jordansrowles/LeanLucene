@@ -1,0 +1,226 @@
+DUAL LICENCE AGREEMENT
+======================
+LeanLucene — Copyright (c) 2026 Jordan Rowles
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+TL;DR
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  - Free for individuals, hobbyists, students, open-source projects, and
+    organisations with under USD $1,000,000 annual revenue. Just keep the
+    attribution.
+  - Organisations at or above USD $1,000,000 annual revenue, or anyone
+    redistributing this as a standalone library / SDK, need a paid
+    Commercial Licence. Email jordansrowles@gmail.com.
+  - Don't strip the licence, don't relicense forks, don't sue over patents,
+    no warranty.
+
+  This summary is for convenience only. The full terms below are
+  authoritative.
+
+This software is made available under a dual licensing model described below.
+By using, copying, modifying, or distributing this software, you agree to the
+terms of the applicable licence tier as determined by your use case.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+TIER 1 — FREE LICENCE (Community & Attribution Licence)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+You qualify for this licence if your organisation, project, or individual
+has a total annual gross revenue of less than USD $1,000,000 (one million
+US dollars) in the preceding twelve (12) months.
+
+This includes (without limitation): non-commercial, educational, personal,
+open-source, hobbyist, and internal-tooling use, as well as commercial use
+by qualifying organisations.
+
+GRANT OF RIGHTS (Tier 1)
+
+Subject to the conditions below, you are granted a worldwide, royalty-free,
+non-exclusive, non-sublicensable licence to:
+
+  1. Use, copy, and run the software for any qualifying purpose;
+  2. Modify the software for your own qualifying use;
+  3. Distribute verbatim or modified copies of the software, provided all
+     distributed copies retain this licence in full and are accompanied by
+     prominent attribution as defined below;
+  4. Incorporate the software as a dependency of open-source projects,
+     provided the attribution requirement below is satisfied in that
+     project's documentation. This clause does not require the host project
+     to adopt this licence.
+
+CONDITIONS (Tier 1)
+
+  ATTRIBUTION REQUIREMENT
+  You must include the following attribution in:
+    - Any software, product, or service that uses or embeds this library;
+    - Any documentation, README, or about screen made available to end users;
+    - Any publication, article, or post that describes or references the library.
+
+  Required attribution text:
+    "LeanLucene by Jordan Rowles (https://github.com/jordansrowles/leanlucene)
+     — used under the Community & Attribution Licence."
+
+  You must not remove, obscure, or alter any existing copyright notice,
+  licence reference, or attribution notice present in the source code or
+  documentation.
+
+  FORK & REDISTRIBUTION REQUIREMENT
+  Any fork, derivative work, or modified distribution of this software must:
+    (a) Carry this full dual licence document without modification;
+    (b) Clearly state that the work is a derivative and identify the original
+        source;
+    (c) Not relicense the work or any portion of it under any other licence
+        without express written permission from Jordan Rowles;
+    (d) Remain subject to the same commercial use restrictions defined herein.
+
+  Forking this repository or copying its source code does not transfer,
+  waive, or modify the licensing obligations of any party. The terms of this
+  agreement apply to all copies, forks, and derivatives regardless of where
+  they are hosted or how they are obtained.
+
+RESTRICTIONS (Tier 1)
+
+  You may NOT, under the Tier 1 licence:
+    - Use the software within an organisation that exceeds the revenue
+      threshold defined above;
+    - Sell, sublicence, or commercially redistribute the software as a
+      standalone library or SDK;
+    - Remove or replace this licence document with any other licence.
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+TIER 2 — COMMERCIAL LICENCE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+You require this licence if any of the following are true:
+
+  (a) Your organisation has an annual gross revenue of USD $1,000,000 or
+      more in the preceding twelve (12) months;
+
+  (b) You wish to redistribute the software as a standalone library or SDK
+      to third parties;
+
+  (c) You wish to use the software without the attribution requirements of
+      Tier 1.
+
+OBTAINING A COMMERCIAL LICENCE
+
+  A Tier 2 Commercial Licence is granted as a one-time, perpetual licence
+  for a single organisation upon payment of the applicable licence fee.
+
+  To obtain a Commercial Licence, contact:
+    Jordan Rowles
+    jordansrowles@gmail.com
+    https://github.com/jordansrowles/leanlucene
+
+  Upon payment and written confirmation from Jordan Rowles, you will receive
+  a signed licence certificate granting Tier 2 rights to your organisation.
+
+GRANT OF RIGHTS (Tier 2)
+
+  Upon receipt of a valid, paid Commercial Licence certificate, the licensed
+  organisation is granted a worldwide, perpetual, irrevocable, royalty-free
+  (post payment), non-sublicensable licence to:
+
+  1. Use, copy, modify, and integrate the software into any commercial
+     product or internal system operated by the licensed organisation;
+  2. Deploy the software in production environments, SaaS products, and
+     customer-facing systems;
+  3. Create and maintain private forks and derivative works for internal use;
+  4. Distribute the software as a compiled or embedded component of a larger
+     product, without separately licensing the standalone library to end
+     users and without the attribution obligations of Tier 1.
+
+CONDITIONS (Tier 2)
+
+  The Commercial Licence:
+    - Is granted to a single legal entity (organisation) and is non-transferable;
+    - Covers all current and future versions of LeanLucene for the licensed
+      organisation;
+    - Does not permit redistribution of the source code as a standalone
+      library under any terms other than this dual licence;
+    - Does not grant the licensee the right to sub-license the software to
+      third parties as a standalone library or SDK.
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+GENERAL TERMS (BOTH TIERS)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+PATENT GRANT
+
+  Each contributor (including Jordan Rowles) hereby grants you a perpetual,
+  worldwide, non-exclusive, royalty-free, irrevocable (except as stated in
+  this section) patent licence to make, have made, use, offer to sell, sell,
+  import, and otherwise transfer the software, where such licence applies
+  only to those patent claims licensable by such contributor that are
+  necessarily infringed by their contribution alone or in combination with
+  the software.
+
+  If you institute patent litigation against any entity (including a
+  cross-claim or counterclaim in a lawsuit) alleging that the software or a
+  contribution constitutes direct or contributory patent infringement, then
+  any patent licences granted to you under this licence terminate as of the
+  date such litigation is filed.
+
+CONTRIBUTIONS
+
+  Unless you explicitly state otherwise, any contribution intentionally
+  submitted for inclusion in the software by you to Jordan Rowles shall be
+  licensed to Jordan Rowles under the terms of this dual licence, without
+  any additional terms or conditions. You retain all right, title, and
+  interest in your contributions.
+
+TRADEMARKS
+
+  This licence does not grant permission to use the trade names, trademarks,
+  service marks, or product names of Jordan Rowles (including "LeanLucene"),
+  except as required for reasonable and customary use in describing the
+  origin of the software and reproducing the attribution notice.
+
+DISCLAIMER OF WARRANTIES
+
+  THIS SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+  OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+  FITNESS FOR A PARTICULAR PURPOSE, TITLE, AND NON-INFRINGEMENT. IN NO EVENT
+  SHALL JORDAN ROWLES BE LIABLE FOR ANY CLAIM, DAMAGES, OR OTHER LIABILITY,
+  WHETHER IN AN ACTION OF CONTRACT, TORT, OR OTHERWISE, ARISING FROM, OUT OF,
+  OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+  SOFTWARE.
+
+LIMITATION OF LIABILITY
+
+  TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, IN NO EVENT SHALL
+  JORDAN ROWLES BE LIABLE FOR ANY INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY,
+  CONSEQUENTIAL, OR PUNITIVE DAMAGES, INCLUDING LOSS OF PROFITS, DATA,
+  GOODWILL, OR BUSINESS INTERRUPTION, HOWEVER CAUSED AND ON ANY THEORY OF
+  LIABILITY, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+TERMINATION
+
+  Your rights under the applicable licence tier terminate automatically if
+  you materially breach its terms and fail to cure the breach within thirty
+  (30) days of receiving written notice from Jordan Rowles. Upon termination,
+  you must cease all use and distribution of the software and destroy all
+  copies in your possession. Termination does not limit Jordan Rowles's
+  right to seek other remedies.
+
+GOVERNING LAW
+
+  This Agreement shall be governed by and construed in accordance with the
+  laws of England and Wales, without regard to its conflict of law provisions.
+  Any disputes arising under this Agreement shall be subject to the exclusive
+  jurisdiction of the courts of England and Wales.
+
+ENTIRE AGREEMENT
+
+  This document constitutes the entire agreement between the parties with
+  respect to the subject matter herein and supersedes all prior or
+  contemporaneous agreements, representations, or understandings. This
+  licence may only be modified in writing signed by Jordan Rowles.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+END OF LICENCE
+Copyright (c) 2026 Jordan Rowles.
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
