@@ -103,7 +103,7 @@ public sealed partial class IndexSearcher
                 ExecutePhraseQuery(pq, reader, ref collector);
                 break;
             case VectorQuery vq:
-                ExecuteVectorQuery(vq, reader, ref collector);
+                ExecuteVectorQuery(vq, reader, globalDFs, ref collector);
                 break;
             case PrefixQuery pfq:
                 ExecutePrefixQuery(pfq, reader, globalDFs, ref collector);

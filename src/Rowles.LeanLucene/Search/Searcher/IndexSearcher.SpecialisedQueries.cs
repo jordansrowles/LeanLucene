@@ -283,36 +283,74 @@ public sealed partial class IndexSearcher
     }
 
     private void ExecuteVectorQuery(VectorQuery query, SegmentReader reader, ref TopNCollector collector)
+        => ExecuteVectorQuery(query, reader, new Dictionary<(string Field, string Term), int>(), ref collector);
+
+    private void ExecuteVectorQuery(
+        VectorQuery query,
+        SegmentReader reader,
+        Dictionary<(string Field, string Term), int> globalDFs,
+        ref TopNCollector collector)
     {
         if (!reader.HasVectors) return;
 
         int docBase = reader.DocBase;
 
-        // Try HNSW two-phase search first.
-        var graph = reader.GetHnswGraph(query.Field);
-        if (graph is not null && graph.NodeCount > 0)
+        // Resolve filter (if any) to a docId bitmap and choose a strategy.
+        Util.RoaringBitmap? filterBitmap = null;
+        if (query.Filter is not null)
         {
-            int shortlistSize = query.TopK * query.OversamplingFactor;
-            var queryVec = query.QueryVector;
-            float[]? normalisedQuery = null;
-            // If the field stored normalised vectors, the query vector must be normalised too.
-            var fieldInfo = reader.Info.VectorFields.FirstOrDefault(f => f.FieldName == query.Field);
-            if (fieldInfo is not null && fieldInfo.Normalised)
+            filterBitmap = ExecuteFilterToBitmap(query.Filter, reader, globalDFs);
+            if (filterBitmap.Cardinality == 0) return;
+        }
+
+        var graph = reader.GetHnswGraph(query.Field);
+        bool hasGraph = graph is not null && graph.NodeCount > 0;
+
+        // Pre-compute query vector (and normalised variant for normalised fields).
+        var queryVec = query.QueryVector;
+        var fieldInfo = reader.Info.VectorFields.FirstOrDefault(f => f.FieldName == query.Field);
+        bool normalised = fieldInfo is not null && fieldInfo.Normalised;
+        float[]? normalisedQuery = null;
+        if (normalised)
+        {
+            normalisedQuery = (float[])queryVec.Clone();
+            if (!Rowles.LeanLucene.Search.SimdVectorOps.NormaliseInPlace(normalisedQuery))
+                return;
+        }
+
+        // Filter strategy selection.
+        if (filterBitmap is not null && hasGraph)
+        {
+            int liveCount = reader.MaxDoc;
+            int matched = filterBitmap.Cardinality;
+            double selectivity = liveCount > 0 ? (double)matched / liveCount : 1.0;
+
+            // Highly selective: brute-force scan only matched docs (cheaper than graph traversal).
+            if (matched < 64 || selectivity < 0.005)
             {
-                normalisedQuery = (float[])queryVec.Clone();
-                if (!Rowles.LeanLucene.Search.SimdVectorOps.NormaliseInPlace(normalisedQuery))
-                    return;
+                BruteForceFilter(query, reader, filterBitmap, queryVec, docBase, ref collector);
+                return;
             }
+
+            // Moderately selective: pre-filter via allow-list.
+            // Loose: post-filter with retry.
+            var bitset = new Util.RoaringBitmapBitSet(filterBitmap);
+            var options = selectivity < 0.05
+                ? new HnswSearchOptions
+                {
+                    Ef = query.EfSearch,
+                    TopK = query.TopK * query.OversamplingFactor,
+                    AllowList = bitset,
+                }
+                : new HnswSearchOptions
+                {
+                    Ef = query.EfSearch,
+                    TopK = query.TopK * query.OversamplingFactor,
+                    PostFilterMask = bitset,
+                };
+
             var searchVec = normalisedQuery ?? queryVec;
-
-            var options = new HnswSearchOptions
-            {
-                Ef = query.EfSearch,
-                TopK = shortlistSize,
-            };
-            var shortlist = graph.Search(searchVec, options);
-            if (shortlist.Count == 0) return;
-
+            var shortlist = graph!.Search(searchVec, options);
             foreach (var hit in shortlist)
             {
                 if (!reader.IsLive(hit.DocId)) continue;
@@ -324,17 +362,89 @@ public sealed partial class IndexSearcher
             return;
         }
 
-        // Fall back to flat scan when no HNSW graph is present.
+        // No filter, but HNSW present: two-phase search.
+        if (hasGraph)
+        {
+            int shortlistSize = query.TopK * query.OversamplingFactor;
+            var options = new HnswSearchOptions
+            {
+                Ef = query.EfSearch,
+                TopK = shortlistSize,
+            };
+            var searchVec = normalisedQuery ?? queryVec;
+            var shortlist = graph!.Search(searchVec, options);
+            if (shortlist.Count == 0) return;
+            foreach (var hit in shortlist)
+            {
+                if (!reader.IsLive(hit.DocId)) continue;
+                var docVector = reader.GetVector(query.Field, hit.DocId);
+                if (docVector is null || docVector.Length == 0) continue;
+                float similarity = VectorQuery.CosineSimilarity(queryVec, docVector);
+                collector.Collect(docBase + hit.DocId, similarity);
+            }
+            return;
+        }
+
+        // Flat-scan fallback (with optional filter).
+        if (filterBitmap is not null)
+        {
+            BruteForceFilter(query, reader, filterBitmap, queryVec, docBase, ref collector);
+            return;
+        }
+
         for (int docId = 0; docId < reader.MaxDoc; docId++)
         {
             if (!reader.IsLive(docId)) continue;
-
             var docVector = reader.GetVector(query.Field, docId);
             if (docVector is null || docVector.Length == 0) continue;
-
-            float similarity = VectorQuery.CosineSimilarity(query.QueryVector, docVector);
+            float similarity = VectorQuery.CosineSimilarity(queryVec, docVector);
             collector.Collect(docBase + docId, similarity);
         }
+    }
+
+    private void BruteForceFilter(
+        VectorQuery query,
+        SegmentReader reader,
+        Util.RoaringBitmap filterBitmap,
+        float[] queryVec,
+        int docBase,
+        ref TopNCollector collector)
+    {
+        for (int docId = 0; docId < reader.MaxDoc; docId++)
+        {
+            if (!filterBitmap.Contains(docId)) continue;
+            if (!reader.IsLive(docId)) continue;
+            var docVector = reader.GetVector(query.Field, docId);
+            if (docVector is null || docVector.Length == 0) continue;
+            float similarity = VectorQuery.CosineSimilarity(queryVec, docVector);
+            collector.Collect(docBase + docId, similarity);
+        }
+    }
+
+    private Util.RoaringBitmap ExecuteFilterToBitmap(
+        Query filter,
+        SegmentReader reader,
+        Dictionary<(string Field, string Term), int> globalDFs)
+    {
+        int cap = Math.Max(reader.MaxDoc, 1);
+        var inner = new TopNCollector(cap);
+        int savedDocBase = reader.DocBase;
+        try
+        {
+            // Execute filter against this segment with docBase=0 so collected ids are local.
+            reader.DocBase = 0;
+            ExecuteQuery(filter, reader, globalDFs, ref inner);
+        }
+        finally
+        {
+            reader.DocBase = savedDocBase;
+        }
+
+        var bitmap = new Util.RoaringBitmap();
+        var topDocs = inner.ToTopDocs();
+        foreach (var sd in topDocs.ScoreDocs)
+            bitmap.Add(sd.DocId);
+        return bitmap;
     }
 
     private void ExecuteFunctionScoreQuery(FunctionScoreQuery query, SegmentReader reader,
