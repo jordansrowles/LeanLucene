@@ -11,10 +11,65 @@ public sealed class StopWordFilter : ITokenFilter
     /// <summary>Built-in English stop word list.</summary>
     public static readonly IReadOnlyList<string> DefaultStopWords =
     [
-        "a", "an", "and", "are", "as", "at", "be", "but", "by",
-        "for", "if", "in", "into", "is", "it", "no", "of",
-        "on", "or", "such", "that", "the", "their", "then", "there",
-        "these", "they", "this", "to", "was", "will", "with", "through"
+        // Articles & determiners
+        "a", "an", "another", "any", "each", "either",
+        "every", "many", "more", "most", "much",
+        "neither", "no", "other", "some",
+        "that", "the", "these", "this", "those",
+        "what", "which", "whose",
+
+        // Conjunctions
+        "although", "and", "as", "because", "both",
+        "but", "if", "nor", "or", "since",
+        "so", "than", "though", "unless", "until",
+        "whether", "while", "yet",
+
+        // Prepositions
+        "about", "above", "across", "after", "against",
+        "along", "among", "around", "at", "before",
+        "behind", "below", "between", "beyond", "by",
+        "down", "during", "for", "from", "in",
+        "into", "near", "of", "off", "on",
+        "onto", "out", "over", "per", "through",
+        "to", "toward", "under", "until", "up",
+        "upon", "via", "with", "within", "without",
+
+        // Pronouns
+        "he", "her", "hers", "herself", "him",
+        "himself", "his", "i", "it", "its",
+        "itself", "me", "my", "myself", "our",
+        "ours", "ourselves", "she", "them", "their",
+        "theirs", "themselves", "they", "us", "we",
+        "who", "whom", "you", "your", "yours",
+        "yourself", "yourselves",
+
+        // "To be"
+        "am", "are", "be", "been", "being", "is", "was", "were",
+
+        // "To have"
+        "had", "has", "have", "having",
+
+        // "To do"
+        "did", "do", "does", "doing",
+
+        // Modals
+        "can", "could", "may", "might", "must",
+        "ought", "shall", "should", "will", "would",
+
+        // Adverbs & high-frequency words
+        "again", "all", "also", "both", "few",
+        "further", "here", "however", "how", "just",
+        "not", "now", "once", "only", "own",
+        "re", "same", "so", "still", "then",
+        "there", "too", "very", "when", "where",
+        "why",
+
+        // Negation fragments (post-tokenisation apostrophe stripping)
+        "ain", "aren", "couldn", "didn", "doesn",
+        "don", "hadn", "hasn", "haven", "isn",
+        "ll", "mightn", "mustn", "needn", "shan",
+        "shouldn", "t", "ve", "wasn", "weren",
+        "won", "wouldn"
     ];
 
     private readonly FrozenSet<string> _stopWords;
