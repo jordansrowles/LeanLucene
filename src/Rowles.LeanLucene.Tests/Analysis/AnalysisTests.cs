@@ -47,12 +47,12 @@ public sealed class AnalysisTests
     [Fact]
     public void StopWordFilter_RemovesCommonWords()
     {
-        // Analyse "to be or not to be" — only "not" should survive.
+        // "to", "be", "or", "not" are all stop words; only "live" survives.
         var analyser = new StandardAnalyser();
-        var tokens = analyser.Analyse("to be or not to be".AsSpan());
+        var tokens = analyser.Analyse("to be or not to live".AsSpan());
 
         Assert.Single(tokens);
-        Assert.Equal("not", tokens[0].Text.ToString());
+        Assert.Equal("live", tokens[0].Text.ToString());
     }
 
     [Fact]
