@@ -175,8 +175,7 @@ public sealed partial class IndexSearcher : IDisposable
         activity?.SetTag("search.total_hits", result.TotalHits);
 
         _config.SlowQueryLog?.MaybeLog(query, sw.Elapsed, result.TotalHits);
-        _config.SearchAnalytics?.Record(query, sw.Elapsed, result.TotalHits,
-            _queryCache is not null && _queryCache.TryGet(query, topN) is not null);
+        _config.SearchAnalytics?.Record(query, sw.Elapsed, result.TotalHits, cacheHit: false);
 
         _queryCache?.Put(query, topN, result);
         return result;
