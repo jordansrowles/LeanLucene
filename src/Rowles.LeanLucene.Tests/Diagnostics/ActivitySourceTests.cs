@@ -9,13 +9,21 @@ namespace Rowles.LeanLucene.Tests.Diagnostics;
 /// Verifies that <see cref="LeanLuceneActivitySource"/> emits activities with the expected names
 /// and tags for Search, Commit, Flush, and Merge operations.
 /// </summary>
+/// <remarks>
+/// Each test scopes its captures to a per-test parent activity. The listener captures every
+/// activity from the production source, but the assertions only consider activities whose
+/// <see cref="Activity.RootId"/> matches the test's parent. This isolates the assertions from
+/// any other test in the suite that emits activities from the same source in parallel.
+/// </remarks>
 public sealed class ActivitySourceTests : IDisposable
 {
     private const string SourceName = "Rowles.LeanLucene";
+    private const string TestSourceName = "Rowles.LeanLucene.Tests.ActivityScope";
 
     private readonly string _dir;
     private readonly ConcurrentBag<Activity> _captured = [];
     private readonly ActivityListener _listener;
+    private readonly ActivitySource _testSource = new(TestSourceName);
 
     public ActivitySourceTests()
     {
@@ -24,7 +32,7 @@ public sealed class ActivitySourceTests : IDisposable
 
         _listener = new ActivityListener
         {
-            ShouldListenTo = src => src.Name == SourceName,
+            ShouldListenTo = src => src.Name == SourceName || src.Name == TestSourceName,
             Sample = (ref ActivityCreationOptions<ActivityContext> _) => ActivitySamplingResult.AllDataAndRecorded,
             ActivityStopped = a => _captured.Add(a)
         };
@@ -34,19 +42,31 @@ public sealed class ActivitySourceTests : IDisposable
     public void Dispose()
     {
         _listener.Dispose();
+        _testSource.Dispose();
         foreach (var a in _captured) a.Dispose();
         try { if (Directory.Exists(_dir)) Directory.Delete(_dir, true); } catch { }
     }
 
+    /// <summary>
+    /// Starts a parent activity used as the scoping anchor for the test. Production activities
+    /// started while this is current become children, sharing <see cref="Activity.RootId"/>.
+    /// </summary>
+    private Activity StartScope([System.Runtime.CompilerServices.CallerMemberName] string name = "")
+        => _testSource.StartActivity(name) ?? throw new InvalidOperationException("Test scope activity could not be started.");
+
+    private IEnumerable<Activity> Scoped(Activity scope)
+        => _captured.Where(a => a.RootId == scope.RootId && a.Source.Name == SourceName);
+
     [Fact]
     public void Search_EmitsActivity_WithQueryTypeTag()
     {
+        using var scope = StartScope();
         using var writer = CreateAndPopulateIndex();
 
         using var searcher = new IndexSearcher(new MMapDirectory(_dir));
         searcher.Search(new TermQuery("body", "hello"), 5);
 
-        var activity = _captured.FirstOrDefault(a => a.OperationName == "leanlucene.search");
+        var activity = Scoped(scope).FirstOrDefault(a => a.OperationName == "leanlucene.search");
         Assert.NotNull(activity);
         Assert.Equal("TermQuery", activity!.GetTagItem("query.type"));
     }
@@ -54,12 +74,13 @@ public sealed class ActivitySourceTests : IDisposable
     [Fact]
     public void Search_EmitsActivity_WithTotalHitsTag()
     {
+        using var scope = StartScope();
         using var writer = CreateAndPopulateIndex();
 
         using var searcher = new IndexSearcher(new MMapDirectory(_dir));
         searcher.Search(new TermQuery("body", "hello"), 10);
 
-        var activity = _captured.FirstOrDefault(a => a.OperationName == "leanlucene.search");
+        var activity = Scoped(scope).FirstOrDefault(a => a.OperationName == "leanlucene.search");
         Assert.NotNull(activity);
         Assert.NotNull(activity!.GetTagItem("search.total_hits"));
     }
@@ -67,6 +88,7 @@ public sealed class ActivitySourceTests : IDisposable
     [Fact]
     public void Commit_EmitsActivity_WithSegmentCountTag()
     {
+        using var scope = StartScope();
         using var writer = new IndexWriter(new MMapDirectory(_dir), new IndexWriterConfig());
         var doc = new LeanDocument();
         doc.Add(new TextField("body", "commit activity test"));
@@ -74,7 +96,7 @@ public sealed class ActivitySourceTests : IDisposable
         writer.Commit();
         writer.Dispose();
 
-        var activity = _captured.FirstOrDefault(a => a.OperationName == "leanlucene.index.commit");
+        var activity = Scoped(scope).FirstOrDefault(a => a.OperationName == "leanlucene.index.commit");
         Assert.NotNull(activity);
         Assert.NotNull(activity!.GetTagItem("index.segment_count"));
     }
@@ -82,6 +104,7 @@ public sealed class ActivitySourceTests : IDisposable
     [Fact]
     public void Flush_EmitsActivity_WithDocCountTag()
     {
+        using var scope = StartScope();
         using var writer = new IndexWriter(new MMapDirectory(_dir), new IndexWriterConfig());
         var doc = new LeanDocument();
         doc.Add(new TextField("body", "flush activity test"));
@@ -89,7 +112,7 @@ public sealed class ActivitySourceTests : IDisposable
         writer.Commit();
         writer.Dispose();
 
-        var activity = _captured.FirstOrDefault(a => a.OperationName == "leanlucene.index.flush");
+        var activity = Scoped(scope).FirstOrDefault(a => a.OperationName == "leanlucene.index.flush");
         Assert.NotNull(activity);
         Assert.NotNull(activity.GetTagItem("index.doc_count"));
     }
@@ -97,10 +120,11 @@ public sealed class ActivitySourceTests : IDisposable
     [Fact]
     public void Activities_HaveCorrectSourceName()
     {
+        using var scope = StartScope();
         using var writer = CreateAndPopulateIndex();
         writer.Dispose();
 
-        var snapshot = _captured.ToList();
+        var snapshot = Scoped(scope).ToList();
         Assert.NotEmpty(snapshot);
         Assert.All(snapshot, a => Assert.Equal(SourceName, a.Source.Name));
     }
