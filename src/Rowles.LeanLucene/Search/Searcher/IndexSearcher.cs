@@ -32,6 +32,7 @@ public sealed partial class IndexSearcher : IDisposable
     public Diagnostics.IMetricsCollector Metrics => _config.Metrics;
 
     /// <summary>Exposes the underlying segment readers for advanced use (e.g., spelling suggestions).</summary>
+    [System.ComponentModel.EditorBrowsable(System.ComponentModel.EditorBrowsableState.Never)]
     internal IReadOnlyList<SegmentReader> GetSegmentReaders() => _readers;
 
     /// <summary>Calculates the on-disk size of the index.</summary>
