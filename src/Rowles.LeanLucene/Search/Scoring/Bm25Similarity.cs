@@ -1,4 +1,4 @@
-namespace Rowles.LeanLucene.Search.Scoring;
+﻿namespace Rowles.LeanLucene.Search.Scoring;
 
 /// <summary>BM25 scoring (default). Delegates to <see cref="Bm25Scorer"/>.</summary>
 public sealed class Bm25Similarity : ISimilarity

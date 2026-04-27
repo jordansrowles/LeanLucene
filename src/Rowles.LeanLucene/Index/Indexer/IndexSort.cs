@@ -1,6 +1,4 @@
-using Rowles.LeanLucene.Search.Scoring;
-
-namespace Rowles.LeanLucene.Index.Indexer;
+﻿namespace Rowles.LeanLucene.Index.Indexer;
 
 /// <summary>
 /// Defines the sort order applied to documents within a segment at flush time.

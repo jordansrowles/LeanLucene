@@ -1,12 +1,4 @@
-using Rowles.LeanLucene.Codecs;
-using Rowles.LeanLucene.Codecs.Hnsw;
-using Rowles.LeanLucene.Codecs.Fst;
-using Rowles.LeanLucene.Codecs.Bkd;
-using Rowles.LeanLucene.Codecs.Vectors;
-using Rowles.LeanLucene.Codecs.TermVectors;
-using Rowles.LeanLucene.Codecs.TermDictionary;
-using Rowles.LeanLucene.Codecs.Postings;
-using Rowles.LeanLucene.Codecs.StoredFields;
+﻿using Rowles.LeanLucene.Codecs.TermDictionary;
 using Rowles.LeanLucene.Store;
 
 namespace Rowles.LeanLucene.Index.Indexer;

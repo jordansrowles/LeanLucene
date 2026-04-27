@@ -1,6 +1,4 @@
-using Rowles.LeanLucene.Analysis.Filters;
-
-namespace Rowles.LeanLucene.Analysis;
+﻿namespace Rowles.LeanLucene.Analysis;
 
 /// <summary>
 /// Stop word lists for common languages.
@@ -241,19 +239,19 @@ public static class StopWords
 
         return tag switch
         {
-            "en"            => English,
-            "fr"            => French,
-            "de"            => German,
-            "es"            => Spanish,
-            "it"            => Italian,
-            "pt"            => Portuguese,
-            "nl"            => Dutch,
-            "ru"            => Russian,
-            "ar"            => Arabic,
-            "zh"            => Chinese,
-            "ja"            => Japanese,
-            "ko"            => Korean,
-            _               => null
+            "en" => English,
+            "fr" => French,
+            "de" => German,
+            "es" => Spanish,
+            "it" => Italian,
+            "pt" => Portuguese,
+            "nl" => Dutch,
+            "ru" => Russian,
+            "ar" => Arabic,
+            "zh" => Chinese,
+            "ja" => Japanese,
+            "ko" => Korean,
+            _ => null
         };
     }
 

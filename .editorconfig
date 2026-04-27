@@ -1,0 +1,15 @@
+root = true
+
+[*.cs]
+indent_style = space
+indent_size = 4
+end_of_line = crlf
+charset = utf-8-bom
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+# Unused using directives are an error.
+dotnet_diagnostic.IDE0005.severity = error
+
+# Required so IDE0005 fires during build (not just in IDE).
+dotnet_style_remove_unused_suppressions = true

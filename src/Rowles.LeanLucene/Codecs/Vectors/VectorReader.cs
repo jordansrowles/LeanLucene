@@ -1,13 +1,4 @@
-using System.IO.MemoryMappedFiles;
-using System.Runtime.InteropServices;
-
-using Rowles.LeanLucene.Codecs;
-using Rowles.LeanLucene.Codecs.Hnsw;
-using Rowles.LeanLucene.Codecs.Fst;
-using Rowles.LeanLucene.Codecs.Bkd;
-using Rowles.LeanLucene.Codecs.Vectors;
-using Rowles.LeanLucene.Codecs.TermVectors;
-using Rowles.LeanLucene.Codecs.TermDictionary;
+﻿using System.IO.MemoryMappedFiles;
 namespace Rowles.LeanLucene.Codecs.Vectors;
 
 /// <summary>
@@ -38,7 +29,7 @@ internal sealed class VectorReader : IDisposable
         var accessor = mmf.CreateViewAccessor(0, 0, MemoryMappedFileAccess.Read);
 
         long offset = 0;
-        
+
         // Validate header: magic (4 bytes) + version (1 byte)
         int magic = accessor.ReadInt32(offset);
         offset += 4;
@@ -46,7 +37,7 @@ internal sealed class VectorReader : IDisposable
             throw new InvalidDataException(
                 $"Invalid vector file: expected magic 0x{CodecConstants.Magic:X8}, got 0x{magic:X8}. " +
                 "The file may be corrupted or from an incompatible version.");
-        
+
         byte version = accessor.ReadByte(offset);
         offset += 1;
         if (version > CodecConstants.VectorVersion)

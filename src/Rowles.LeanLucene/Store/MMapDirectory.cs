@@ -1,4 +1,4 @@
-namespace Rowles.LeanLucene.Store;
+﻿namespace Rowles.LeanLucene.Store;
 
 /// <summary>
 /// Primary directory implementation using memory-mapped files for reads

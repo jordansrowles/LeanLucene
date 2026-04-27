@@ -1,4 +1,4 @@
-namespace Rowles.LeanLucene.Document.Fields;
+﻿namespace Rowles.LeanLucene.Document.Fields;
 
 /// <summary>Dense float vector for semantic and RAG workloads.</summary>
 public sealed class VectorField : IField

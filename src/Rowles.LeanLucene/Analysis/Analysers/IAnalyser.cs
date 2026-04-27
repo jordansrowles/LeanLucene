@@ -1,8 +1,4 @@
-using Rowles.LeanLucene.Analysis;
-using Rowles.LeanLucene.Analysis.Filters;
-using Rowles.LeanLucene.Analysis.Tokenisers;
-using Rowles.LeanLucene.Analysis.Stemmers;
-namespace Rowles.LeanLucene.Analysis.Analysers;
+﻿namespace Rowles.LeanLucene.Analysis.Analysers;
 
 /// <summary>
 /// Analyses input text into a list of tokens for indexing or querying.

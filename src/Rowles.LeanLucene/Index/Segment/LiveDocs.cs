@@ -1,4 +1,4 @@
-using Rowles.LeanLucene.Util;
+﻿using Rowles.LeanLucene.Util;
 
 namespace Rowles.LeanLucene.Index.Segment;
 

@@ -1,4 +1,4 @@
-namespace Rowles.LeanLucene.Analysis;
+﻿namespace Rowles.LeanLucene.Analysis;
 
 /// <summary>
 /// Represents a single token produced by the analysis pipeline,

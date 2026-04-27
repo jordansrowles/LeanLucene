@@ -1,4 +1,4 @@
-namespace Rowles.LeanLucene.Search.Suggestions;
+﻿namespace Rowles.LeanLucene.Search.Suggestions;
 
 /// <summary>
 /// A spelling correction suggestion with its edit distance and document frequency score.

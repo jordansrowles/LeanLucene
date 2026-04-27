@@ -1,4 +1,4 @@
-using Rowles.LeanLucene.Store;
+﻿using Rowles.LeanLucene.Store;
 
 namespace Rowles.LeanLucene.Codecs.Postings;
 

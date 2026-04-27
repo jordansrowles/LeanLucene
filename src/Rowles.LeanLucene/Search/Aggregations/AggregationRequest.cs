@@ -1,4 +1,4 @@
-namespace Rowles.LeanLucene.Search.Aggregations;
+﻿namespace Rowles.LeanLucene.Search.Aggregations;
 
 /// <summary>
 /// Describes a numeric aggregation to compute alongside a search query.

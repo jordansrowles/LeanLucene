@@ -1,4 +1,4 @@
-namespace Rowles.LeanLucene.Diagnostics;
+﻿namespace Rowles.LeanLucene.Diagnostics;
 
 /// <summary>
 /// No-op metrics collector — the default when no metrics are configured.

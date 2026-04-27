@@ -1,4 +1,4 @@
-namespace Rowles.LeanLucene.Util;
+﻿namespace Rowles.LeanLucene.Util;
 
 /// <summary>
 /// Narrow read-only abstraction over a set of document identifiers.

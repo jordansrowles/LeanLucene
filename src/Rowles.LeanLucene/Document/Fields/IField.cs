@@ -1,4 +1,4 @@
-namespace Rowles.LeanLucene.Document.Fields;
+﻿namespace Rowles.LeanLucene.Document.Fields;
 
 /// <summary>Defines the contract for a document field.</summary>
 public interface IField

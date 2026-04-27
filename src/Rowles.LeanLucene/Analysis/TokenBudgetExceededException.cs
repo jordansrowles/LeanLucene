@@ -1,4 +1,4 @@
-namespace Rowles.LeanLucene.Analysis;
+﻿namespace Rowles.LeanLucene.Analysis;
 
 /// <summary>
 /// Thrown when <see cref="TokenBudgetPolicy.Reject"/> is active and a document exceeds the token budget.

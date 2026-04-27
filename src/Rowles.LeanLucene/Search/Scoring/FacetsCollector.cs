@@ -1,4 +1,4 @@
-namespace Rowles.LeanLucene.Search.Scoring;
+﻿namespace Rowles.LeanLucene.Search.Scoring;
 
 /// <summary>
 /// Collects per-field value counts across a result set for faceted navigation.

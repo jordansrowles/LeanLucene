@@ -1,4 +1,4 @@
-namespace Rowles.LeanLucene.Search.Aggregations;
+﻿namespace Rowles.LeanLucene.Search.Aggregations;
 
 /// <summary>Supported aggregation types.</summary>
 public enum AggregationType

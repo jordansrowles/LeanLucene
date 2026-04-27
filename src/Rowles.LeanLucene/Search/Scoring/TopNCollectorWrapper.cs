@@ -1,4 +1,4 @@
-namespace Rowles.LeanLucene.Search.Scoring;
+﻿namespace Rowles.LeanLucene.Search.Scoring;
 
 /// <summary>
 /// Wraps a <see cref="TopNCollector"/> struct as an <see cref="ICollector"/> for

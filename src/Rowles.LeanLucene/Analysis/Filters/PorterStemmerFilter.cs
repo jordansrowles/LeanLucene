@@ -1,4 +1,4 @@
-namespace Rowles.LeanLucene.Analysis.Filters;
+﻿namespace Rowles.LeanLucene.Analysis.Filters;
 
 /// <summary>
 /// Porter Stemming Algorithm implementation as an ITokenFilter.

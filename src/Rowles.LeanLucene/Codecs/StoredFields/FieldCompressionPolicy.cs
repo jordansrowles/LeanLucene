@@ -1,4 +1,4 @@
-namespace Rowles.LeanLucene.Codecs.StoredFields;
+﻿namespace Rowles.LeanLucene.Codecs.StoredFields;
 
 /// <summary>
 /// Compression algorithm for stored fields.

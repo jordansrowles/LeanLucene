@@ -1,4 +1,4 @@
-namespace Rowles.LeanLucene.Analysis;
+﻿namespace Rowles.LeanLucene.Analysis;
 
 /// <summary>
 /// Transforms a token list in place (e.g. lowercase, stop-word removal, stemming).

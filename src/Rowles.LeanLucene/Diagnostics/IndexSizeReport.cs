@@ -1,4 +1,4 @@
-namespace Rowles.LeanLucene.Diagnostics;
+﻿namespace Rowles.LeanLucene.Diagnostics;
 
 /// <summary>Overall index size report.</summary>
 public sealed class IndexSizeReport

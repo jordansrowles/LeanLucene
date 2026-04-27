@@ -1,11 +1,6 @@
-using System.Runtime.CompilerServices;
+﻿using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Runtime.Intrinsics;
-
-using Rowles.LeanLucene.Search;
-using Rowles.LeanLucene.Search.Simd;
-using Rowles.LeanLucene.Search.Parsing;
-using Rowles.LeanLucene.Search.Highlighting;
 namespace Rowles.LeanLucene.Search.Simd;
 
 /// <summary>

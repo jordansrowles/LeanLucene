@@ -1,4 +1,4 @@
-namespace Rowles.LeanLucene.Search.Scoring;
+﻿namespace Rowles.LeanLucene.Search.Scoring;
 
 /// <summary>Specifies the data type and sort behaviour for a field-based sort criterion.</summary>
 public enum SortFieldType

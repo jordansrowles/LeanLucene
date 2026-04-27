@@ -1,4 +1,4 @@
-namespace Rowles.LeanLucene.Search.Scoring;
+﻿namespace Rowles.LeanLucene.Search.Scoring;
 
 /// <summary>
 /// BM25 scorer. Computes relevance scores for term matches.

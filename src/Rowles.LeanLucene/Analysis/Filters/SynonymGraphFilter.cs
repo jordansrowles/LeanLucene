@@ -1,4 +1,4 @@
-namespace Rowles.LeanLucene.Analysis.Filters;
+﻿namespace Rowles.LeanLucene.Analysis.Filters;
 
 /// <summary>
 /// Token filter that supports multi-token synonym expansion using a trie-based

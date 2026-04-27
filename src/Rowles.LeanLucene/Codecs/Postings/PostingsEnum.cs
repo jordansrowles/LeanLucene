@@ -1,4 +1,4 @@
-using System.Buffers;
+﻿using System.Buffers;
 using System.Runtime.CompilerServices;
 using Rowles.LeanLucene.Store;
 
@@ -692,7 +692,8 @@ public unsafe struct PostingsEnum : IDisposable
     }
 
     /// <summary>Returns all rented buffers back to <see cref="System.Buffers.ArrayPool{T}"/>.</summary>
-    public void Dispose()    {
+    public void Dispose()
+    {
         if (_disposed) return;
         _disposed = true;
 

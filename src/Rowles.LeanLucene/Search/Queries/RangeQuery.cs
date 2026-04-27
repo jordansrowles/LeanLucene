@@ -1,4 +1,4 @@
-namespace Rowles.LeanLucene.Search.Queries;
+﻿namespace Rowles.LeanLucene.Search.Queries;
 
 /// <summary>
 /// Numeric range filter over NumericField values.

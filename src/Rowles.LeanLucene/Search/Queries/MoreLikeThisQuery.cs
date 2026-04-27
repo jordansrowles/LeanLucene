@@ -1,4 +1,4 @@
-namespace Rowles.LeanLucene.Search.Queries;
+﻿namespace Rowles.LeanLucene.Search.Queries;
 
 /// <summary>
 /// Finds documents similar to a source document by extracting significant terms

@@ -1,6 +1,4 @@
-using Rowles.LeanLucene.Analysis.Filters;
-
-namespace Rowles.LeanLucene.Analysis.Stemmers;
+﻿namespace Rowles.LeanLucene.Analysis.Stemmers;
 
 /// <summary>
 /// English stemmer wrapping the existing Porter stemmer implementation.

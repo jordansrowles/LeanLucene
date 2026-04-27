@@ -1,4 +1,4 @@
-namespace Rowles.LeanLucene.Util;
+﻿namespace Rowles.LeanLucene.Util;
 
 /// <summary>
 /// <see cref="IBitSet"/> adapter over a <see cref="RoaringBitmap"/>.

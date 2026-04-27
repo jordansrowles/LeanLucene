@@ -1,4 +1,4 @@
-namespace Rowles.LeanLucene.Index.Indexer;
+﻿namespace Rowles.LeanLucene.Index.Indexer;
 
 /// <summary>
 /// Thrown when a document fails <see cref="IndexSchema"/> validation.

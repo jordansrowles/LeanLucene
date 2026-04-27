@@ -1,11 +1,4 @@
-using Rowles.LeanLucene.Codecs;
-using Rowles.LeanLucene.Codecs.Hnsw;
-using Rowles.LeanLucene.Codecs.Fst;
-using Rowles.LeanLucene.Codecs.Bkd;
-using Rowles.LeanLucene.Codecs.Vectors;
-using Rowles.LeanLucene.Codecs.TermVectors;
-using Rowles.LeanLucene.Codecs.TermDictionary;
-namespace Rowles.LeanLucene.Codecs.Hnsw;
+﻿namespace Rowles.LeanLucene.Codecs.Hnsw;
 
 /// <summary>
 /// Per-call HNSW search statistics. <see cref="NodesVisited"/> is the primary recall-vs-cost

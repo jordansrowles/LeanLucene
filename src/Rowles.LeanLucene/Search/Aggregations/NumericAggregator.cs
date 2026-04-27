@@ -1,4 +1,4 @@
-namespace Rowles.LeanLucene.Search.Aggregations;
+﻿namespace Rowles.LeanLucene.Search.Aggregations;
 
 /// <summary>
 /// Computes numeric aggregations over matching documents using numeric doc values.

@@ -1,4 +1,4 @@
-namespace Rowles.LeanLucene.Codecs.Postings;
+﻿namespace Rowles.LeanLucene.Codecs.Postings;
 
 /// <summary>
 /// Writes delta-encoded postings lists for a given term.

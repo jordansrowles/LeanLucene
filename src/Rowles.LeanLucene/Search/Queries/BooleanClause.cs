@@ -1,4 +1,4 @@
-namespace Rowles.LeanLucene.Search.Queries;
+﻿namespace Rowles.LeanLucene.Search.Queries;
 
 /// <summary>
 /// Pairs a <see cref="Query"/> with an <see cref="Search.Occur"/> specifying how it participates in a <see cref="BooleanQuery"/>.

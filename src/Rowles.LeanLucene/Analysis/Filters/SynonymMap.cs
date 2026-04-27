@@ -1,4 +1,4 @@
-namespace Rowles.LeanLucene.Analysis.Filters;
+﻿namespace Rowles.LeanLucene.Analysis.Filters;
 
 /// <summary>
 /// Trie-based synonym map supporting multi-token source phrases.

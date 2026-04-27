@@ -1,6 +1,4 @@
-using System.Diagnostics;
-
-namespace Rowles.LeanLucene.Diagnostics;
+﻿namespace Rowles.LeanLucene.Diagnostics;
 
 /// <summary>
 /// Interface for collecting operational metrics from IndexSearcher, IndexWriter, and QueryCache.

@@ -1,10 +1,4 @@
-using Rowles.LeanLucene.Analysis;
-using Rowles.LeanLucene.Analysis.Analysers;
-
-using Rowles.LeanLucene.Search;
-using Rowles.LeanLucene.Search.Simd;
-using Rowles.LeanLucene.Search.Parsing;
-using Rowles.LeanLucene.Search.Highlighting;
+﻿using Rowles.LeanLucene.Analysis.Analysers;
 namespace Rowles.LeanLucene.Search.Highlighting;
 
 /// <summary>

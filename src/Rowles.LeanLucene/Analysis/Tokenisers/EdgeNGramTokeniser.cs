@@ -1,7 +1,6 @@
-namespace Rowles.LeanLucene.Analysis.Tokenisers;
+﻿namespace Rowles.LeanLucene.Analysis.Tokenisers;
 
 using Rowles.LeanLucene.Analysis;
-using Rowles.LeanLucene.Analysis.Analysers;
 
 /// <summary>
 /// Splits text into character substrings of length [<see cref="MinGram"/>, <see cref="MaxGram"/>]
@@ -21,7 +20,7 @@ public sealed class EdgeNGramTokeniser : ITokeniser
     /// Gets the maximum n-gram length (inclusive).
     /// </summary>
     public int MaxGram { get; }
-    
+
     // Intern cache to reduce string allocations for repeated edge n-grams
     private readonly Dictionary<int, string> _internCache = new();
     private const int MaxInternCacheSize = 2048;

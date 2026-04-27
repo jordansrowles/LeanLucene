@@ -1,4 +1,4 @@
-using Rowles.LeanLucene.Store;
+﻿using Rowles.LeanLucene.Store;
 
 namespace Rowles.LeanLucene.Codecs.DocValues;
 
@@ -13,9 +13,9 @@ internal static class SortedDocValuesReader
         if (!File.Exists(filePath)) return result;
 
         using var input = new IndexInput(filePath);
-        
+
         CodecConstants.ValidateHeader(input, CodecConstants.SortedDocValuesVersion, "sorted doc values (.dvs)");
-        
+
         int fieldCount = input.ReadInt32();
 
         for (int f = 0; f < fieldCount; f++)

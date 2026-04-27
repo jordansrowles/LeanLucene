@@ -1,4 +1,4 @@
-namespace Rowles.LeanLucene.Search.Queries;
+﻿namespace Rowles.LeanLucene.Search.Queries;
 
 /// <summary>
 /// Matches terms using wildcard patterns (* = any chars, ? = single char).

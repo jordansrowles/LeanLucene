@@ -1,4 +1,4 @@
-namespace Rowles.LeanLucene.Diagnostics;
+﻿namespace Rowles.LeanLucene.Diagnostics;
 
 /// <summary>
 /// Point-in-time snapshot of operational metrics.

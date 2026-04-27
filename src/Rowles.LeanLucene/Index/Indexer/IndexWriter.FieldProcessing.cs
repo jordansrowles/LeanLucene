@@ -1,10 +1,5 @@
-using System.Runtime.CompilerServices;
-using Rowles.LeanLucene.Analysis;
-using Rowles.LeanLucene.Analysis.Analysers;
-using Rowles.LeanLucene.Codecs.DocValues;
+﻿using System.Runtime.CompilerServices;
 using Rowles.LeanLucene.Document;
-using Rowles.LeanLucene.Document.Fields;
-using Rowles.LeanLucene.Store;
 
 namespace Rowles.LeanLucene.Index.Indexer;
 

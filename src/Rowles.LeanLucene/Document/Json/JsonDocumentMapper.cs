@@ -1,5 +1,4 @@
-using System.Text.Json;
-using Rowles.LeanLucene.Document.Fields;
+﻿using System.Text.Json;
 
 namespace Rowles.LeanLucene.Document.Json;
 
@@ -73,7 +72,7 @@ public static class JsonDocumentMapper
                 doc.Add(new StringField(prefix, "false"));
                 break;
 
-            // Null and Undefined are intentionally skipped
+                // Null and Undefined are intentionally skipped
         }
     }
 }

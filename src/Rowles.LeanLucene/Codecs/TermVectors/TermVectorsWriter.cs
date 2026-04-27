@@ -1,11 +1,4 @@
-using Rowles.LeanLucene.Codecs;
-using Rowles.LeanLucene.Codecs.Hnsw;
-using Rowles.LeanLucene.Codecs.Fst;
-using Rowles.LeanLucene.Codecs.Bkd;
-using Rowles.LeanLucene.Codecs.Vectors;
-using Rowles.LeanLucene.Codecs.TermVectors;
-using Rowles.LeanLucene.Codecs.TermDictionary;
-namespace Rowles.LeanLucene.Codecs.TermVectors;
+﻿namespace Rowles.LeanLucene.Codecs.TermVectors;
 
 /// <summary>
 /// Writes per-document term vectors to .tvd (data) and .tvx (offset index) files.
@@ -48,9 +41,9 @@ internal static class TermVectorsWriter
         // Write .tvx index
         using var tvxFs = new FileStream(tvxPath, FileMode.Create, FileAccess.Write, FileShare.None);
         using var tvxWriter = new BinaryWriter(tvxFs, System.Text.Encoding.UTF8, leaveOpen: false);
-        
+
         CodecConstants.WriteHeader(tvxWriter, CodecConstants.TermVectorsVersion);
-        
+
         tvxWriter.Write(docs.Count);
         foreach (var offset in offsets)
             tvxWriter.Write(offset);

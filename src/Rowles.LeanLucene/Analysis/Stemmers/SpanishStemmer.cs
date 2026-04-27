@@ -1,4 +1,4 @@
-namespace Rowles.LeanLucene.Analysis.Stemmers;
+﻿namespace Rowles.LeanLucene.Analysis.Stemmers;
 
 /// <summary>
 /// Spanish Snowball-inspired stemmer. Handles common Spanish inflectional and

@@ -1,6 +1,4 @@
-using Rowles.LeanLucene.Document.Fields;
-
-namespace Rowles.LeanLucene.Document;
+﻿namespace Rowles.LeanLucene.Document;
 
 /// <summary>A document is a bag of fields. Nothing more.</summary>
 public sealed class LeanDocument

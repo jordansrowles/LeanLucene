@@ -1,7 +1,4 @@
-using System.Text.Json;
-using Rowles.LeanLucene.Store;
-
-namespace Rowles.LeanLucene.Index;
+﻿namespace Rowles.LeanLucene.Index;
 
 /// <summary>
 /// Result of an <see cref="IndexValidator.Validate"/> call.

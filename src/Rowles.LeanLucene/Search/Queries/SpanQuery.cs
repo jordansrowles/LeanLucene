@@ -1,4 +1,4 @@
-namespace Rowles.LeanLucene.Search.Queries;
+﻿namespace Rowles.LeanLucene.Search.Queries;
 
 /// <summary>Base type for position-aware queries that produce spans.</summary>
 public abstract class SpanQuery : Query

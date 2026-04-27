@@ -1,4 +1,4 @@
-namespace Rowles.LeanLucene.Analysis.Tokenisers;
+﻿namespace Rowles.LeanLucene.Analysis.Tokenisers;
 
 using Rowles.LeanLucene.Analysis;
 using Rowles.LeanLucene.Analysis.Analysers;

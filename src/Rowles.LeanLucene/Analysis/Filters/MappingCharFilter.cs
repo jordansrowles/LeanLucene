@@ -1,4 +1,4 @@
-namespace Rowles.LeanLucene.Analysis.Filters;
+﻿namespace Rowles.LeanLucene.Analysis.Filters;
 
 /// <summary>
 /// Maps specific characters or strings to replacements using a lookup table.

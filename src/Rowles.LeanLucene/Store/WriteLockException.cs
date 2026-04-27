@@ -1,4 +1,4 @@
-namespace Rowles.LeanLucene.Store;
+﻿namespace Rowles.LeanLucene.Store;
 
 /// <summary>
 /// Thrown when an <see cref="Rowles.LeanLucene.Index.Indexer.IndexWriter"/> cannot acquire the

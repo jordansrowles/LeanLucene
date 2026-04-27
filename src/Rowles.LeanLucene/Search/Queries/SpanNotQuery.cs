@@ -1,4 +1,4 @@
-namespace Rowles.LeanLucene.Search.Queries;
+﻿namespace Rowles.LeanLucene.Search.Queries;
 
 /// <summary>
 /// Matches spans from <see cref="Include"/> that do not overlap with any span from <see cref="Exclude"/>.

@@ -1,14 +1,7 @@
-using System.Buffers;
-using System.Runtime.CompilerServices;
-using Rowles.LeanLucene.Analysis;
-using Rowles.LeanLucene.Analysis.Analysers;
-using Rowles.LeanLucene.Codecs.Postings;
+﻿using Rowles.LeanLucene.Analysis.Analysers;
 using Rowles.LeanLucene.Index;
 using Rowles.LeanLucene.Store;
-
-using Rowles.LeanLucene.Search.Simd;
 using Rowles.LeanLucene.Search.Parsing;
-using Rowles.LeanLucene.Search.Highlighting;
 namespace Rowles.LeanLucene.Search.Searcher;
 
 /// <summary>
@@ -419,65 +412,65 @@ public sealed partial class IndexSearcher : IDisposable
         switch (query)
         {
             case TermQuery tq:
-            {
-                var qt = string.Concat(tq.Field, "\x00", tq.Term);
-                using var pe = reader.GetPostingsEnum(qt);
-                while (pe.MoveNext())
-                    bits[pe.DocId] = true;
-                break;
-            }
-            case BooleanQuery bq:
-            {
-                System.Collections.BitArray? mustResult = null;
-                System.Collections.BitArray? scratch = null;
-
-                foreach (var clause in bq.Clauses)
                 {
-                    if (clause.Occur == Occur.MustNot) continue;
+                    var qt = string.Concat(tq.Field, "\x00", tq.Term);
+                    using var pe = reader.GetPostingsEnum(qt);
+                    while (pe.MoveNext())
+                        bits[pe.DocId] = true;
+                    break;
+                }
+            case BooleanQuery bq:
+                {
+                    System.Collections.BitArray? mustResult = null;
+                    System.Collections.BitArray? scratch = null;
 
-                    if (clause.Occur == Occur.Must && mustResult is null)
+                    foreach (var clause in bq.Clauses)
                     {
-                        // First MUST clause owns its BitArray for the AND chain
-                        mustResult = new System.Collections.BitArray(bits.Length);
-                        CollectChildDocsIntoBitArray(clause.Query, reader, mustResult);
+                        if (clause.Occur == Occur.MustNot) continue;
+
+                        if (clause.Occur == Occur.Must && mustResult is null)
+                        {
+                            // First MUST clause owns its BitArray for the AND chain
+                            mustResult = new System.Collections.BitArray(bits.Length);
+                            CollectChildDocsIntoBitArray(clause.Query, reader, mustResult);
+                        }
+                        else
+                        {
+                            // Reuse scratch for SHOULD and subsequent MUST clauses
+                            scratch ??= new System.Collections.BitArray(bits.Length);
+                            scratch.SetAll(false);
+                            CollectChildDocsIntoBitArray(clause.Query, reader, scratch);
+
+                            if (clause.Occur == Occur.Must)
+                                mustResult!.And(scratch);
+                            else // Should
+                                bits.Or(scratch);
+                        }
                     }
-                    else
+                    if (mustResult is not null) bits.Or(mustResult);
+
+                    foreach (var clause in bq.Clauses)
                     {
-                        // Reuse scratch for SHOULD and subsequent MUST clauses
+                        if (clause.Occur != Occur.MustNot) continue;
                         scratch ??= new System.Collections.BitArray(bits.Length);
                         scratch.SetAll(false);
                         CollectChildDocsIntoBitArray(clause.Query, reader, scratch);
-
-                        if (clause.Occur == Occur.Must)
-                            mustResult!.And(scratch);
-                        else // Should
-                            bits.Or(scratch);
+                        bits.And(scratch.Not());
                     }
+                    break;
                 }
-                if (mustResult is not null) bits.Or(mustResult);
-
-                foreach (var clause in bq.Clauses)
-                {
-                    if (clause.Occur != Occur.MustNot) continue;
-                    scratch ??= new System.Collections.BitArray(bits.Length);
-                    scratch.SetAll(false);
-                    CollectChildDocsIntoBitArray(clause.Query, reader, scratch);
-                    bits.And(scratch.Not());
-                }
-                break;
-            }
             default:
-            {
-                // Fallback for complex child queries: full query execution
-                var globalDFs = PrecomputeGlobalDocFreqs(query);
-                var segCollector = new TopNCollector(reader.MaxDoc);
-                ExecuteQuery(query, reader, globalDFs, ref segCollector);
-                int docBase = reader.DocBase;
-                var childDocs = segCollector.ToTopDocs();
-                foreach (var sd in childDocs.ScoreDocs)
-                    bits[sd.DocId - docBase] = true;
-                break;
-            }
+                {
+                    // Fallback for complex child queries: full query execution
+                    var globalDFs = PrecomputeGlobalDocFreqs(query);
+                    var segCollector = new TopNCollector(reader.MaxDoc);
+                    ExecuteQuery(query, reader, globalDFs, ref segCollector);
+                    int docBase = reader.DocBase;
+                    var childDocs = segCollector.ToTopDocs();
+                    foreach (var sd in childDocs.ScoreDocs)
+                        bits[sd.DocId - docBase] = true;
+                    break;
+                }
         }
     }
 
@@ -522,8 +515,8 @@ public sealed partial class IndexSearcher : IDisposable
                 foreach (var d in dmq.Disjuncts)
                     CollectTerms(d, terms);
                 break;
-            // Expansion queries (prefix/wildcard/fuzzy/range/regexp) resolve terms at execution
-            // time per-segment, so no static term collection is needed here.
+                // Expansion queries (prefix/wildcard/fuzzy/range/regexp) resolve terms at execution
+                // time per-segment, so no static term collection is needed here.
         }
     }
 

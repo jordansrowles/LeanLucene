@@ -1,4 +1,4 @@
-namespace Rowles.LeanLucene.Diagnostics;
+﻿namespace Rowles.LeanLucene.Diagnostics;
 
 /// <summary>Per-segment size breakdown.</summary>
 public sealed class SegmentSizeReport

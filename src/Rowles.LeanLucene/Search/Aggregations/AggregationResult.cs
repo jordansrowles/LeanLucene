@@ -1,4 +1,4 @@
-namespace Rowles.LeanLucene.Search.Aggregations;
+﻿namespace Rowles.LeanLucene.Search.Aggregations;
 
 /// <summary>
 /// Result of a numeric aggregation over matching documents.

@@ -1,4 +1,4 @@
-namespace Rowles.LeanLucene.Index.Segment;
+﻿namespace Rowles.LeanLucene.Index.Segment;
 
 /// <summary>
 /// A point-in-time, read-only snapshot of the committed segments.

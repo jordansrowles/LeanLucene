@@ -1,4 +1,4 @@
-namespace Rowles.LeanLucene.Search;
+﻿namespace Rowles.LeanLucene.Search;
 
 /// <summary>
 /// Base class for all query types.

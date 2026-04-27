@@ -1,4 +1,4 @@
-namespace Rowles.LeanLucene.Analysis.Filters;
+﻿namespace Rowles.LeanLucene.Analysis.Filters;
 
 /// <summary>
 /// Performs an in-place lowercase transformation on tokens or a character buffer.

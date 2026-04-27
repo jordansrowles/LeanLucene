@@ -1,4 +1,4 @@
-using Rowles.LeanLucene.Store;
+﻿using Rowles.LeanLucene.Store;
 
 namespace Rowles.LeanLucene.Codecs.DocValues;
 
@@ -13,9 +13,9 @@ internal static class NumericDocValuesWriter
     public static void Write(string filePath, IReadOnlyDictionary<string, double[]> fields, int docCount, bool durable = false)
     {
         using var output = new IndexOutput(filePath, durable);
-        
+
         CodecConstants.WriteHeader(output, CodecConstants.NumericDocValuesVersion);
-        
+
         output.WriteInt32(fields.Count);
 
         foreach (var (fieldName, values) in fields)

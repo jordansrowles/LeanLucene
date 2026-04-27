@@ -1,18 +1,8 @@
-using System.Collections.Frozen;
+﻿using System.Collections.Frozen;
 using System.Text.RegularExpressions;
 using Rowles.LeanLucene.Search;
-using Rowles.LeanLucene.Search.Simd;
-using Rowles.LeanLucene.Search.Parsing;
-using Rowles.LeanLucene.Search.Highlighting;
 using Rowles.LeanLucene.Store;
-
-using Rowles.LeanLucene.Codecs;
-using Rowles.LeanLucene.Codecs.Hnsw;
 using Rowles.LeanLucene.Codecs.Fst;
-using Rowles.LeanLucene.Codecs.Bkd;
-using Rowles.LeanLucene.Codecs.Vectors;
-using Rowles.LeanLucene.Codecs.TermVectors;
-using Rowles.LeanLucene.Codecs.TermDictionary;
 namespace Rowles.LeanLucene.Codecs.TermDictionary;
 
 /// <summary>

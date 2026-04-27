@@ -1,4 +1,4 @@
-using System.IO.MemoryMappedFiles;
+﻿using System.IO.MemoryMappedFiles;
 using System.Text;
 
 namespace Rowles.LeanLucene.Codecs.DocValues;
@@ -19,7 +19,7 @@ internal static class NormsReader
         using var accessor = mmf.CreateViewAccessor(0, fileInfo.Length, MemoryMappedFileAccess.Read);
 
         long offset = 0;
-        
+
         // Validate header: magic (4 bytes) + version (1 byte)
         int magic = accessor.ReadInt32(offset);
         offset += 4;
@@ -27,7 +27,7 @@ internal static class NormsReader
             throw new InvalidDataException(
                 $"Invalid norms file: expected magic 0x{CodecConstants.Magic:X8}, got 0x{magic:X8}. " +
                 "The file may be corrupted or from an incompatible version.");
-        
+
         byte version = accessor.ReadByte(offset);
         offset += 1;
         if (version > CodecConstants.NormsVersion)
@@ -35,7 +35,7 @@ internal static class NormsReader
                 $"Unsupported norms format version {version}. " +
                 $"This build supports up to version {CodecConstants.NormsVersion}. " +
                 "Please upgrade LeanLucene.");
-        
+
         int fieldCount = accessor.ReadInt32(offset);
         offset += 4;
 

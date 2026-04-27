@@ -1,5 +1,4 @@
-using Rowles.LeanLucene.Codecs.Postings;
-using Rowles.LeanLucene.Store;
+﻿using Rowles.LeanLucene.Store;
 
 namespace Rowles.LeanLucene.Index.Segment;
 

@@ -1,4 +1,4 @@
-namespace Rowles.LeanLucene.Diagnostics;
+﻿namespace Rowles.LeanLucene.Diagnostics;
 
 /// <summary>
 /// A single search event captured by <see cref="SearchAnalytics"/>.

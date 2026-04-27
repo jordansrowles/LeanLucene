@@ -1,5 +1,4 @@
-using System.Runtime.CompilerServices;
-using Rowles.LeanLucene.Codecs.Postings;
+﻿using System.Runtime.CompilerServices;
 
 namespace Rowles.LeanLucene.Search.Scoring;
 

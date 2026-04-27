@@ -1,4 +1,4 @@
-namespace Rowles.LeanLucene.Analysis.Stemmers;
+﻿namespace Rowles.LeanLucene.Analysis.Stemmers;
 
 /// <summary>
 /// Arabic light stemmer. Removes common Arabic prefixes and suffixes without

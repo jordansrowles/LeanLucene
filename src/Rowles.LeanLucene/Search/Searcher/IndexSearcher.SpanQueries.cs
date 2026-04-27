@@ -1,10 +1,4 @@
-using Rowles.LeanLucene.Codecs.Postings;
-using Rowles.LeanLucene.Index;
-
-using Rowles.LeanLucene.Search.Simd;
-using Rowles.LeanLucene.Search.Parsing;
-using Rowles.LeanLucene.Search.Highlighting;
-namespace Rowles.LeanLucene.Search.Searcher;
+﻿namespace Rowles.LeanLucene.Search.Searcher;
 
 /// <summary>
 /// Partial class containing span query execution logic (SpanNear, SpanOr, SpanNot).
@@ -127,81 +121,81 @@ public sealed partial class IndexSearcher
         switch (query)
         {
             case SpanTermQuery stq:
-            {
-                var qt = stq.CachedQualifiedTerm ??= string.Concat(stq.Field, "\x00", stq.Term);
-                using var pe = reader.GetPostingsEnumWithPositions(qt);
-                while (pe.MoveNext())
                 {
-                    var positions = pe.GetCurrentPositions();
-                    foreach (int pos in positions)
-                        spans.Add(new Span(pe.DocId, pos, pos + 1));
+                    var qt = stq.CachedQualifiedTerm ??= string.Concat(stq.Field, "\x00", stq.Term);
+                    using var pe = reader.GetPostingsEnumWithPositions(qt);
+                    while (pe.MoveNext())
+                    {
+                        var positions = pe.GetCurrentPositions();
+                        foreach (int pos in positions)
+                            spans.Add(new Span(pe.DocId, pos, pos + 1));
+                    }
+                    break;
                 }
-                break;
-            }
             case SpanNearQuery snq:
-            {
-                // Recursive: collect matching spans
-                var clauseSpans = new List<List<Span>>(snq.Clauses.Count);
-                foreach (var clause in snq.Clauses)
-                    clauseSpans.Add(CollectSpans(clause, reader));
-                
-                var commonDocs = new HashSet<int>();
-                foreach (var span in clauseSpans[0])
-                    commonDocs.Add(span.DocId);
-                for (int i = 1; i < clauseSpans.Count; i++)
                 {
-                    var docIds = new HashSet<int>();
-                    foreach (var span in clauseSpans[i])
-                        docIds.Add(span.DocId);
-                    commonDocs.IntersectWith(docIds);
-                }
+                    // Recursive: collect matching spans
+                    var clauseSpans = new List<List<Span>>(snq.Clauses.Count);
+                    foreach (var clause in snq.Clauses)
+                        clauseSpans.Add(CollectSpans(clause, reader));
 
-                foreach (int docId in commonDocs)
-                {
-                    var clausePositions = new List<List<int>>(clauseSpans.Count);
-                    foreach (var clauseSpanList in clauseSpans)
+                    var commonDocs = new HashSet<int>();
+                    foreach (var span in clauseSpans[0])
+                        commonDocs.Add(span.DocId);
+                    for (int i = 1; i < clauseSpans.Count; i++)
                     {
-                        var positions = new List<int>();
-                        foreach (var sp in clauseSpanList)
-                            if (sp.DocId == docId) positions.Add(sp.Start);
-                        positions.Sort();
-                        clausePositions.Add(positions);
+                        var docIds = new HashSet<int>();
+                        foreach (var span in clauseSpans[i])
+                            docIds.Add(span.DocId);
+                        commonDocs.IntersectWith(docIds);
                     }
-                    if (CheckNearConstraint(clausePositions, snq.Slop, snq.InOrder))
+
+                    foreach (int docId in commonDocs)
                     {
-                        int minPos = int.MaxValue;
-                        int maxPos = int.MinValue;
-                        foreach (var positions in clausePositions)
+                        var clausePositions = new List<List<int>>(clauseSpans.Count);
+                        foreach (var clauseSpanList in clauseSpans)
                         {
-                            foreach (int p in positions)
-                            {
-                                if (p < minPos) minPos = p;
-                                if (p > maxPos) maxPos = p;
-                            }
+                            var positions = new List<int>();
+                            foreach (var sp in clauseSpanList)
+                                if (sp.DocId == docId) positions.Add(sp.Start);
+                            positions.Sort();
+                            clausePositions.Add(positions);
                         }
-                        spans.Add(new Span(docId, minPos, maxPos + 1));
+                        if (CheckNearConstraint(clausePositions, snq.Slop, snq.InOrder))
+                        {
+                            int minPos = int.MaxValue;
+                            int maxPos = int.MinValue;
+                            foreach (var positions in clausePositions)
+                            {
+                                foreach (int p in positions)
+                                {
+                                    if (p < minPos) minPos = p;
+                                    if (p > maxPos) maxPos = p;
+                                }
+                            }
+                            spans.Add(new Span(docId, minPos, maxPos + 1));
+                        }
                     }
+                    break;
                 }
-                break;
-            }
             case SpanOrQuery soq:
                 foreach (var clause in soq.Clauses)
                     spans.AddRange(CollectSpans(clause, reader));
                 break;
             case SpanNotQuery snotq:
-            {
-                var includeSpans = CollectSpans(snotq.Include, reader);
-                var excludeSpans = CollectSpans(snotq.Exclude, reader);
-                var excludedDocs = new HashSet<int>();
-                foreach (var s in excludeSpans)
-                    excludedDocs.Add(s.DocId);
-                foreach (var span in includeSpans)
                 {
-                    if (!excludedDocs.Contains(span.DocId))
-                        spans.Add(span);
+                    var includeSpans = CollectSpans(snotq.Include, reader);
+                    var excludeSpans = CollectSpans(snotq.Exclude, reader);
+                    var excludedDocs = new HashSet<int>();
+                    foreach (var s in excludeSpans)
+                        excludedDocs.Add(s.DocId);
+                    foreach (var span in includeSpans)
+                    {
+                        if (!excludedDocs.Contains(span.DocId))
+                            spans.Add(span);
+                    }
+                    break;
                 }
-                break;
-            }
         }
         return spans;
     }

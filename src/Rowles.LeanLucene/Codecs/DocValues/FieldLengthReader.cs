@@ -1,4 +1,4 @@
-using System.Text;
+﻿using System.Text;
 using Rowles.LeanLucene.Store;
 
 namespace Rowles.LeanLucene.Codecs.DocValues;

@@ -1,4 +1,4 @@
-namespace Rowles.LeanLucene.Analysis.Stemmers;
+﻿namespace Rowles.LeanLucene.Analysis.Stemmers;
 
 /// <summary>
 /// German Snowball-inspired stemmer. Handles common German inflectional and
@@ -31,7 +31,7 @@ public sealed class GermanStemmer : IStemmer
                 case 'ö': buf[len++] = 'o'; break;
                 case 'ü': buf[len++] = 'u'; break;
                 case 'ß': buf[len++] = 's'; buf[len++] = 's'; break;
-                default:  buf[len++] = ch; break;
+                default: buf[len++] = ch; break;
             }
         }
 

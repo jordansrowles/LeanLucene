@@ -1,11 +1,4 @@
-using Rowles.LeanLucene.Analysis.Stemmers;
-using Rowles.LeanLucene.Analysis.Tokenisers;
-
-using Rowles.LeanLucene.Analysis;
-using Rowles.LeanLucene.Analysis.Filters;
-using Rowles.LeanLucene.Analysis.Tokenisers;
-using Rowles.LeanLucene.Analysis.Stemmers;
-namespace Rowles.LeanLucene.Analysis.Analysers;
+﻿namespace Rowles.LeanLucene.Analysis.Analysers;
 
 /// <summary>
 /// Factory for creating language-specific analysers.
@@ -38,18 +31,18 @@ public static class AnalyserFactory
 
         return tag switch
         {
-            "en" => new LanguageAnalyser(new Tokeniser(), StopWords.English,    new EnglishStemmer()),
-            "fr" => new LanguageAnalyser(new Tokeniser(), StopWords.French,     new FrenchStemmer()),
-            "de" => new LanguageAnalyser(new Tokeniser(), StopWords.German,     new GermanStemmer()),
-            "es" => new LanguageAnalyser(new Tokeniser(), StopWords.Spanish,    new SpanishStemmer()),
-            "it" => new LanguageAnalyser(new Tokeniser(), StopWords.Italian,    new ItalianStemmer()),
+            "en" => new LanguageAnalyser(new Tokeniser(), StopWords.English, new EnglishStemmer()),
+            "fr" => new LanguageAnalyser(new Tokeniser(), StopWords.French, new FrenchStemmer()),
+            "de" => new LanguageAnalyser(new Tokeniser(), StopWords.German, new GermanStemmer()),
+            "es" => new LanguageAnalyser(new Tokeniser(), StopWords.Spanish, new SpanishStemmer()),
+            "it" => new LanguageAnalyser(new Tokeniser(), StopWords.Italian, new ItalianStemmer()),
             "pt" => new LanguageAnalyser(new Tokeniser(), StopWords.Portuguese, new PortugueseStemmer()),
-            "nl" => new LanguageAnalyser(new Tokeniser(), StopWords.Dutch,      new DutchStemmer()),
-            "ru" => new LanguageAnalyser(new Tokeniser(), StopWords.Russian,    new RussianStemmer()),
-            "ar" => new LanguageAnalyser(new Tokeniser(), StopWords.Arabic,     new ArabicStemmer()),
-            "zh" => new LanguageAnalyser(new CJKBigramTokeniser(), StopWords.Chinese,  stemmer: null),
+            "nl" => new LanguageAnalyser(new Tokeniser(), StopWords.Dutch, new DutchStemmer()),
+            "ru" => new LanguageAnalyser(new Tokeniser(), StopWords.Russian, new RussianStemmer()),
+            "ar" => new LanguageAnalyser(new Tokeniser(), StopWords.Arabic, new ArabicStemmer()),
+            "zh" => new LanguageAnalyser(new CJKBigramTokeniser(), StopWords.Chinese, stemmer: null),
             "ja" => new LanguageAnalyser(new CJKBigramTokeniser(), StopWords.Japanese, stemmer: null),
-            "ko" => new LanguageAnalyser(new CJKBigramTokeniser(), StopWords.Korean,   stemmer: null),
+            "ko" => new LanguageAnalyser(new CJKBigramTokeniser(), StopWords.Korean, stemmer: null),
             _ => throw new NotSupportedException(
                 $"Language '{languageCode}' is not supported. Supported: {string.Join(", ", SupportedLanguages)}.")
         };

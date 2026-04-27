@@ -1,4 +1,4 @@
-namespace Rowles.LeanLucene.Document.Fields;
+﻿namespace Rowles.LeanLucene.Document.Fields;
 
 /// <summary>Full-text field passed through the analyser pipeline.</summary>
 public sealed class TextField : IField

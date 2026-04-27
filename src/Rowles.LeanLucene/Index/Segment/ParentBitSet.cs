@@ -1,4 +1,4 @@
-namespace Rowles.LeanLucene.Index.Segment;
+﻿namespace Rowles.LeanLucene.Index.Segment;
 
 /// <summary>
 /// A bitset tracking which document IDs within a segment are parent documents.

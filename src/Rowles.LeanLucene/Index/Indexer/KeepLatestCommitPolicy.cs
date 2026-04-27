@@ -1,4 +1,4 @@
-namespace Rowles.LeanLucene.Index.Indexer;
+﻿namespace Rowles.LeanLucene.Index.Indexer;
 
 /// <summary>Keeps only the latest commit, deleting all older segments_N and stats_N files.</summary>
 public sealed class KeepLatestCommitPolicy : IIndexDeletionPolicy

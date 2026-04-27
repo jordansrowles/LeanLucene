@@ -1,4 +1,4 @@
-namespace Rowles.LeanLucene.Codecs;
+﻿namespace Rowles.LeanLucene.Codecs;
 
 /// <summary>
 /// Shared magic number and format version constants for all codec file types.

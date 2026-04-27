@@ -1,7 +1,4 @@
-using Rowles.LeanLucene.Search.Simd;
-using Rowles.LeanLucene.Search.Parsing;
-using Rowles.LeanLucene.Search.Highlighting;
-namespace Rowles.LeanLucene.Search.Searcher;
+﻿namespace Rowles.LeanLucene.Search.Searcher;
 
 /// <summary>
 /// Configuration for the IndexSearcher.

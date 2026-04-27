@@ -1,4 +1,4 @@
-namespace Rowles.LeanLucene.Document.Fields;
+﻿namespace Rowles.LeanLucene.Document.Fields;
 
 /// <summary>Exact-match field stored as-is, not passed through the analyser.</summary>
 public sealed class StringField : IField

@@ -1,4 +1,4 @@
-namespace Rowles.LeanLucene.Analysis;
+﻿namespace Rowles.LeanLucene.Analysis;
 
 /// <summary>
 /// Determines what happens when a document exceeds <see cref="Index.Indexer.IndexWriterConfig.MaxTokensPerDocument"/>.

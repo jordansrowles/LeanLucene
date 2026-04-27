@@ -1,4 +1,4 @@
-namespace Rowles.LeanLucene.Analysis.Stemmers;
+﻿namespace Rowles.LeanLucene.Analysis.Stemmers;
 
 /// <summary>
 /// Dutch Snowball-inspired stemmer. Handles common Dutch inflectional and

@@ -1,4 +1,4 @@
-namespace Rowles.LeanLucene.Search.Scoring;
+﻿namespace Rowles.LeanLucene.Search.Scoring;
 
 /// <summary>Classic TF-IDF scoring model.</summary>
 public sealed class TfIdfSimilarity : ISimilarity

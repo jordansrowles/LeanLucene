@@ -1,4 +1,4 @@
-namespace Rowles.LeanLucene.Search.Queries;
+﻿namespace Rowles.LeanLucene.Search.Queries;
 
 /// <summary>A span: a contiguous range of positions in a document.</summary>
 /// <param name="DocId">The identifier of the document containing this span.</param>

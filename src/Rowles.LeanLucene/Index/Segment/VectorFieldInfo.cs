@@ -1,4 +1,4 @@
-namespace Rowles.LeanLucene.Index.Segment;
+﻿namespace Rowles.LeanLucene.Index.Segment;
 
 /// <summary>
 /// Persisted metadata for a single vector field within a segment. The reader uses this to

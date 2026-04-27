@@ -1,4 +1,4 @@
-namespace Rowles.LeanLucene.Search.Geo;
+﻿namespace Rowles.LeanLucene.Search.Geo;
 
 /// <summary>
 /// Utilities for encoding/decoding geographic coordinates to/from numeric values

@@ -1,4 +1,4 @@
-namespace Rowles.LeanLucene.Codecs.Postings;
+﻿namespace Rowles.LeanLucene.Codecs.Postings;
 
 /// <summary>
 /// Reads delta-encoded postings lists written by <see cref="PostingsWriter"/>.

@@ -1,4 +1,4 @@
-using System.Diagnostics.Metrics;
+﻿using System.Diagnostics.Metrics;
 
 namespace Rowles.LeanLucene.Diagnostics;
 
@@ -19,17 +19,17 @@ public sealed class MeterMetricsCollector : IMetricsCollector, IDisposable
     private readonly bool _ownsMeter;
 
     private readonly Histogram<double> _searchDuration;
-    private readonly Counter<long>     _searchCount;
-    private readonly Counter<long>     _cacheHits;
-    private readonly Counter<long>     _cacheMisses;
+    private readonly Counter<long> _searchCount;
+    private readonly Counter<long> _cacheHits;
+    private readonly Counter<long> _cacheMisses;
     private readonly Histogram<double> _flushDuration;
     private readonly Histogram<double> _mergeDuration;
-    private readonly Counter<long>     _mergeSegments;
+    private readonly Counter<long> _mergeSegments;
     private readonly Histogram<double> _commitDuration;
     private readonly Histogram<double> _hnswSearchDuration;
-    private readonly Histogram<long>   _hnswNodesVisited;
+    private readonly Histogram<long> _hnswNodesVisited;
     private readonly Histogram<double> _hnswBuildDuration;
-    private readonly Histogram<long>   _hnswBuildSize;
+    private readonly Histogram<long> _hnswBuildSize;
 
     // Interlocked shadow counters so GetSnapshot() remains fully functional.
     private long _snSearchCount;
@@ -215,9 +215,9 @@ public sealed class MeterMetricsCollector : IMetricsCollector, IDisposable
     public MetricsSnapshot GetSnapshot()
     {
         long searchCount = Interlocked.Read(ref _snSearchCount);
-        long hits        = Interlocked.Read(ref _snCacheHits);
-        long misses      = Interlocked.Read(ref _snCacheMisses);
-        long total       = hits + misses;
+        long hits = Interlocked.Read(ref _snCacheHits);
+        long misses = Interlocked.Read(ref _snCacheMisses);
+        long total = hits + misses;
 
         var buckets = new long[_snLatencyBuckets.Length];
         for (int i = 0; i < buckets.Length; i++)
@@ -225,27 +225,27 @@ public sealed class MeterMetricsCollector : IMetricsCollector, IDisposable
 
         return new MetricsSnapshot
         {
-            SearchCount    = searchCount,
-            SearchTotalMs  = Interlocked.Read(ref _snSearchTotalMs),
-            SearchMaxMs    = Interlocked.Read(ref _snSearchMaxMs),
-            SearchAvgMs    = searchCount > 0 ? (double)Interlocked.Read(ref _snSearchTotalMs) / searchCount : 0,
-            CacheHits      = hits,
-            CacheMisses    = misses,
-            CacheHitRate   = total > 0 ? (double)hits / total : 0,
-            FlushCount     = Interlocked.Read(ref _snFlushCount),
-            FlushTotalMs   = Interlocked.Read(ref _snFlushTotalMs),
-            MergeCount     = Interlocked.Read(ref _snMergeCount),
-            MergeSegments  = Interlocked.Read(ref _snMergeSegments),
-            MergeTotalMs   = Interlocked.Read(ref _snMergeTotalMs),
-            CommitCount    = Interlocked.Read(ref _snCommitCount),
-            CommitTotalMs  = Interlocked.Read(ref _snCommitTotalMs),
+            SearchCount = searchCount,
+            SearchTotalMs = Interlocked.Read(ref _snSearchTotalMs),
+            SearchMaxMs = Interlocked.Read(ref _snSearchMaxMs),
+            SearchAvgMs = searchCount > 0 ? (double)Interlocked.Read(ref _snSearchTotalMs) / searchCount : 0,
+            CacheHits = hits,
+            CacheMisses = misses,
+            CacheHitRate = total > 0 ? (double)hits / total : 0,
+            FlushCount = Interlocked.Read(ref _snFlushCount),
+            FlushTotalMs = Interlocked.Read(ref _snFlushTotalMs),
+            MergeCount = Interlocked.Read(ref _snMergeCount),
+            MergeSegments = Interlocked.Read(ref _snMergeSegments),
+            MergeTotalMs = Interlocked.Read(ref _snMergeTotalMs),
+            CommitCount = Interlocked.Read(ref _snCommitCount),
+            CommitTotalMs = Interlocked.Read(ref _snCommitTotalMs),
             LatencyHistogram = buckets,
-            HnswSearchCount   = Interlocked.Read(ref _snHnswSearchCount),
+            HnswSearchCount = Interlocked.Read(ref _snHnswSearchCount),
             HnswSearchTotalMs = Interlocked.Read(ref _snHnswSearchTotalMs),
-            HnswNodesVisited  = Interlocked.Read(ref _snHnswNodesVisited),
-            HnswBuildCount    = Interlocked.Read(ref _snHnswBuildCount),
-            HnswBuildTotalMs  = Interlocked.Read(ref _snHnswBuildTotalMs),
-            HnswNodesBuilt    = Interlocked.Read(ref _snHnswNodesBuilt)
+            HnswNodesVisited = Interlocked.Read(ref _snHnswNodesVisited),
+            HnswBuildCount = Interlocked.Read(ref _snHnswBuildCount),
+            HnswBuildTotalMs = Interlocked.Read(ref _snHnswBuildTotalMs),
+            HnswNodesBuilt = Interlocked.Read(ref _snHnswNodesBuilt)
         };
     }
 

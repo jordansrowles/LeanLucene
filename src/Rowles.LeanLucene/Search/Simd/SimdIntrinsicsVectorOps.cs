@@ -1,12 +1,7 @@
-using System.Runtime.CompilerServices;
+﻿using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Runtime.Intrinsics;
 using System.Runtime.Intrinsics.X86;
-
-using Rowles.LeanLucene.Search;
-using Rowles.LeanLucene.Search.Simd;
-using Rowles.LeanLucene.Search.Parsing;
-using Rowles.LeanLucene.Search.Highlighting;
 namespace Rowles.LeanLucene.Search.Simd;
 
 /// <summary>
@@ -78,19 +73,19 @@ public static class SimdIntrinsicsVectorOps
             var x = Vector512.LoadUnsafe(ref Unsafe.Add(ref pa, j));
             var y = Vector512.LoadUnsafe(ref Unsafe.Add(ref pb, j));
             vDot = Avx512F.FusedMultiplyAdd(x, y, vDot);
-            vA   = Avx512F.FusedMultiplyAdd(x, x, vA);
-            vB   = Avx512F.FusedMultiplyAdd(y, y, vB);
+            vA = Avx512F.FusedMultiplyAdd(x, x, vA);
+            vB = Avx512F.FusedMultiplyAdd(y, y, vB);
         }
 
         float dot = Vector512.Sum(vDot);
-        float na  = Vector512.Sum(vA);
-        float nb  = Vector512.Sum(vB);
+        float na = Vector512.Sum(vA);
+        float nb = Vector512.Sum(vB);
 
         for (int i = simdEnd; i < a.Length; i++)
         {
             dot += a[i] * b[i];
-            na  += a[i] * a[i];
-            nb  += b[i] * b[i];
+            na += a[i] * a[i];
+            nb += b[i] * b[i];
         }
         return (dot, na, nb);
     }
@@ -110,19 +105,19 @@ public static class SimdIntrinsicsVectorOps
             var x = Vector256.LoadUnsafe(ref Unsafe.Add(ref pa, j));
             var y = Vector256.LoadUnsafe(ref Unsafe.Add(ref pb, j));
             vDot = Fma.MultiplyAdd(x, y, vDot);
-            vA   = Fma.MultiplyAdd(x, x, vA);
-            vB   = Fma.MultiplyAdd(y, y, vB);
+            vA = Fma.MultiplyAdd(x, x, vA);
+            vB = Fma.MultiplyAdd(y, y, vB);
         }
 
         float dot = Vector256.Sum(vDot);
-        float na  = Vector256.Sum(vA);
-        float nb  = Vector256.Sum(vB);
+        float na = Vector256.Sum(vA);
+        float nb = Vector256.Sum(vB);
 
         for (int i = simdEnd; i < a.Length; i++)
         {
             dot += a[i] * b[i];
-            na  += a[i] * a[i];
-            nb  += b[i] * b[i];
+            na += a[i] * a[i];
+            nb += b[i] * b[i];
         }
         return (dot, na, nb);
     }
@@ -142,19 +137,19 @@ public static class SimdIntrinsicsVectorOps
             var x = Vector128.LoadUnsafe(ref Unsafe.Add(ref pa, j));
             var y = Vector128.LoadUnsafe(ref Unsafe.Add(ref pb, j));
             vDot = Sse.Add(vDot, Sse.Multiply(x, y));
-            vA   = Sse.Add(vA,   Sse.Multiply(x, x));
-            vB   = Sse.Add(vB,   Sse.Multiply(y, y));
+            vA = Sse.Add(vA, Sse.Multiply(x, x));
+            vB = Sse.Add(vB, Sse.Multiply(y, y));
         }
 
         float dot = Vector128.Sum(vDot);
-        float na  = Vector128.Sum(vA);
-        float nb  = Vector128.Sum(vB);
+        float na = Vector128.Sum(vA);
+        float nb = Vector128.Sum(vB);
 
         for (int i = simdEnd; i < a.Length; i++)
         {
             dot += a[i] * b[i];
-            na  += a[i] * a[i];
-            nb  += b[i] * b[i];
+            na += a[i] * a[i];
+            nb += b[i] * b[i];
         }
         return (dot, na, nb);
     }
@@ -165,8 +160,8 @@ public static class SimdIntrinsicsVectorOps
         for (int i = 0; i < a.Length; i++)
         {
             dot += a[i] * b[i];
-            na  += a[i] * a[i];
-            nb  += b[i] * b[i];
+            na += a[i] * a[i];
+            nb += b[i] * b[i];
         }
         return (dot, na, nb);
     }

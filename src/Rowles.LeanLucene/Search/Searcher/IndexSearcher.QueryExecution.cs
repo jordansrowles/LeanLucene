@@ -1,12 +1,5 @@
-using System.Buffers;
+﻿using System.Buffers;
 using System.Runtime.CompilerServices;
-using Rowles.LeanLucene.Codecs.Postings;
-using Rowles.LeanLucene.Index;
-using Rowles.LeanLucene.Search.Geo;
-
-using Rowles.LeanLucene.Search.Simd;
-using Rowles.LeanLucene.Search.Parsing;
-using Rowles.LeanLucene.Search.Highlighting;
 namespace Rowles.LeanLucene.Search.Searcher;
 
 /// <summary>
@@ -607,115 +600,115 @@ public sealed partial class IndexSearcher
         switch (query)
         {
             case TermQuery tq:
-            {
-                var qt = tq.CachedQualifiedTerm ??= string.Concat(tq.Field, "\x00", tq.Term);
-                using var postings = reader.GetPostingsEnum(qt);
-                if (postings.IsExhausted) break;
-                int docFreq = globalDFs.GetValueOrDefault((tq.Field, tq.Term), postings.DocFreq);
-                float avgDocLength = _stats.GetAvgFieldLength(tq.Field);
-                var factors = _similarity.PrecomputeFactors(_totalDocCount, docFreq, avgDocLength);
-                reader.TryGetFieldLengths(tq.Field, out var fieldLengths);
-                while (postings.MoveNext())
                 {
-                    int docId = postings.DocId;
-                    if (!reader.IsLive(docId)) continue;
-                    int docLength = fieldLengths is not null && (uint)docId < (uint)fieldLengths.Length
-                        ? fieldLengths[docId] : 1;
-                    float score = _similarity.ScorePrecomputed(factors.Factor1, factors.Factor2, postings.Freq, docLength);
-                    results.Add(new ScoreDoc(docId, score));
+                    var qt = tq.CachedQualifiedTerm ??= string.Concat(tq.Field, "\x00", tq.Term);
+                    using var postings = reader.GetPostingsEnum(qt);
+                    if (postings.IsExhausted) break;
+                    int docFreq = globalDFs.GetValueOrDefault((tq.Field, tq.Term), postings.DocFreq);
+                    float avgDocLength = _stats.GetAvgFieldLength(tq.Field);
+                    var factors = _similarity.PrecomputeFactors(_totalDocCount, docFreq, avgDocLength);
+                    reader.TryGetFieldLengths(tq.Field, out var fieldLengths);
+                    while (postings.MoveNext())
+                    {
+                        int docId = postings.DocId;
+                        if (!reader.IsLive(docId)) continue;
+                        int docLength = fieldLengths is not null && (uint)docId < (uint)fieldLengths.Length
+                            ? fieldLengths[docId] : 1;
+                        float score = _similarity.ScorePrecomputed(factors.Factor1, factors.Factor2, postings.Freq, docLength);
+                        results.Add(new ScoreDoc(docId, score));
+                    }
+                    break;
                 }
-                break;
-            }
             case BooleanQuery bq:
-            {
-                // Nested boolean: use a sub-collector and extract results
-                var subCollector = new TopNCollector(reader.MaxDoc);
-                ExecuteBooleanQuery(bq, reader, globalDFs, ref subCollector);
-                var subDocs = subCollector.ToTopDocs();
-                foreach (var sd in subDocs.ScoreDocs)
-                    results.Add(new ScoreDoc(sd.DocId - reader.DocBase, sd.Score));
-                break;
-            }
+                {
+                    // Nested boolean: use a sub-collector and extract results
+                    var subCollector = new TopNCollector(reader.MaxDoc);
+                    ExecuteBooleanQuery(bq, reader, globalDFs, ref subCollector);
+                    var subDocs = subCollector.ToTopDocs();
+                    foreach (var sd in subDocs.ScoreDocs)
+                        results.Add(new ScoreDoc(sd.DocId - reader.DocBase, sd.Score));
+                    break;
+                }
             case RangeQuery rq:
-            {
-                var rangeResults = reader.GetNumericRange(rq.Field, rq.Min, rq.Max);
-                float rqScore = rq.Boost != 1.0f ? rq.Boost : 1.0f;
-                foreach (var r in rangeResults)
-                    results.Add(new ScoreDoc(r.DocId, rqScore));
-                break;
-            }
+                {
+                    var rangeResults = reader.GetNumericRange(rq.Field, rq.Min, rq.Max);
+                    float rqScore = rq.Boost != 1.0f ? rq.Boost : 1.0f;
+                    foreach (var r in rangeResults)
+                        results.Add(new ScoreDoc(r.DocId, rqScore));
+                    break;
+                }
             case TermRangeQuery trq:
-            {
-                var subCollector = new TopNCollector(reader.MaxDoc);
-                ExecuteTermRangeQuery(trq, reader, globalDFs, ref subCollector);
-                var subDocs = subCollector.ToTopDocs();
-                foreach (var sd in subDocs.ScoreDocs)
-                    results.Add(new ScoreDoc(sd.DocId - reader.DocBase, sd.Score));
-                break;
-            }
+                {
+                    var subCollector = new TopNCollector(reader.MaxDoc);
+                    ExecuteTermRangeQuery(trq, reader, globalDFs, ref subCollector);
+                    var subDocs = subCollector.ToTopDocs();
+                    foreach (var sd in subDocs.ScoreDocs)
+                        results.Add(new ScoreDoc(sd.DocId - reader.DocBase, sd.Score));
+                    break;
+                }
             case ConstantScoreQuery csq:
-            {
-                var subCollector = new TopNCollector(reader.MaxDoc);
-                ExecuteConstantScoreQuery(csq, reader, globalDFs, ref subCollector);
-                var subDocs = subCollector.ToTopDocs();
-                foreach (var sd in subDocs.ScoreDocs)
-                    results.Add(new ScoreDoc(sd.DocId - reader.DocBase, sd.Score));
-                break;
-            }
+                {
+                    var subCollector = new TopNCollector(reader.MaxDoc);
+                    ExecuteConstantScoreQuery(csq, reader, globalDFs, ref subCollector);
+                    var subDocs = subCollector.ToTopDocs();
+                    foreach (var sd in subDocs.ScoreDocs)
+                        results.Add(new ScoreDoc(sd.DocId - reader.DocBase, sd.Score));
+                    break;
+                }
             case DisjunctionMaxQuery dmq:
-            {
-                var subCollector = new TopNCollector(reader.MaxDoc);
-                ExecuteDisjunctionMaxQuery(dmq, reader, globalDFs, ref subCollector);
-                var subDocs = subCollector.ToTopDocs();
-                foreach (var sd in subDocs.ScoreDocs)
-                    results.Add(new ScoreDoc(sd.DocId - reader.DocBase, sd.Score));
-                break;
-            }
+                {
+                    var subCollector = new TopNCollector(reader.MaxDoc);
+                    ExecuteDisjunctionMaxQuery(dmq, reader, globalDFs, ref subCollector);
+                    var subDocs = subCollector.ToTopDocs();
+                    foreach (var sd in subDocs.ScoreDocs)
+                        results.Add(new ScoreDoc(sd.DocId - reader.DocBase, sd.Score));
+                    break;
+                }
             case RegexpQuery rxq:
-            {
-                var subCollector = new TopNCollector(reader.MaxDoc);
-                ExecuteRegexpQuery(rxq, reader, globalDFs, ref subCollector);
-                var subDocs = subCollector.ToTopDocs();
-                foreach (var sd in subDocs.ScoreDocs)
-                    results.Add(new ScoreDoc(sd.DocId - reader.DocBase, sd.Score));
-                break;
-            }
+                {
+                    var subCollector = new TopNCollector(reader.MaxDoc);
+                    ExecuteRegexpQuery(rxq, reader, globalDFs, ref subCollector);
+                    var subDocs = subCollector.ToTopDocs();
+                    foreach (var sd in subDocs.ScoreDocs)
+                        results.Add(new ScoreDoc(sd.DocId - reader.DocBase, sd.Score));
+                    break;
+                }
             case FunctionScoreQuery fsq:
-            {
-                var subCollector = new TopNCollector(reader.MaxDoc);
-                ExecuteFunctionScoreQuery(fsq, reader, globalDFs, ref subCollector);
-                var subDocs = subCollector.ToTopDocs();
-                foreach (var sd in subDocs.ScoreDocs)
-                    results.Add(new ScoreDoc(sd.DocId - reader.DocBase, sd.Score));
-                break;
-            }
+                {
+                    var subCollector = new TopNCollector(reader.MaxDoc);
+                    ExecuteFunctionScoreQuery(fsq, reader, globalDFs, ref subCollector);
+                    var subDocs = subCollector.ToTopDocs();
+                    foreach (var sd in subDocs.ScoreDocs)
+                        results.Add(new ScoreDoc(sd.DocId - reader.DocBase, sd.Score));
+                    break;
+                }
             case SpanNearQuery snq:
-            {
-                var subCollector = new TopNCollector(reader.MaxDoc);
-                ExecuteSpanNearQuery(snq, reader, globalDFs, ref subCollector);
-                var subDocs = subCollector.ToTopDocs();
-                foreach (var sd in subDocs.ScoreDocs)
-                    results.Add(new ScoreDoc(sd.DocId - reader.DocBase, sd.Score));
-                break;
-            }
+                {
+                    var subCollector = new TopNCollector(reader.MaxDoc);
+                    ExecuteSpanNearQuery(snq, reader, globalDFs, ref subCollector);
+                    var subDocs = subCollector.ToTopDocs();
+                    foreach (var sd in subDocs.ScoreDocs)
+                        results.Add(new ScoreDoc(sd.DocId - reader.DocBase, sd.Score));
+                    break;
+                }
             case SpanOrQuery soq:
-            {
-                var subCollector = new TopNCollector(reader.MaxDoc);
-                ExecuteSpanOrQuery(soq, reader, globalDFs, ref subCollector);
-                var subDocs = subCollector.ToTopDocs();
-                foreach (var sd in subDocs.ScoreDocs)
-                    results.Add(new ScoreDoc(sd.DocId - reader.DocBase, sd.Score));
-                break;
-            }
+                {
+                    var subCollector = new TopNCollector(reader.MaxDoc);
+                    ExecuteSpanOrQuery(soq, reader, globalDFs, ref subCollector);
+                    var subDocs = subCollector.ToTopDocs();
+                    foreach (var sd in subDocs.ScoreDocs)
+                        results.Add(new ScoreDoc(sd.DocId - reader.DocBase, sd.Score));
+                    break;
+                }
             case SpanNotQuery snotq:
-            {
-                var subCollector = new TopNCollector(reader.MaxDoc);
-                ExecuteSpanNotQuery(snotq, reader, globalDFs, ref subCollector);
-                var subDocs = subCollector.ToTopDocs();
-                foreach (var sd in subDocs.ScoreDocs)
-                    results.Add(new ScoreDoc(sd.DocId - reader.DocBase, sd.Score));
-                break;
-            }
+                {
+                    var subCollector = new TopNCollector(reader.MaxDoc);
+                    ExecuteSpanNotQuery(snotq, reader, globalDFs, ref subCollector);
+                    var subDocs = subCollector.ToTopDocs();
+                    foreach (var sd in subDocs.ScoreDocs)
+                        results.Add(new ScoreDoc(sd.DocId - reader.DocBase, sd.Score));
+                    break;
+                }
         }
         return results;
     }

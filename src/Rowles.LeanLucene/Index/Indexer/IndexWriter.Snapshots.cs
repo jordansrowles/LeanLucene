@@ -1,6 +1,4 @@
-using Rowles.LeanLucene.Store;
-
-namespace Rowles.LeanLucene.Index.Indexer;
+﻿namespace Rowles.LeanLucene.Index.Indexer;
 
 public sealed partial class IndexWriter
 {

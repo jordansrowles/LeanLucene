@@ -1,5 +1,4 @@
-using System.Buffers;
-using Rowles.LeanLucene.Index.Segment;
+﻿using System.Buffers;
 
 namespace Rowles.LeanLucene.Search.Suggestions;
 

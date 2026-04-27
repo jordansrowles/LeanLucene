@@ -1,4 +1,4 @@
-namespace Rowles.LeanLucene.Document.Fields;
+﻿namespace Rowles.LeanLucene.Document.Fields;
 
 /// <summary>
 /// Indexed geo-point field. Stores latitude and longitude as two numeric fields

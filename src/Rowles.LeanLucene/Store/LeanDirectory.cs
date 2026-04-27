@@ -1,4 +1,4 @@
-namespace Rowles.LeanLucene.Store;
+﻿namespace Rowles.LeanLucene.Store;
 
 /// <summary>
 /// Abstract base for storage operations. Named LeanDirectory to

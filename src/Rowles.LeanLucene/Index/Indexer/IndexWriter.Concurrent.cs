@@ -1,5 +1,4 @@
-using Rowles.LeanLucene.Analysis;
-using Rowles.LeanLucene.Analysis.Analysers;
+﻿using Rowles.LeanLucene.Analysis.Analysers;
 using Rowles.LeanLucene.Document;
 
 namespace Rowles.LeanLucene.Index.Indexer;
@@ -229,14 +228,14 @@ public sealed partial class IndexWriter
                 dstCounts = new int[_config.MaxBufferedDocs];
                 _docTokenCounts[fieldName] = dstCounts;
             }
-            
+
             int newTotal = docBase + dwpt.DocCount;
             if (newTotal > dstCounts.Length)
             {
                 Array.Resize(ref dstCounts, Math.Max(dstCounts.Length * 2, newTotal));
                 _docTokenCounts[fieldName] = dstCounts;
             }
-            
+
             for (int i = 0; i < dwpt.DocCount && i < counts.Length; i++)
                 dstCounts[docBase + i] = counts[i];
         }

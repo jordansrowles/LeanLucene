@@ -1,4 +1,4 @@
-namespace Rowles.LeanLucene.Index.Indexer;
+﻿namespace Rowles.LeanLucene.Index.Indexer;
 
 /// <summary>
 /// Controls which old commit files and their referenced segments are pruned after a new commit.

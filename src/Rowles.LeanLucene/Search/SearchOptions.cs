@@ -1,4 +1,4 @@
-namespace Rowles.LeanLucene.Search;
+﻿namespace Rowles.LeanLucene.Search;
 
 /// <summary>
 /// Per-query options controlling resource usage and result delivery.

@@ -1,4 +1,4 @@
-namespace Rowles.LeanLucene.Search.Geo;
+﻿namespace Rowles.LeanLucene.Search.Geo;
 
 /// <summary>
 /// Query matching documents within a geographic bounding box.

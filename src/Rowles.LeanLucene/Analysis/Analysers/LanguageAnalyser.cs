@@ -1,11 +1,4 @@
-using System.Buffers;
-using Rowles.LeanLucene.Analysis.Stemmers;
-using Rowles.LeanLucene.Analysis.Tokenisers;
-
-using Rowles.LeanLucene.Analysis;
-using Rowles.LeanLucene.Analysis.Filters;
-using Rowles.LeanLucene.Analysis.Tokenisers;
-using Rowles.LeanLucene.Analysis.Stemmers;
+﻿using System.Buffers;
 namespace Rowles.LeanLucene.Analysis.Analysers;
 
 /// <summary>

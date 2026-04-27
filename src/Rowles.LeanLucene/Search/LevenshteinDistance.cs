@@ -1,4 +1,4 @@
-namespace Rowles.LeanLucene.Search;
+﻿namespace Rowles.LeanLucene.Search;
 
 /// <summary>
 /// Computes Levenshtein edit distance between two strings or UTF-8 byte spans.

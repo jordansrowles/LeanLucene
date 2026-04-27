@@ -1,4 +1,4 @@
-namespace Rowles.LeanLucene.Search.Scoring;
+﻿namespace Rowles.LeanLucene.Search.Scoring;
 
 /// <summary>A single facet bucket: a field value and how many matching documents have it.</summary>
 /// <param name="Value">The field value represented by this bucket.</param>

@@ -1,4 +1,4 @@
-namespace Rowles.LeanLucene.Search.Queries;
+﻿namespace Rowles.LeanLucene.Search.Queries;
 
 /// <summary>A span query matching a single term.</summary>
 public sealed class SpanTermQuery : SpanQuery

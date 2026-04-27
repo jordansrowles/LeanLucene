@@ -1,6 +1,4 @@
-using System.Buffers;
-
-namespace Rowles.LeanLucene.Codecs.StoredFields;
+﻿namespace Rowles.LeanLucene.Codecs.StoredFields;
 
 /// <summary>
 /// Writes stored field data (.fdt) with configurable compression (LZ4/Zstandard/None)

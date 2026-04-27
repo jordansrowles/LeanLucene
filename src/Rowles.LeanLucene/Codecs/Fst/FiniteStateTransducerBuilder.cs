@@ -1,11 +1,4 @@
-using Rowles.LeanLucene.Codecs;
-using Rowles.LeanLucene.Codecs.Hnsw;
-using Rowles.LeanLucene.Codecs.Fst;
-using Rowles.LeanLucene.Codecs.Bkd;
-using Rowles.LeanLucene.Codecs.Vectors;
-using Rowles.LeanLucene.Codecs.TermVectors;
-using Rowles.LeanLucene.Codecs.TermDictionary;
-namespace Rowles.LeanLucene.Codecs.FST;
+﻿namespace Rowles.LeanLucene.Codecs.FST;
 
 /// <summary>
 /// Builds a minimal acyclic finite state transducer (FST) from sorted byte-sequence keys
@@ -86,10 +79,10 @@ namespace Rowles.LeanLucene.Codecs.FST;
 public sealed class FSTBuilder
 {
     // ── Arc flag constants ───────────────────────────────────────────────────
-    internal const byte FlagIsFinal    = 0b_1000_0000; // bit 7
-    internal const byte FlagIsLastArc  = 0b_0100_0000; // bit 6
-    internal const byte FlagHasOutput  = 0b_0010_0000; // bit 5
-    internal const byte FlagHasTarget  = 0b_0001_0000; // bit 4
+    internal const byte FlagIsFinal = 0b_1000_0000; // bit 7
+    internal const byte FlagIsLastArc = 0b_0100_0000; // bit 6
+    internal const byte FlagHasOutput = 0b_0010_0000; // bit 5
+    internal const byte FlagHasTarget = 0b_0001_0000; // bit 4
 
     // ── Header magic bytes ("FST1") ─────────────────────────────────────────
     internal static ReadOnlySpan<byte> HeaderMagic => "FST1"u8;

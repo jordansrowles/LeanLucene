@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 
 namespace Rowles.LeanLucene.Diagnostics;
 
@@ -12,6 +12,6 @@ internal static class LeanLuceneActivitySource
 
     internal const string Search = "leanlucene.search";
     internal const string Commit = "leanlucene.index.commit";
-    internal const string Flush  = "leanlucene.index.flush";
-    internal const string Merge  = "leanlucene.index.merge";
+    internal const string Flush = "leanlucene.index.flush";
+    internal const string Merge = "leanlucene.index.merge";
 }

@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using Rowles.LeanLucene.Store;
 
 namespace Rowles.LeanLucene.Index;

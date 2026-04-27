@@ -1,10 +1,4 @@
-using Rowles.LeanLucene.Search.Queries;
-
-using Rowles.LeanLucene.Search;
-using Rowles.LeanLucene.Search.Simd;
-using Rowles.LeanLucene.Search.Parsing;
-using Rowles.LeanLucene.Search.Highlighting;
-namespace Rowles.LeanLucene.Search.Parsing;
+﻿namespace Rowles.LeanLucene.Search.Parsing;
 
 /// <summary>
 /// Fluent builder for <see cref="BooleanQuery"/> clauses.

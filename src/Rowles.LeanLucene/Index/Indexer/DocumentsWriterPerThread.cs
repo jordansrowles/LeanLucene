@@ -1,7 +1,5 @@
-using Rowles.LeanLucene.Analysis;
-using Rowles.LeanLucene.Analysis.Analysers;
+﻿using Rowles.LeanLucene.Analysis.Analysers;
 using Rowles.LeanLucene.Document;
-using Rowles.LeanLucene.Document.Fields;
 
 namespace Rowles.LeanLucene.Index.Indexer;
 
@@ -111,7 +109,7 @@ internal sealed class DocumentsWriterPerThread
             Array.Resize(ref counts, Math.Max(counts.Length * 2, docId + 1));
         counts[docId] += tokens.Count;
         DocTokenCounts[fieldName] = counts; // Update reference in case of resize
-        
+
         FieldNames.Add(fieldName);
 
         for (int pos = 0; pos < tokens.Count; pos++)

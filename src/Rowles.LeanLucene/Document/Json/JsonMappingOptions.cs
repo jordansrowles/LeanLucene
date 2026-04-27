@@ -1,6 +1,4 @@
-using System.Text.Json;
-
-namespace Rowles.LeanLucene.Document.Json;
+﻿namespace Rowles.LeanLucene.Document.Json;
 
 /// <summary>
 /// Options controlling how <see cref="JsonDocumentMapper"/> maps JSON to fields.

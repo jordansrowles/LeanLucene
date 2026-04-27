@@ -1,4 +1,4 @@
-namespace Rowles.LeanLucene.Index.Indexer;
+﻿namespace Rowles.LeanLucene.Index.Indexer;
 
 /// <summary>Keeps the last N commit generations, deleting older ones.</summary>
 public sealed class KeepLastNCommitsPolicy : IIndexDeletionPolicy

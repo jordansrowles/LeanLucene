@@ -1,5 +1,4 @@
-using System.Buffers;
-using System.IO.Compression;
+﻿using System.IO.Compression;
 using NativeCompressions;
 
 namespace Rowles.LeanLucene.Codecs.StoredFields;

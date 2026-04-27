@@ -1,4 +1,4 @@
-namespace Rowles.LeanLucene.Search.Queries;
+﻿namespace Rowles.LeanLucene.Search.Queries;
 
 /// <summary>Matches documents that match any of the provided span sub-queries.</summary>
 public sealed class SpanOrQuery : SpanQuery
