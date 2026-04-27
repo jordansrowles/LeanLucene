@@ -97,6 +97,19 @@ internal sealed class GcDumpDiagnoser : IDiagnoser
     }
 
     public IEnumerable<ValidationError> Validate(ValidationParameters validationParameters) => [];
+
+    public async IAsyncEnumerable<ValidationError> ValidateAsync(ValidationParameters validationParameters)
+    {
+        await ValueTask.CompletedTask;
+        yield break;
+    }
+
+    public ValueTask HandleAsync(HostSignal signal, DiagnoserActionParameters parameters, CancellationToken cancellationToken)
+    {
+        Handle(signal, parameters);
+        return ValueTask.CompletedTask;
+    }
+
     public IEnumerable<Metric> ProcessResults(DiagnoserResults results) => [];
     public void DisplayResults(ILogger logger) { }
 }
