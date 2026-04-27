@@ -17,7 +17,7 @@
     <PackageTags>search;full-text;lucene;indexing;information-retrieval</PackageTags>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageLicenseFile>LICENCE</PackageLicenseFile>
-    <RepositoryUrl>https://github.com/jordanrowles/LeanLucene</RepositoryUrl>
+    <RepositoryUrl>https://github.com/jordansrowles/LeanLucene</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
     <PublishRepositoryUrl>true</PublishRepositoryUrl>
   </PropertyGroup>
