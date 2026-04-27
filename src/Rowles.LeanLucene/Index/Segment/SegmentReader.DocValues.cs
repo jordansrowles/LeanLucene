@@ -142,7 +142,9 @@ public sealed partial class SegmentReader
             if (File.Exists(path) && _vectorReaders.TryGetValue(fieldName, out var vr))
             {
                 var src = new VectorReaderSource(vr);
-                graph = HnswReader.Read(path, src);
+                bool? expectedNormalised = _info.VectorFields
+                    .FirstOrDefault(vf => vf.FieldName == fieldName)?.Normalised;
+                graph = HnswReader.Read(path, src, expectedNormalised);
             }
             _hnswGraphs[fieldName] = graph;
             return graph;

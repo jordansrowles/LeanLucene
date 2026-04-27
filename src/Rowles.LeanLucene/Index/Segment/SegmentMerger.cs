@@ -450,7 +450,9 @@ public sealed class SegmentMerger
         {
             if (perField.Count == 0) continue;
             int dimension = vectorFieldDims[fieldName];
-            bool normalised = vectorFieldNormalised.GetValueOrDefault(fieldName, true);
+            if (!vectorFieldNormalised.TryGetValue(fieldName, out var normalised))
+                throw new InvalidOperationException(
+                    $"Cannot determine Normalised flag for vector field '{fieldName}' during merge. Source segments must declare this flag.");
 
             var vecPath = Codecs.Vectors.VectorFilePaths.VectorFile(basePath, fieldName);
             VectorWriter.WriteField(vecPath, totalDocs, dimension, perField);
@@ -478,7 +480,7 @@ public sealed class SegmentMerger
                         {
                             try
                             {
-                                graph = HnswReader.Read(seedHnswPath, src, seed.OldToNew);
+                                graph = HnswReader.Read(seedHnswPath, src, normalised, seed.OldToNew);
                                 graph.Thaw();
 
                                 // Insert any vectors not already present (from other segments

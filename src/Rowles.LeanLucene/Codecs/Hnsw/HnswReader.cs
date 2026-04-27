@@ -14,7 +14,10 @@ namespace Rowles.LeanLucene.Codecs.Hnsw;
 internal static class HnswReader
 {
     public static HnswGraph Read(string filePath, IVectorSource vectorSource)
-        => Read(filePath, vectorSource, docIdRemap: null);
+        => Read(filePath, vectorSource, expectedNormalised: null, docIdRemap: null);
+
+    public static HnswGraph Read(string filePath, IVectorSource vectorSource, bool? expectedNormalised)
+        => Read(filePath, vectorSource, expectedNormalised, docIdRemap: null);
 
     /// <summary>
     /// Reads a graph and optionally remaps every doc-id (entry point, node keys, neighbour ids)
@@ -22,7 +25,11 @@ internal static class HnswReader
     /// source segment's local ids into the merged segment's id space. Any node whose id is
     /// missing from the map is dropped; back-edges to dropped nodes are removed.
     /// </summary>
-    public static HnswGraph Read(string filePath, IVectorSource vectorSource, IReadOnlyDictionary<int, int>? docIdRemap)
+    public static HnswGraph Read(
+        string filePath,
+        IVectorSource vectorSource,
+        bool? expectedNormalised,
+        IReadOnlyDictionary<int, int>? docIdRemap)
     {
         using var fs = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read);
         using var reader = new BinaryReader(fs, System.Text.Encoding.UTF8, leaveOpen: false);
@@ -31,7 +38,9 @@ internal static class HnswReader
 
         int dimension = reader.ReadInt32();
         bool normalised = reader.ReadByte() != 0;
-        _ = normalised;
+        if (expectedNormalised is bool expected && expected != normalised)
+            throw new InvalidDataException(
+                $"HNSW file at '{filePath}' declares Normalised={normalised} but the segment field declares Normalised={expected}.");
         if (vectorSource.Dimension != dimension)
             throw new InvalidDataException(
                 $"HNSW file dimension {dimension} does not match vector source dimension {vectorSource.Dimension}.");
