@@ -94,6 +94,14 @@ public sealed partial class IndexWriter
         ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
         if (documents.Count == 0) return;
 
+        // Validate every document up front so a single bad doc fails the call,
+        // not silently corrupts the index on a per-partition basis.
+        if (_config.Schema is { } schema)
+        {
+            for (int i = 0; i < documents.Count; i++)
+                schema.Validate(documents[i]);
+        }
+
         var perThreadResults = new System.Collections.Concurrent.ConcurrentBag<DocumentsWriterPerThread>();
 
         Parallel.ForEach(
