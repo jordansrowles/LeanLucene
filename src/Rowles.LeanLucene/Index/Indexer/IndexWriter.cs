@@ -148,6 +148,15 @@ public sealed partial class IndexWriter : IDisposable
             _backpressureSemaphore.Wait();
         }
 
+        // We hold a semaphore slot at this point (or backpressure is disabled).
+        // Track the slot before any work that could throw, so the catch's release
+        // is balanced even if FlushSegment below fails.
+        if (_backpressureSemaphore is not null)
+        {
+            lock (_writeLock)
+                _semaphoreSlotsHeld++;
+        }
+
         try
         {
             lock (_writeLock)
@@ -155,10 +164,6 @@ public sealed partial class IndexWriter : IDisposable
                 // Merge backpressure: if too many unmerged segments, flush and merge now
                 if (ShouldThrottleForMerge() && _bufferedDocCount > 0)
                     FlushSegment();
-
-                // Track that we've acquired a slot
-                if (_backpressureSemaphore is not null)
-                    _semaphoreSlotsHeld++;
 
                 AddDocumentCore(doc);
             }
