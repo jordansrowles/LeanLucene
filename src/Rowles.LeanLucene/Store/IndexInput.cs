@@ -13,8 +13,8 @@ namespace Rowles.LeanLucene.Store;
 /// </summary>
 public sealed unsafe class IndexInput : IDisposable
 {
-    private readonly MemoryMappedFile _mmf;
-    private readonly MemoryMappedViewAccessor _accessor;
+    private readonly MemoryMappedFile? _mmf;
+    private readonly MemoryMappedViewAccessor? _accessor;
     private readonly long _length;
     private long _position;
     private bool _disposed;
@@ -32,12 +32,10 @@ public sealed unsafe class IndexInput : IDisposable
 
         if (_length == 0)
         {
-            // Empty file — no data to map. Allow reads to fail with EndOfStream.
-            _mmf = MemoryMappedFile.CreateNew(null, 1, MemoryMappedFileAccess.Read);
-            _accessor = _mmf.CreateViewAccessor(0, 1, MemoryMappedFileAccess.Read);
+            // Empty file — no data to map. Reads will throw EndOfStream naturally.
+            _mmf = null;
+            _accessor = null;
             _ptr = null;
-            _accessor.SafeMemoryMappedViewHandle.AcquirePointer(ref _ptr!);
-            _ptr += _accessor.PointerOffset;
             return;
         }
 
@@ -534,9 +532,7 @@ public sealed unsafe class IndexInput : IDisposable
 
     private void PrefetchWindows()
     {
-        nint handle = Environment.ProcessId != 0
-            ? NativeMethods.GetCurrentProcess()
-            : IntPtr.Zero;
+        var handle = NativeMethods.GetCurrentProcess();
         if (handle == IntPtr.Zero) return;
 
         var entry = new NativeMethods.WIN32_MEMORY_RANGE_ENTRY
@@ -559,10 +555,13 @@ public sealed unsafe class IndexInput : IDisposable
         if (_disposed) return;
         _disposed = true;
 
-        _accessor.SafeMemoryMappedViewHandle.ReleasePointer();
-        _ptr = null;
-        _accessor.Dispose();
-        _mmf.Dispose();
+        if (_accessor is not null)
+        {
+            _accessor.SafeMemoryMappedViewHandle.ReleasePointer();
+            _ptr = null;
+            _accessor.Dispose();
+        }
+        _mmf?.Dispose();
     }
 
     [MethodImpl(MethodImplOptions.NoInlining)]
