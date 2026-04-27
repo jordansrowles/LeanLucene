@@ -12,9 +12,7 @@ public sealed class QueryCache
     private readonly LinkedList<CacheEntry> _lru = new();
     private long _generation;
     private long _hits;
-    private long _misses;
-
-    /// <summary>
+    private long _misses;    /// <summary>
     /// Initialises a new <see cref="QueryCache"/> with the specified maximum entry count.
     /// </summary>
     /// <param name="maxEntries">The maximum number of entries to hold. Must be at least 1.</param>
@@ -27,10 +25,10 @@ public sealed class QueryCache
     }
 
     /// <summary>Total cache hits since creation.</summary>
-    public long Hits => Volatile.Read(ref _hits);
+    public long Hits { get { lock (_lock) return _hits; } }
 
     /// <summary>Total cache misses since creation.</summary>
-    public long Misses => Volatile.Read(ref _misses);
+    public long Misses { get { lock (_lock) return _misses; } }
 
     /// <summary>Current number of cached entries.</summary>
     public int Count
@@ -51,7 +49,7 @@ public sealed class QueryCache
                 // Move to front (most recently used)
                 _lru.Remove(node);
                 _lru.AddFirst(node);
-                Interlocked.Increment(ref _hits);
+                _hits++;
                 return node.Value.Result;
             }
 
@@ -62,7 +60,7 @@ public sealed class QueryCache
                 _map.Remove(key);
             }
 
-            Interlocked.Increment(ref _misses);
+            _misses++;
             return null;
         }
     }
