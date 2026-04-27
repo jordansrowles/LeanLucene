@@ -25,6 +25,19 @@ public interface IMetricsCollector
     /// <summary>Records a commit event.</summary>
     void RecordCommit(TimeSpan elapsed);
 
+    /// <summary>
+    /// Records a single HNSW graph traversal. <paramref name="nodesVisited"/> is the number of
+    /// distinct nodes visited during the layer-zero search and is the primary recall-vs-cost signal.
+    /// Default implementation is a no-op for backwards compatibility.
+    /// </summary>
+    void RecordHnswSearch(TimeSpan elapsed, int nodesVisited) { }
+
+    /// <summary>
+    /// Records a single HNSW graph build (flush or merge). <paramref name="nodes"/> is the number
+    /// of vectors inserted. Default implementation is a no-op for backwards compatibility.
+    /// </summary>
+    void RecordHnswBuild(TimeSpan elapsed, int nodes) { }
+
     /// <summary>Takes a point-in-time snapshot of all metrics.</summary>
     MetricsSnapshot GetSnapshot();
 }

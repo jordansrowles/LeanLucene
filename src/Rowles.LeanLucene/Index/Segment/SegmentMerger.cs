@@ -20,6 +20,7 @@ public sealed class SegmentMerger
     private readonly MMapDirectory _directory;
     private readonly int _mergeThreshold;
     private readonly int _skipInterval;
+    private readonly Diagnostics.IMetricsCollector _metrics;
 
     /// <summary>Default merge threshold: when this many segments exist, merge.</summary>
     public const int DefaultMergeThreshold = 10;
@@ -31,11 +32,17 @@ public sealed class SegmentMerger
     /// <param name="directory">The directory holding segment files.</param>
     /// <param name="mergeThreshold">Number of segments at one tier before a merge is triggered.</param>
     /// <param name="skipInterval">Postings skip interval used when writing the merged segment.</param>
-    public SegmentMerger(MMapDirectory directory, int mergeThreshold = DefaultMergeThreshold, int skipInterval = DefaultSkipInterval)
+    /// <param name="metrics">Optional metrics collector. Defaults to <see cref="Diagnostics.NullMetricsCollector.Instance"/>.</param>
+    public SegmentMerger(
+        MMapDirectory directory,
+        int mergeThreshold = DefaultMergeThreshold,
+        int skipInterval = DefaultSkipInterval,
+        Diagnostics.IMetricsCollector? metrics = null)
     {
         _directory = directory;
         _mergeThreshold = mergeThreshold;
         _skipInterval = skipInterval;
+        _metrics = metrics ?? Diagnostics.NullMetricsCollector.Instance;
     }
 
     /// <summary>
@@ -136,6 +143,10 @@ public sealed class SegmentMerger
         var vectorFieldDims = new Dictionary<string, int>(StringComparer.Ordinal);
         var vectorFieldNormalised = new Dictionary<string, bool>(StringComparer.Ordinal);
         var vectorFieldHadHnsw = new Dictionary<string, bool>(StringComparer.Ordinal);
+        // Per-field, per-source-segment doc-id remap (sourceLocalDocId -> mergedDocId).
+        // Drives incremental HNSW merge: pick the segment with the most live vectors,
+        // load its existing graph, remap into the merged id space, then insert the rest.
+        var vectorFieldRemaps = new Dictionary<string, List<(SegmentInfo Seg, Dictionary<int, int> OldToNew)>>(StringComparer.Ordinal);
         var fieldNames = new HashSet<string>(StringComparer.Ordinal);
 
         // Collect the union of all field names across the source segments.
@@ -313,6 +324,20 @@ public sealed class SegmentMerger
                         }
                         perField[remapDocId] = vec;
                         vectorFieldDims[vfName] = vec.Length;
+
+                        if (!vectorFieldRemaps.TryGetValue(vfName, out var remapList))
+                        {
+                            remapList = new List<(SegmentInfo, Dictionary<int, int>)>();
+                            vectorFieldRemaps[vfName] = remapList;
+                        }
+                        var entry = remapList.FirstOrDefault(t => ReferenceEquals(t.Seg, segInfo));
+                        if (entry.OldToNew is null)
+                        {
+                            entry = (segInfo, new Dictionary<int, int>());
+                            remapList.Add(entry);
+                        }
+                        entry.OldToNew[oldDocId] = remapDocId;
+
                         // Carry forward source field metadata when present.
                         var match = reader.Info.VectorFields.FirstOrDefault(vf => vf.FieldName == vfName);
                         if (match is not null)
@@ -428,7 +453,57 @@ public sealed class SegmentMerger
             if (vectorFieldHadHnsw.GetValueOrDefault(fieldName, false) && perField.Count >= 2)
             {
                 var src = new InMemoryVectorSource(new Dictionary<int, ReadOnlyMemory<float>>(perField), dimension);
-                var graph = HnswGraphBuilder.Build(src, perField.Keys.ToArray(), new HnswBuildConfig());
+                var hnswSw = System.Diagnostics.Stopwatch.StartNew();
+
+                HnswGraph? graph = null;
+                if (vectorFieldRemaps.TryGetValue(fieldName, out var remapList) && remapList.Count > 0)
+                {
+                    // Pick the source segment contributing the most live vectors as the seed graph.
+                    var seed = remapList
+                        .Where(t => t.Seg.VectorFields.Any(vf => vf.FieldName == fieldName && vf.HasHnsw))
+                        .OrderByDescending(t => t.OldToNew.Count)
+                        .FirstOrDefault();
+
+                    if (seed.OldToNew is not null && seed.OldToNew.Count > 0)
+                    {
+                        var seedHnswPath = Codecs.VectorFilePaths.HnswFile(
+                            Path.Combine(_directory.DirectoryPath, seed.Seg.SegmentId), fieldName);
+                        if (File.Exists(seedHnswPath))
+                        {
+                            try
+                            {
+                                graph = HnswReader.Read(seedHnswPath, src, seed.OldToNew);
+                                graph.Thaw();
+
+                                // Insert any vectors not already present (from other segments
+                                // and any docs that were missing from the seed graph).
+                                foreach (var docId in perField.Keys)
+                                {
+                                    if (!graph.ContainsNode(docId))
+                                        graph.Insert(docId);
+                                }
+                            }
+                            catch
+                            {
+                                // Fall back to full rebuild if the seed graph can't be reused.
+                                graph = null;
+                            }
+                        }
+                    }
+                }
+
+                if (graph is null)
+                {
+                    var docIds = perField.Keys.ToArray();
+                    graph = HnswGraphBuilder.Build(src, docIds, new HnswBuildConfig());
+                }
+                else
+                {
+                    graph.Freeze();
+                }
+
+                hnswSw.Stop();
+                _metrics.RecordHnswBuild(hnswSw.Elapsed, perField.Count);
                 var hnswPath = Codecs.VectorFilePaths.HnswFile(basePath, fieldName);
                 HnswWriter.Write(hnswPath, graph, dimension, normalised);
                 hasHnsw = true;

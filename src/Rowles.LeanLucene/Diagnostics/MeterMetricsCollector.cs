@@ -26,6 +26,10 @@ public sealed class MeterMetricsCollector : IMetricsCollector, IDisposable
     private readonly Histogram<double> _mergeDuration;
     private readonly Counter<long>     _mergeSegments;
     private readonly Histogram<double> _commitDuration;
+    private readonly Histogram<double> _hnswSearchDuration;
+    private readonly Histogram<long>   _hnswNodesVisited;
+    private readonly Histogram<double> _hnswBuildDuration;
+    private readonly Histogram<long>   _hnswBuildSize;
 
     // Interlocked shadow counters so GetSnapshot() remains fully functional.
     private long _snSearchCount;
@@ -40,6 +44,12 @@ public sealed class MeterMetricsCollector : IMetricsCollector, IDisposable
     private long _snMergeTotalMs;
     private long _snCommitCount;
     private long _snCommitTotalMs;
+    private long _snHnswSearchCount;
+    private long _snHnswSearchTotalMs;
+    private long _snHnswNodesVisited;
+    private long _snHnswBuildCount;
+    private long _snHnswBuildTotalMs;
+    private long _snHnswNodesBuilt;
     private readonly long[] _snLatencyBuckets = new long[8];
     private static readonly int[] BucketThresholdsMs = [1, 5, 10, 50, 100, 500, 1000];
 
@@ -92,6 +102,22 @@ public sealed class MeterMetricsCollector : IMetricsCollector, IDisposable
         _commitDuration = _meter.CreateHistogram<double>(
             "leanlucene.index.commit.duration", unit: "ms",
             description: "Elapsed time for each index commit.");
+
+        _hnswSearchDuration = _meter.CreateHistogram<double>(
+            "leanlucene.hnsw.search.duration", unit: "ms",
+            description: "Elapsed time for each HNSW graph traversal.");
+
+        _hnswNodesVisited = _meter.CreateHistogram<long>(
+            "leanlucene.hnsw.search.nodes_visited", unit: "{node}",
+            description: "Distinct nodes visited per HNSW search; primary recall-vs-cost signal.");
+
+        _hnswBuildDuration = _meter.CreateHistogram<double>(
+            "leanlucene.hnsw.build.duration", unit: "ms",
+            description: "Elapsed time for each HNSW graph build (flush or merge).");
+
+        _hnswBuildSize = _meter.CreateHistogram<long>(
+            "leanlucene.hnsw.build.nodes", unit: "{node}",
+            description: "Nodes inserted per HNSW build operation.");
     }
 
     /// <inheritdoc/>
@@ -162,6 +188,30 @@ public sealed class MeterMetricsCollector : IMetricsCollector, IDisposable
     }
 
     /// <inheritdoc/>
+    public void RecordHnswSearch(TimeSpan elapsed, int nodesVisited)
+    {
+        double ms = elapsed.TotalMilliseconds;
+        _hnswSearchDuration.Record(ms);
+        _hnswNodesVisited.Record(nodesVisited);
+
+        Interlocked.Increment(ref _snHnswSearchCount);
+        Interlocked.Add(ref _snHnswSearchTotalMs, (long)ms);
+        Interlocked.Add(ref _snHnswNodesVisited, nodesVisited);
+    }
+
+    /// <inheritdoc/>
+    public void RecordHnswBuild(TimeSpan elapsed, int nodes)
+    {
+        double ms = elapsed.TotalMilliseconds;
+        _hnswBuildDuration.Record(ms);
+        _hnswBuildSize.Record(nodes);
+
+        Interlocked.Increment(ref _snHnswBuildCount);
+        Interlocked.Add(ref _snHnswBuildTotalMs, (long)ms);
+        Interlocked.Add(ref _snHnswNodesBuilt, nodes);
+    }
+
+    /// <inheritdoc/>
     public MetricsSnapshot GetSnapshot()
     {
         long searchCount = Interlocked.Read(ref _snSearchCount);
@@ -189,7 +239,13 @@ public sealed class MeterMetricsCollector : IMetricsCollector, IDisposable
             MergeTotalMs   = Interlocked.Read(ref _snMergeTotalMs),
             CommitCount    = Interlocked.Read(ref _snCommitCount),
             CommitTotalMs  = Interlocked.Read(ref _snCommitTotalMs),
-            LatencyHistogram = buckets
+            LatencyHistogram = buckets,
+            HnswSearchCount   = Interlocked.Read(ref _snHnswSearchCount),
+            HnswSearchTotalMs = Interlocked.Read(ref _snHnswSearchTotalMs),
+            HnswNodesVisited  = Interlocked.Read(ref _snHnswNodesVisited),
+            HnswBuildCount    = Interlocked.Read(ref _snHnswBuildCount),
+            HnswBuildTotalMs  = Interlocked.Read(ref _snHnswBuildTotalMs),
+            HnswNodesBuilt    = Interlocked.Read(ref _snHnswNodesBuilt)
         };
     }
 

@@ -117,6 +117,34 @@ internal sealed class HnswGraph
         _mutableLevels.Clear();
     }
 
+    /// <summary>
+    /// Reverses <see cref="Freeze"/>: copies frozen adjacency back into the mutable structure
+    /// so further <see cref="Insert"/> calls are permitted. Used by incremental merge to seed
+    /// a new graph from the largest input segment's existing graph.
+    /// </summary>
+    internal void Thaw()
+    {
+        if (_frozenLevels is null) return;
+
+        _mutableLevels.Clear();
+        foreach (var level in _frozenLevels)
+        {
+            var dict = new Dictionary<int, List<int>>(level.Count);
+            foreach (var (docId, neighbours) in level)
+                dict[docId] = [.. neighbours];
+            _mutableLevels.Add(dict);
+        }
+        _frozenLevels = null;
+    }
+
+    /// <summary>True if a node with the given id is already present at layer 0.</summary>
+    internal bool ContainsNode(int docId)
+    {
+        if (_frozenLevels is not null)
+            return _frozenLevels.Count > 0 && _frozenLevels[0].ContainsKey(docId);
+        return _mutableLevels.Count > 0 && _mutableLevels[0].ContainsKey(docId);
+    }
+
     /// <summary>Inserts a node into the graph. The node's vector must already be present in the source.</summary>
     public void Insert(int docId)
     {
@@ -148,7 +176,7 @@ internal sealed class HnswGraph
         var entryPoints = new List<int> { currentEntry };
         for (int l = Math.Min(MaxLevel, newLevel); l >= 0; l--)
         {
-            var candidates = SearchLayer(query, entryPoints, EfConstruction, l, allowList: null);
+            var candidates = SearchLayer(query, entryPoints, EfConstruction, l, allowList: null, out _);
             // candidates is in arbitrary order; convert to a sorted distance ascending list for selection.
             var sorted = SortAscByDistance(candidates);
             int degree = LevelDegree(l);
@@ -186,22 +214,44 @@ internal sealed class HnswGraph
     /// Safe for concurrent callers once <see cref="Freeze"/> has been called.
     /// </summary>
     public IReadOnlyList<HnswSearchResult> Search(ReadOnlySpan<float> query, HnswSearchOptions options)
+        => SearchCore(query, options, out _);
+
+    /// <summary>
+    /// Searches the graph and returns per-call statistics for diagnostics and metrics.
+    /// </summary>
+    internal IReadOnlyList<HnswSearchResult> Search(
+        ReadOnlySpan<float> query,
+        HnswSearchOptions options,
+        out HnswSearchStats stats)
+        => SearchCore(query, options, out stats);
+
+    private IReadOnlyList<HnswSearchResult> SearchCore(
+        ReadOnlySpan<float> query,
+        HnswSearchOptions options,
+        out HnswSearchStats stats)
     {
         ArgumentNullException.ThrowIfNull(options);
+        stats = default;
         if (NodeCount == 0 || EntryPoint == NoEntryPoint)
             return Array.Empty<HnswSearchResult>();
 
         int currentEntry = EntryPoint;
+        int layersDescended = 0;
         for (int l = MaxLevel; l > 0; l--)
+        {
             currentEntry = GreedyDescent(query, currentEntry, l);
+            layersDescended++;
+        }
 
         int ef = Math.Max(1, options.Ef);
         int retriesLeft = options.MaxPostFilterRetries;
         IReadOnlyList<HnswSearchResult> results;
+        int totalVisited = 0;
 
         while (true)
         {
-            var raw = SearchLayer(query, [currentEntry], ef, level: 0, options.AllowList);
+            var raw = SearchLayer(query, [currentEntry], ef, level: 0, options.AllowList, out int visitedThisIteration);
+            totalVisited += visitedThisIteration;
             var ranked = SortAscByDistance(raw);
             var filtered = options.PostFilterMask is null
                 ? ranked
@@ -221,6 +271,7 @@ internal sealed class HnswGraph
             retriesLeft--;
         }
 
+        stats = new HnswSearchStats(totalVisited, layersDescended);
         return results;
     }
 
@@ -300,7 +351,8 @@ internal sealed class HnswGraph
         IReadOnlyList<int> entryPoints,
         int ef,
         int level,
-        IBitSet? allowList)
+        IBitSet? allowList,
+        out int nodesVisited)
     {
         var visited = new HashSet<int>(ef * 2);
         // Frontier: min-heap by distance ascending (closest popped first).
@@ -353,6 +405,7 @@ internal sealed class HnswGraph
         var output = new List<(int DocId, float Distance)>(results.Count);
         while (results.TryDequeue(out int id, out float dist))
             output.Add((id, dist));
+        nodesVisited = visited.Count;
         return output;
     }
 

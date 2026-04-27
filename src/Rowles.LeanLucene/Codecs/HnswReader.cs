@@ -7,6 +7,15 @@ namespace Rowles.LeanLucene.Codecs;
 internal static class HnswReader
 {
     public static HnswGraph Read(string filePath, IVectorSource vectorSource)
+        => Read(filePath, vectorSource, docIdRemap: null);
+
+    /// <summary>
+    /// Reads a graph and optionally remaps every doc-id (entry point, node keys, neighbour ids)
+    /// through <paramref name="docIdRemap"/>. Used by incremental merge to translate from a
+    /// source segment's local ids into the merged segment's id space. Any node whose id is
+    /// missing from the map is dropped; back-edges to dropped nodes are removed.
+    /// </summary>
+    public static HnswGraph Read(string filePath, IVectorSource vectorSource, IReadOnlyDictionary<int, int>? docIdRemap)
     {
         using var fs = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read);
         using var reader = new BinaryReader(fs, System.Text.Encoding.UTF8, leaveOpen: false);
@@ -44,7 +53,36 @@ internal static class HnswReader
                 var arr = new int[neighCount];
                 for (int k = 0; k < neighCount; k++)
                     arr[k] = reader.ReadInt32();
-                dict[docId] = arr;
+
+                if (docIdRemap is null)
+                {
+                    dict[docId] = arr;
+                }
+                else if (docIdRemap.TryGetValue(docId, out int newDocId))
+                {
+                    var remapped = new List<int>(arr.Length);
+                    foreach (int neigh in arr)
+                    {
+                        if (docIdRemap.TryGetValue(neigh, out int newNeigh))
+                            remapped.Add(newNeigh);
+                    }
+                    dict[newDocId] = remapped.ToArray();
+                }
+            }
+        }
+
+        if (docIdRemap is not null)
+        {
+            entryPoint = docIdRemap.TryGetValue(entryPoint, out int newEntry) ? newEntry : -1;
+            nodeCount = 0;
+            foreach (var lvl in levels) nodeCount += lvl.Count;
+            // Fix maxLevel if higher levels became empty after remap.
+            while (maxLevel >= 0 && levels[maxLevel].Count == 0) maxLevel--;
+            // If the original entry point was dropped, pick any surviving top-level node.
+            if (entryPoint == -1 && maxLevel >= 0)
+            {
+                using var e = levels[maxLevel].Keys.GetEnumerator();
+                if (e.MoveNext()) entryPoint = e.Current;
             }
         }
 

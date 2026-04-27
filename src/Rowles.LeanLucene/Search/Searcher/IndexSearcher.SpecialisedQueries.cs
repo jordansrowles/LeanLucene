@@ -350,7 +350,10 @@ public sealed partial class IndexSearcher
                 };
 
             var searchVec = normalisedQuery ?? queryVec;
-            var shortlist = graph!.Search(searchVec, options);
+            var hnswSw = System.Diagnostics.Stopwatch.StartNew();
+            var shortlist = graph!.Search(searchVec, options, out var stats);
+            hnswSw.Stop();
+            _config.Metrics.RecordHnswSearch(hnswSw.Elapsed, stats.NodesVisited);
             foreach (var hit in shortlist)
             {
                 if (!reader.IsLive(hit.DocId)) continue;
@@ -372,7 +375,10 @@ public sealed partial class IndexSearcher
                 TopK = shortlistSize,
             };
             var searchVec = normalisedQuery ?? queryVec;
-            var shortlist = graph!.Search(searchVec, options);
+            var hnswSw = System.Diagnostics.Stopwatch.StartNew();
+            var shortlist = graph!.Search(searchVec, options, out var stats);
+            hnswSw.Stop();
+            _config.Metrics.RecordHnswSearch(hnswSw.Elapsed, stats.NodesVisited);
             if (shortlist.Count == 0) return;
             foreach (var hit in shortlist)
             {

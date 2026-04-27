@@ -54,4 +54,22 @@ public sealed class MetricsSnapshot
     /// Latency histogram: buckets are [&lt;1ms, &lt;5ms, &lt;10ms, &lt;50ms, &lt;100ms, &lt;500ms, &lt;1000ms, ≥1000ms].
     /// </summary>
     public long[]? LatencyHistogram { get; init; }
+
+    /// <summary>Total number of HNSW graph traversals performed during search.</summary>
+    public long HnswSearchCount { get; init; }
+
+    /// <summary>Cumulative time spent in HNSW graph traversal in milliseconds.</summary>
+    public long HnswSearchTotalMs { get; init; }
+
+    /// <summary>Total nodes visited across all HNSW graph traversals (recall-vs-cost signal).</summary>
+    public long HnswNodesVisited { get; init; }
+
+    /// <summary>Total number of HNSW graphs built (flush + merge).</summary>
+    public long HnswBuildCount { get; init; }
+
+    /// <summary>Cumulative time spent building HNSW graphs in milliseconds.</summary>
+    public long HnswBuildTotalMs { get; init; }
+
+    /// <summary>Total nodes inserted across all HNSW build operations.</summary>
+    public long HnswNodesBuilt { get; init; }
 }

@@ -228,7 +228,10 @@ public sealed partial class IndexWriter
                     var memSource = new Dictionary<int, ReadOnlyMemory<float>>(perField);
                     var source = new Codecs.InMemoryVectorSource(memSource, dimension);
                     var docIds = perField.Keys.ToArray();
+                    var hnswSw = System.Diagnostics.Stopwatch.StartNew();
                     var graph = Codecs.HnswGraphBuilder.Build(source, docIds, _config.HnswBuildConfig, _config.HnswSeed);
+                    hnswSw.Stop();
+                    _config.Metrics.RecordHnswBuild(hnswSw.Elapsed, docIds.Length);
                     var hnswPath = Codecs.VectorFilePaths.HnswFile(basePath, fieldName);
                     Codecs.HnswWriter.Write(hnswPath, graph, dimension, _config.NormaliseVectors);
                     hasHnsw = true;

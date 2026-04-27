@@ -87,6 +87,78 @@ public sealed partial class IndexSearcher
     }
 
     /// <summary>
+    /// Explains the score and execution strategy for a <see cref="VectorQuery"/> against a specific document.
+    /// Surfaces the chosen ANN strategy (flat scan, HNSW two-phase, brute-force filter,
+    /// HNSW pre-filter, HNSW post-filter), the configured <c>ef</c>, and shortlist size.
+    /// Returns null if the document does not exist or has no vector for the query field.
+    /// </summary>
+    public Explanation? Explain(VectorQuery query, int globalDocId)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+
+        int readerIndex = ResolveReaderIndex(globalDocId);
+        if (readerIndex < 0 || readerIndex >= _readers.Count) return null;
+
+        var reader = _readers[readerIndex];
+        int localDocId = globalDocId - _docBases[readerIndex];
+
+        if (!reader.IsLive(localDocId)) return null;
+        if (!reader.HasVectors) return null;
+
+        var docVector = reader.GetVector(query.Field, localDocId);
+        if (docVector is null || docVector.Length == 0) return null;
+
+        float similarity = VectorQuery.CosineSimilarity(query.QueryVector, docVector);
+
+        var graph = reader.GetHnswGraph(query.Field);
+        bool hasGraph = graph is not null && graph.NodeCount > 0;
+        int shortlistSize = query.TopK * query.OversamplingFactor;
+
+        string strategy;
+        var details = new List<Explanation>();
+
+        if (query.Filter is not null)
+        {
+            // Mirror ExecuteVectorQuery's selectivity branching to report the chosen strategy.
+            var filterBitmap = ExecuteFilterToBitmap(query.Filter, reader, []);
+            int matched = filterBitmap.Cardinality;
+            int liveCount = reader.MaxDoc;
+            double selectivity = liveCount > 0 ? (double)matched / liveCount : 1.0;
+
+            if (!hasGraph)
+                strategy = "flat-scan + filter";
+            else if (matched < 64 || selectivity < 0.005)
+                strategy = "brute-force on filter (highly selective)";
+            else if (selectivity < 0.05)
+                strategy = "HNSW pre-filter (allow-list)";
+            else
+                strategy = "HNSW post-filter with retry";
+
+            details.Add(new Explanation
+            {
+                Score = matched,
+                Description = $"filter matched {matched} docs (selectivity={selectivity:P2})"
+            });
+        }
+        else
+        {
+            strategy = hasGraph ? "HNSW two-phase" : "flat-scan";
+        }
+
+        details.Add(new Explanation { Score = query.EfSearch, Description = $"efSearch={query.EfSearch}" });
+        details.Add(new Explanation { Score = shortlistSize, Description = $"shortlistSize={shortlistSize} (topK*oversampling)" });
+        if (hasGraph)
+            details.Add(new Explanation { Score = graph!.NodeCount, Description = $"hnswNodeCount={graph.NodeCount}" });
+
+        return new Explanation
+        {
+            Score = similarity,
+            Description = $"cosine similarity for field '{query.Field}'; strategy: {strategy}",
+            Details = details.ToArray()
+        };
+    }
+
+    /// <summary>
     /// Returns the top-N terms with the given prefix for auto-complete / suggest,
     /// ranked by global document frequency descending.
     /// </summary>

@@ -17,6 +17,12 @@ public sealed class DefaultMetricsCollector : IMetricsCollector
     private long _mergeTotalMs;
     private long _commitCount;
     private long _commitTotalMs;
+    private long _hnswSearchCount;
+    private long _hnswSearchTotalMs;
+    private long _hnswNodesVisited;
+    private long _hnswBuildCount;
+    private long _hnswBuildTotalMs;
+    private long _hnswNodesBuilt;
 
     // Latency histogram buckets: <1ms, <5ms, <10ms, <50ms, <100ms, <500ms, <1000ms, ≥1000ms
     private readonly long[] _latencyBuckets = new long[8];
@@ -68,6 +74,22 @@ public sealed class DefaultMetricsCollector : IMetricsCollector
     }
 
     /// <inheritdoc/>
+    public void RecordHnswSearch(TimeSpan elapsed, int nodesVisited)
+    {
+        Interlocked.Increment(ref _hnswSearchCount);
+        Interlocked.Add(ref _hnswSearchTotalMs, (long)elapsed.TotalMilliseconds);
+        Interlocked.Add(ref _hnswNodesVisited, nodesVisited);
+    }
+
+    /// <inheritdoc/>
+    public void RecordHnswBuild(TimeSpan elapsed, int nodes)
+    {
+        Interlocked.Increment(ref _hnswBuildCount);
+        Interlocked.Add(ref _hnswBuildTotalMs, (long)elapsed.TotalMilliseconds);
+        Interlocked.Add(ref _hnswNodesBuilt, nodes);
+    }
+
+    /// <inheritdoc/>
     public MetricsSnapshot GetSnapshot()
     {
         long searchCount = Interlocked.Read(ref _searchCount);
@@ -95,7 +117,13 @@ public sealed class DefaultMetricsCollector : IMetricsCollector
             MergeTotalMs = Interlocked.Read(ref _mergeTotalMs),
             CommitCount = Interlocked.Read(ref _commitCount),
             CommitTotalMs = Interlocked.Read(ref _commitTotalMs),
-            LatencyHistogram = buckets
+            LatencyHistogram = buckets,
+            HnswSearchCount = Interlocked.Read(ref _hnswSearchCount),
+            HnswSearchTotalMs = Interlocked.Read(ref _hnswSearchTotalMs),
+            HnswNodesVisited = Interlocked.Read(ref _hnswNodesVisited),
+            HnswBuildCount = Interlocked.Read(ref _hnswBuildCount),
+            HnswBuildTotalMs = Interlocked.Read(ref _hnswBuildTotalMs),
+            HnswNodesBuilt = Interlocked.Read(ref _hnswNodesBuilt)
         };
     }
 
