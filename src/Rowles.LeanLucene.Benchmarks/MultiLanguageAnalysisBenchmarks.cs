@@ -1,5 +1,6 @@
 using BenchmarkDotNet.Attributes;
 using Rowles.LeanLucene.Analysis;
+using Rowles.LeanLucene.Analysis.Analysers;
 
 namespace Rowles.LeanLucene.Benchmarks;
 

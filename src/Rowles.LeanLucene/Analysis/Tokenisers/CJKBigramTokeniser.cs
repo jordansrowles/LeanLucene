@@ -1,6 +1,7 @@
 namespace Rowles.LeanLucene.Analysis.Tokenisers;
 
 using Rowles.LeanLucene.Analysis;
+using Rowles.LeanLucene.Analysis.Analysers;
 
 /// <summary>
 /// Tokeniser for CJK (Chinese, Japanese, Korean) text using overlapping bigrams.

@@ -1,6 +1,7 @@
 namespace Rowles.LeanLucene.Analysis.Tokenisers;
 
 using Rowles.LeanLucene.Analysis;
+using Rowles.LeanLucene.Analysis.Analysers;
 
 /// <summary>
 /// Splits text into character substrings of length [<see cref="MinGram"/>, <see cref="MaxGram"/>]

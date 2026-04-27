@@ -3,6 +3,7 @@ using Lucene.Net.Analysis.Standard;
 using Lucene.Net.Documents;
 using Lucene.Net.Util;
 using Rowles.LeanLucene.Analysis;
+using Rowles.LeanLucene.Analysis.Analysers;
 using Rowles.LeanLucene.Store;
 using LeanDocument = Rowles.LeanLucene.Document.LeanDocument;
 using LeanIndexWriter = Rowles.LeanLucene.Index.Indexer.IndexWriter;

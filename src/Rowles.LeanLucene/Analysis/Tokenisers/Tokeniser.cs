@@ -1,6 +1,7 @@
 namespace Rowles.LeanLucene.Analysis.Tokenisers;
 
 using Rowles.LeanLucene.Analysis;
+using Rowles.LeanLucene.Analysis.Analysers;
 
 /// <summary>
 /// Slices input text into tokens at word boundaries, splitting on

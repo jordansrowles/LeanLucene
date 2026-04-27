@@ -1,5 +1,11 @@
 using System.Buffers;
 using Rowles.LeanLucene.Codecs;
+using Rowles.LeanLucene.Codecs.Hnsw;
+using Rowles.LeanLucene.Codecs.Fst;
+using Rowles.LeanLucene.Codecs.Bkd;
+using Rowles.LeanLucene.Codecs.Vectors;
+using Rowles.LeanLucene.Codecs.TermVectors.TermVectors;
+using Rowles.LeanLucene.Codecs.TermDictionary;
 using Rowles.LeanLucene.Codecs.DocValues;
 using Rowles.LeanLucene.Codecs.StoredFields;
 using Rowles.LeanLucene.Search.Scoring;
@@ -214,26 +220,26 @@ public sealed partial class IndexWriter
                         var v = perField[k];
                         if (v.Length != dimension) continue;
                         var copy = v.ToArray();
-                        if (Search.SimdVectorOps.NormaliseInPlace(copy))
+                        if (Search.Simd.SimdVectorOps.NormaliseInPlace(copy))
                             perField[k] = copy;
                     }
                 }
 
-                var vecPath = Codecs.VectorFilePaths.VectorFile(basePath, fieldName);
-                Codecs.VectorWriter.WriteField(vecPath, _bufferedDocCount, dimension, perField);
+                var vecPath = Codecs.Vectors.VectorFilePaths.VectorFile(basePath, fieldName);
+                Codecs.Vectors.VectorWriter.WriteField(vecPath, _bufferedDocCount, dimension, perField);
 
                 bool hasHnsw = false;
                 if (_config.BuildHnswOnFlush && perField.Count >= 2)
                 {
                     var memSource = new Dictionary<int, ReadOnlyMemory<float>>(perField);
-                    var source = new Codecs.InMemoryVectorSource(memSource, dimension);
+                    var source = new Codecs.Vectors.InMemoryVectorSource(memSource, dimension);
                     var docIds = perField.Keys.ToArray();
                     var hnswSw = System.Diagnostics.Stopwatch.StartNew();
-                    var graph = Codecs.HnswGraphBuilder.Build(source, docIds, _config.HnswBuildConfig, _config.HnswSeed);
+                    var graph = Codecs.Hnsw.HnswGraphBuilder.Build(source, docIds, _config.HnswBuildConfig, _config.HnswSeed);
                     hnswSw.Stop();
                     _config.Metrics.RecordHnswBuild(hnswSw.Elapsed, docIds.Length);
-                    var hnswPath = Codecs.VectorFilePaths.HnswFile(basePath, fieldName);
-                    Codecs.HnswWriter.Write(hnswPath, graph, dimension, _config.NormaliseVectors);
+                    var hnswPath = Codecs.Vectors.VectorFilePaths.HnswFile(basePath, fieldName);
+                    Codecs.Hnsw.HnswWriter.Write(hnswPath, graph, dimension, _config.NormaliseVectors);
                     hasHnsw = true;
                 }
 

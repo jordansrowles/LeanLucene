@@ -1,8 +1,17 @@
 using BenchmarkDotNet.Attributes;
 using Rowles.LeanLucene.Codecs;
+using Rowles.LeanLucene.Codecs.Hnsw;
+using Rowles.LeanLucene.Codecs.Fst;
+using Rowles.LeanLucene.Codecs.Bkd;
+using Rowles.LeanLucene.Codecs.Vectors;
+using Rowles.LeanLucene.Codecs.TermVectors.TermVectors;
+using Rowles.LeanLucene.Codecs.TermDictionary;
 using Rowles.LeanLucene.Document;
 using Rowles.LeanLucene.Document.Fields;
 using Rowles.LeanLucene.Search;
+using Rowles.LeanLucene.Search.Simd;
+using Rowles.LeanLucene.Search.Parsing;
+using Rowles.LeanLucene.Search.Highlighting;
 using Rowles.LeanLucene.Store;
 using LeanIndexWriter = Rowles.LeanLucene.Index.Indexer.IndexWriter;
 using LeanIndexWriterConfig = Rowles.LeanLucene.Index.Indexer.IndexWriterConfig;

@@ -1,4 +1,5 @@
 using Rowles.LeanLucene.Analysis;
+using Rowles.LeanLucene.Analysis.Analysers;
 using Xunit;
 
 namespace Rowles.LeanLucene.Tests.Analysis;

@@ -1,5 +1,8 @@
 using BenchmarkDotNet.Attributes;
 using Rowles.LeanLucene.Search;
+using Rowles.LeanLucene.Search.Simd;
+using Rowles.LeanLucene.Search.Parsing;
+using Rowles.LeanLucene.Search.Highlighting;
 
 namespace Rowles.LeanLucene.Benchmarks;
 

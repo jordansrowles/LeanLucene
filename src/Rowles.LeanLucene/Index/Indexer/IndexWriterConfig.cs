@@ -1,6 +1,10 @@
 using Rowles.LeanLucene.Analysis;
+using Rowles.LeanLucene.Analysis.Analysers;
 using Rowles.LeanLucene.Codecs.StoredFields;
 using Rowles.LeanLucene.Search;
+using Rowles.LeanLucene.Search.Simd;
+using Rowles.LeanLucene.Search.Parsing;
+using Rowles.LeanLucene.Search.Highlighting;
 
 namespace Rowles.LeanLucene.Index.Indexer;
 
@@ -146,8 +150,8 @@ public sealed class IndexWriterConfig
     /// </summary>
     public bool BuildHnswOnFlush { get; set; } = true;
 
-    /// <summary>HNSW build configuration applied to every vector field. See <see cref="Codecs.HnswBuildConfig"/>.</summary>
-    public Codecs.HnswBuildConfig HnswBuildConfig { get; set; } = new();
+    /// <summary>HNSW build configuration applied to every vector field. See <see cref="Codecs.Hnsw.HnswBuildConfig"/>.</summary>
+    public Codecs.Hnsw.HnswBuildConfig HnswBuildConfig { get; set; } = new();
 
     /// <summary>
     /// Optional deterministic seed for HNSW graph construction. When null, a random seed is generated

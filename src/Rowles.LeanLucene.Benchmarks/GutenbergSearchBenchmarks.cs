@@ -5,6 +5,7 @@ using Lucene.Net.Index;
 using Lucene.Net.Search;
 using Lucene.Net.Util;
 using Rowles.LeanLucene.Analysis;
+using Rowles.LeanLucene.Analysis.Analysers;
 using LeanDocument = Rowles.LeanLucene.Document.LeanDocument;
 using LeanIndexSearcher = Rowles.LeanLucene.Search.Searcher.IndexSearcher;
 using LeanIndexWriter = Rowles.LeanLucene.Index.Indexer.IndexWriter;

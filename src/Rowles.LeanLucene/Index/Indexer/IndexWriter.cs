@@ -1,7 +1,14 @@
 using System.Runtime.CompilerServices;
 using System.Text.Json;
 using Rowles.LeanLucene.Analysis;
+using Rowles.LeanLucene.Analysis.Analysers;
 using Rowles.LeanLucene.Codecs;
+using Rowles.LeanLucene.Codecs.Hnsw;
+using Rowles.LeanLucene.Codecs.Fst;
+using Rowles.LeanLucene.Codecs.Bkd;
+using Rowles.LeanLucene.Codecs.Vectors;
+using Rowles.LeanLucene.Codecs.TermVectors.TermVectors;
+using Rowles.LeanLucene.Codecs.TermDictionary;
 using Rowles.LeanLucene.Codecs.StoredFields;
 using Rowles.LeanLucene.Document;
 using Rowles.LeanLucene.Document.Fields;

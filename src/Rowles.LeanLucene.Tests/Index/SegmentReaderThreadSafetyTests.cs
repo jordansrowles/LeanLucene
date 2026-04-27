@@ -2,6 +2,9 @@ using Rowles.LeanLucene.Document;
 using Rowles.LeanLucene.Document.Fields;
 using Rowles.LeanLucene.Index;
 using Rowles.LeanLucene.Search;
+using Rowles.LeanLucene.Search.Simd;
+using Rowles.LeanLucene.Search.Parsing;
+using Rowles.LeanLucene.Search.Highlighting;
 using Rowles.LeanLucene.Store;
 
 namespace Rowles.LeanLucene.Tests.Index;

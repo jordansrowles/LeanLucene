@@ -1,6 +1,12 @@
 using System.Buffers;
 using System.Text.Json;
 using Rowles.LeanLucene.Codecs;
+using Rowles.LeanLucene.Codecs.Hnsw;
+using Rowles.LeanLucene.Codecs.Fst;
+using Rowles.LeanLucene.Codecs.Bkd;
+using Rowles.LeanLucene.Codecs.Vectors;
+using Rowles.LeanLucene.Codecs.TermVectors.TermVectors;
+using Rowles.LeanLucene.Codecs.TermDictionary;
 using Rowles.LeanLucene.Codecs.DocValues;
 using Rowles.LeanLucene.Codecs.Postings;
 using Rowles.LeanLucene.Codecs.StoredFields;
@@ -446,7 +452,7 @@ public sealed class SegmentMerger
             int dimension = vectorFieldDims[fieldName];
             bool normalised = vectorFieldNormalised.GetValueOrDefault(fieldName, true);
 
-            var vecPath = Codecs.VectorFilePaths.VectorFile(basePath, fieldName);
+            var vecPath = Codecs.Vectors.VectorFilePaths.VectorFile(basePath, fieldName);
             VectorWriter.WriteField(vecPath, totalDocs, dimension, perField);
 
             bool hasHnsw = false;
@@ -466,7 +472,7 @@ public sealed class SegmentMerger
 
                     if (seed.OldToNew is not null && seed.OldToNew.Count > 0)
                     {
-                        var seedHnswPath = Codecs.VectorFilePaths.HnswFile(
+                        var seedHnswPath = Codecs.Vectors.VectorFilePaths.HnswFile(
                             Path.Combine(_directory.DirectoryPath, seed.Seg.SegmentId), fieldName);
                         if (File.Exists(seedHnswPath))
                         {
@@ -504,7 +510,7 @@ public sealed class SegmentMerger
 
                 hnswSw.Stop();
                 _metrics.RecordHnswBuild(hnswSw.Elapsed, perField.Count);
-                var hnswPath = Codecs.VectorFilePaths.HnswFile(basePath, fieldName);
+                var hnswPath = Codecs.Vectors.VectorFilePaths.HnswFile(basePath, fieldName);
                 HnswWriter.Write(hnswPath, graph, dimension, normalised);
                 hasHnsw = true;
             }

@@ -1,5 +1,6 @@
 using System.Reflection;
 using Rowles.LeanLucene.Analysis;
+using Rowles.LeanLucene.Analysis.Analysers;
 using Rowles.LeanLucene.Document;
 using Rowles.LeanLucene.Document.Fields;
 using Rowles.LeanLucene.Index;

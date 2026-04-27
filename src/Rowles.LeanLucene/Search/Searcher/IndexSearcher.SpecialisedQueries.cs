@@ -2,6 +2,9 @@ using Rowles.LeanLucene.Codecs.Postings;
 using Rowles.LeanLucene.Index;
 using Rowles.LeanLucene.Search.Geo;
 
+using Rowles.LeanLucene.Search.Simd;
+using Rowles.LeanLucene.Search.Parsing;
+using Rowles.LeanLucene.Search.Highlighting;
 namespace Rowles.LeanLucene.Search.Searcher;
 
 /// <summary>
@@ -314,7 +317,7 @@ public sealed partial class IndexSearcher
         if (normalised)
         {
             normalisedQuery = (float[])queryVec.Clone();
-            if (!Rowles.LeanLucene.Search.SimdVectorOps.NormaliseInPlace(normalisedQuery))
+            if (!Rowles.LeanLucene.Search.Simd.SimdVectorOps.NormaliseInPlace(normalisedQuery))
                 return;
         }
 

@@ -1,5 +1,6 @@
 using BenchmarkDotNet.Attributes;
 using Rowles.LeanLucene.Analysis;
+using Rowles.LeanLucene.Analysis.Analysers;
 using Rowles.LeanLucene.Store;
 using LeanDocument = Rowles.LeanLucene.Document.LeanDocument;
 using LeanStringField = Rowles.LeanLucene.Document.Fields.StringField;

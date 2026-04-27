@@ -1,4 +1,5 @@
 using Rowles.LeanLucene.Analysis;
+using Rowles.LeanLucene.Analysis.Analysers;
 using Rowles.LeanLucene.Analysis.Stemmers;
 using Rowles.LeanLucene.Analysis.Tokenisers;
 using Xunit;
