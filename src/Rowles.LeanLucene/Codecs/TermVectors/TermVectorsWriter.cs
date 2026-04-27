@@ -3,9 +3,9 @@ using Rowles.LeanLucene.Codecs.Hnsw;
 using Rowles.LeanLucene.Codecs.Fst;
 using Rowles.LeanLucene.Codecs.Bkd;
 using Rowles.LeanLucene.Codecs.Vectors;
-using Rowles.LeanLucene.Codecs.TermVectors.TermVectors;
+using Rowles.LeanLucene.Codecs.TermVectors;
 using Rowles.LeanLucene.Codecs.TermDictionary;
-namespace Rowles.LeanLucene.Codecs.TermVectors.TermVectors;
+namespace Rowles.LeanLucene.Codecs.TermVectors;
 
 /// <summary>
 /// Writes per-document term vectors to .tvd (data) and .tvx (offset index) files.
