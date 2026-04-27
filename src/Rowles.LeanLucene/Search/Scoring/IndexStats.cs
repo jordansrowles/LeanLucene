@@ -80,9 +80,31 @@ public sealed class IndexStats
             FieldDocCounts = _fieldDocCounts,
         };
         var json = JsonSerializer.Serialize(dto, s_jsonOptions);
-        var tmp = path + ".tmp";
+
+        // Use a unique tmp suffix so concurrent or rapidly-repeated writes
+        // never collide on the same temp path. File.Move is atomic on a single
+        // filesystem; if the source vanishes between WriteAllText and Move
+        // (test harness cleanup, antivirus, etc), tolerate it provided the
+        // destination ended up with content.
+        var tmp = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
         File.WriteAllText(tmp, json);
-        File.Move(tmp, path, overwrite: true);
+        try
+        {
+            File.Move(tmp, path, overwrite: true);
+        }
+        catch (FileNotFoundException) when (File.Exists(path))
+        {
+            // The tmp was consumed by a concurrent move (shouldn't happen with
+            // unique names, but defend against environmental interference).
+            // The destination exists — accept that as success.
+        }
+        finally
+        {
+            if (File.Exists(tmp))
+            {
+                try { File.Delete(tmp); } catch { /* best-effort cleanup */ }
+            }
+        }
     }
 
     /// <summary>
