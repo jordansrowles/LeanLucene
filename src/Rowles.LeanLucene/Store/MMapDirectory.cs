@@ -67,6 +67,18 @@ public sealed class MMapDirectory : LeanDirectory
         if (Path.IsPathRooted(fileName) || fileName != Path.GetFileName(fileName))
             throw new ArgumentException("File name must not contain path components.", nameof(fileName));
 
+        // Cross-platform: Path.GetFileName on POSIX treats backslash as a
+        // regular character, so "..\\..\\foo" passes the check above. Reject
+        // every separator and every traversal segment explicitly.
+        if (fileName.Contains('/') || fileName.Contains('\\') || fileName.Contains(".."))
+            throw new ArgumentException("File name must not contain path separators or traversal segments.", nameof(fileName));
+
+        foreach (var c in fileName)
+        {
+            if (char.IsControl(c))
+                throw new ArgumentException("File name must not contain control characters.", nameof(fileName));
+        }
+
         return fileName;
     }
 }
