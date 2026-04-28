@@ -77,6 +77,24 @@ public sealed class SearcherManager : IDisposable
     }
 
     /// <summary>
+    /// Acquires a scoped reference to the current searcher. Disposing the returned
+    /// <see cref="SearcherLease"/> releases the reference. This is the preferred
+    /// alternative to <see cref="Acquire"/> + <see cref="Release"/>: the lease
+    /// bypasses the <c>ConditionalWeakTable</c> lookup performed by <c>Release</c>.
+    /// </summary>
+    public SearcherLease AcquireLease()
+    {
+        while (true)
+        {
+            ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
+            var sr = _current;
+            if (sr.TryIncrementRef())
+                return new SearcherLease(sr.Searcher, sr.DecrementRef);
+            Thread.SpinWait(1);
+        }
+    }
+
+    /// <summary>
     /// Acquires a reference to the current searcher. The caller must call
     /// <see cref="Release"/> when done. The searcher remains valid until released.
     /// </summary>
