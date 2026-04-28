@@ -26,6 +26,9 @@
 .PARAMETER DocCount
     Override document count for all suites.
 
+.PARAMETER Framework
+    Target framework for the benchmark host. Defaults to net10.0.
+
 .PARAMETER PrepareData
     Check for benchmark data and download if absent. Runs download-gutenberg.ps1
     and download-news.ps1 before benchmarking. Safe to re-run; existing files are
@@ -48,6 +51,19 @@
 
 .PARAMETER GcDump
     Collect GC heap dumps after each benchmark run (requires dotnet-gcdump).
+
+.PARAMETER Controlled
+    Use a deterministic local diagnostic preset. Defaults to 1000 documents,
+    --job short, and LeanLucene-only when those are not otherwise specified.
+
+.PARAMETER SourceCommit
+    Source commit for copied benchmark runs where .git is unavailable.
+
+.PARAMETER SourceRef
+    Source branch or ref for copied benchmark runs where .git is unavailable.
+
+.PARAMETER SourceManifest
+    Path to a source manifest for copied benchmark runs where .git is unavailable.
 
 .PARAMETER BenchmarkArgs
     Additional arguments passed through to BenchmarkDotNet
@@ -81,6 +97,7 @@
     .\scripts\benchmark.ps1 -Dry -Suite index -Strat fast
     Prints the command that would run without executing it.
 #>
+[CmdletBinding(PositionalBinding = $false)]
 param(
     [ValidateSet('all', 'index', 'query', 'analysis', 'boolean', 'phrase',
                  'prefix', 'fuzzy', 'wildcard', 'deletion',
@@ -91,6 +108,9 @@ param(
 
     [ValidateSet('default', 'fast', 'quick-compare', 'intense', 'stress')]
     [string]$Strat = 'default',
+
+    [ValidateSet('net10.0', 'net11.0')]
+    [string]$Framework = 'net10.0',
 
     [int]$DocCount = 0,
 
@@ -108,9 +128,43 @@ param(
 
     [switch]$GcDump,
 
+    [switch]$Controlled,
+
+    [string]$SourceCommit = '',
+
+    [string]$SourceRef = '',
+
+    [string]$SourceManifest = '',
+
     [Parameter(ValueFromRemainingArguments = $true)]
     [string[]]$BenchmarkArgs
 )
+
+function Test-HasBdnOption {
+    param(
+        [string[]]$Arguments,
+        [string[]]$Names
+    )
+
+    foreach ($argument in $Arguments) {
+        foreach ($name in $Names) {
+            if ($argument.Equals($name, [System.StringComparison]::OrdinalIgnoreCase) -or
+                $argument.StartsWith("$name=", [System.StringComparison]::OrdinalIgnoreCase)) {
+                return $true
+            }
+        }
+    }
+
+    return $false
+}
+
+if ($BenchmarkArgs -and $BenchmarkArgs.Count -gt 0 -and $BenchmarkArgs[0] -eq '--') {
+    if ($BenchmarkArgs.Count -eq 1) {
+        $BenchmarkArgs = @()
+    } else {
+        $BenchmarkArgs = $BenchmarkArgs[1..($BenchmarkArgs.Count - 1)]
+    }
+}
 
 $suiteDescriptions = [ordered]@{
     all                  = 'Run all primary benchmark suites, including Gutenberg (default)'
@@ -154,6 +208,7 @@ if ($Help) {
     Write-Host '  Options:'
     Write-Host '    -Suite <name>      Benchmark suite to run (default: all)'
     Write-Host '    -Strat <name>      Predefined strategy (default: default)'
+    Write-Host '    -Framework <tfm>   Target framework for dotnet run (default: net10.0)'
     Write-Host '    -DocCount <n>      Override document count (overrides -Strat)'
     Write-Host '    -PrepareData       Download benchmark data if not already present'
     Write-Host '    -BookCount <n>     Number of Gutenberg books to fetch with -PrepareData (default: 200)'
@@ -161,6 +216,10 @@ if ($Help) {
     Write-Host '    -List              List available suites and strategies and exit'
     Write-Host '    -Dry               Print the command that would run without executing it'
     Write-Host '    -GcDump            Collect GC heap dumps (requires dotnet-gcdump)'
+    Write-Host '    -Controlled        Use a deterministic local diagnostic preset'
+    Write-Host '    -SourceCommit <s>  Source commit for copied runs without .git'
+    Write-Host '    -SourceRef <s>     Source branch/ref for copied runs without .git'
+    Write-Host '    -SourceManifest <p> Source manifest path for copied runs'
     Write-Host '    -Help              Show this help message and exit'
     Write-Host ''
     Write-Host '  Suites (-Suite):'
@@ -232,6 +291,16 @@ switch ($Strat) {
     }
 }
 
+if ($Controlled) {
+    if ($DocCount -le 0 -and $stratDocCount -le 0) {
+        $stratDocCount = 1000
+    }
+    if ($stratJobArgs.Count -eq 0 -and -not (Test-HasBdnOption $BenchmarkArgs @('--job', '-j'))) {
+        $stratJobArgs = @('--job', 'short')
+    }
+    $LeanOnly = $true
+}
+
 # DocCount parameter overrides strategy; if neither set, leave unset (BDN [Params] defaults)
 $effectiveDocCount = 0
 if ($DocCount -gt 0) {
@@ -297,12 +366,27 @@ if ($LeanOnly) {
     $runArgs += '--lean-only'
 }
 
+if (-not [string]::IsNullOrWhiteSpace($SourceCommit)) {
+    $env:BENCH_SOURCE_COMMIT = $SourceCommit
+}
+if (-not [string]::IsNullOrWhiteSpace($SourceRef)) {
+    $env:BENCH_SOURCE_REF = $SourceRef
+}
+if (-not [string]::IsNullOrWhiteSpace($SourceManifest)) {
+    $env:BENCH_SOURCE_MANIFEST = [System.IO.Path]::GetFullPath($SourceManifest)
+}
+
 # Prepend strategy job args before user-supplied BDN args
-$allExtraArgs = $stratJobArgs
+$allExtraArgs = @()
+if (-not (Test-HasBdnOption $BenchmarkArgs @('--job', '-j'))) {
+    $allExtraArgs += $stratJobArgs
+}
 if ($BenchmarkArgs) { $allExtraArgs += $BenchmarkArgs }
 
 Write-Host "Suite:    $Suite"
 Write-Host "Strat:    $Strat"
+Write-Host "Framework: $Framework"
+if ($Controlled) { Write-Host "Mode:     controlled" }
 if ($LeanOnly) { Write-Host "LeanOnly: enabled" }
 if ($effectiveDocCount -gt 0) {
     Write-Host "Docs:     $effectiveDocCount"
@@ -312,7 +396,7 @@ if ($allExtraArgs) {
 }
 
 if ($Dry) {
-    $cmdDisplay = "dotnet run -c Release --project `"$projectPath`" -- $($runArgs -join ' ')"
+    $cmdDisplay = "dotnet run -c Release --framework $Framework --project `"$projectPath`" -- $($runArgs -join ' ')"
     if ($allExtraArgs) { $cmdDisplay += " $($allExtraArgs -join ' ')" }
     Write-Host ""
     Write-Host 'Dry run - command that would execute:'
@@ -320,6 +404,9 @@ if ($Dry) {
     if ($effectiveDocCount -gt 0) {
         Write-Host "  env: BENCH_DOC_COUNT=$effectiveDocCount"
     }
+    if ($env:BENCH_SOURCE_COMMIT) { Write-Host "  env: BENCH_SOURCE_COMMIT=$($env:BENCH_SOURCE_COMMIT)" }
+    if ($env:BENCH_SOURCE_REF) { Write-Host "  env: BENCH_SOURCE_REF=$($env:BENCH_SOURCE_REF)" }
+    if ($env:BENCH_SOURCE_MANIFEST) { Write-Host "  env: BENCH_SOURCE_MANIFEST=$($env:BENCH_SOURCE_MANIFEST)" }
     Write-Host ""
     exit 0
 }
@@ -334,4 +421,4 @@ if ($GcDump) {
 }
 
 Write-Host ""
-dotnet run -c Release --project $projectPath -- @runArgs @allExtraArgs
+dotnet run -c Release --framework $Framework --project $projectPath -- @runArgs @allExtraArgs

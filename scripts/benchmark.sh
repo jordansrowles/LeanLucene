@@ -7,6 +7,7 @@
 # Options:
 #   --suite <name>        Benchmark suite to run (default: all)
 #   --strat <name>        Predefined strategy (default: default)
+#   --framework <tfm>     Target framework for dotnet run (default: net10.0)
 #   --doccount <n>        Override document count (overrides --strat)
 #   --prepare-data        Download benchmark data if not already present
 #   --book-count <n>      Number of Gutenberg books to fetch with --prepare-data (default: 200)
@@ -14,6 +15,10 @@
 #   --list                List available suites and strategies and exit
 #   --dry                 Print the command that would run without executing it
 #   --gcdump              Collect GC heap dumps (requires dotnet-gcdump)
+#   --controlled          Use a deterministic local diagnostic preset
+#   --source-commit <s>   Source commit for copied runs without .git
+#   --source-ref <s>      Source branch/ref for copied runs without .git
+#   --source-manifest <p> Source manifest path for copied runs
 #   --help                Show help and exit
 #
 # Extra arguments after -- are passed through to BenchmarkDotNet.
@@ -36,6 +41,7 @@ PROJECT_PATH="$REPO_ROOT/src/Rowles.LeanLucene.Benchmarks/Rowles.LeanLucene.Benc
 
 SUITE="all"
 STRAT="default"
+TARGET_FRAMEWORK="net10.0"
 DOC_COUNT=0
 LEAN_ONLY=false
 DRY=false
@@ -44,6 +50,10 @@ HELP=false
 GCDUMP=false
 PREPARE_DATA=false
 BOOK_COUNT=200
+CONTROLLED=false
+SOURCE_COMMIT=""
+SOURCE_REF=""
+SOURCE_MANIFEST=""
 EXTRA_ARGS=()
 
 declare -A SUITE_DESC=(
@@ -97,6 +107,19 @@ contains() {
     return 1
 }
 
+has_bdn_option() {
+    local item
+    local name
+    for item in "${EXTRA_ARGS[@]}"; do
+        for name in "$@"; do
+            if [[ "$item" == "$name" || "$item" == "$name="* ]]; then
+                return 0
+            fi
+        done
+    done
+    return 1
+}
+
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --suite)
@@ -105,6 +128,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --strat)
             STRAT="${2:-}"
+            shift 2
+            ;;
+        --framework)
+            TARGET_FRAMEWORK="${2:-}"
             shift 2
             ;;
         --doccount)
@@ -134,6 +161,22 @@ while [[ $# -gt 0 ]]; do
         --gcdump)
             GCDUMP=true
             shift
+            ;;
+        --controlled)
+            CONTROLLED=true
+            shift
+            ;;
+        --source-commit)
+            SOURCE_COMMIT="${2:-}"
+            shift 2
+            ;;
+        --source-ref)
+            SOURCE_REF="${2:-}"
+            shift 2
+            ;;
+        --source-manifest)
+            SOURCE_MANIFEST="${2:-}"
+            shift 2
             ;;
         --help|-h)
             HELP=true
@@ -172,6 +215,7 @@ if $HELP; then
     echo "  Options:"
     echo "    --suite <name>        Benchmark suite to run (default: all)"
     echo "    --strat <name>        Predefined strategy (default: default)"
+    echo "    --framework <tfm>     Target framework for dotnet run (default: net10.0)"
     echo "    --doccount <n>        Override document count (overrides --strat)"
     echo "    --prepare-data        Download benchmark data if not already present"
     echo "    --book-count <n>      Number of Gutenberg books to fetch (default: 200)"
@@ -179,6 +223,10 @@ if $HELP; then
     echo "    --list                List available suites and strategies and exit"
     echo "    --dry                 Print the command that would run without executing it"
     echo "    --gcdump              Collect GC heap dumps (requires dotnet-gcdump)"
+    echo "    --controlled          Use a deterministic local diagnostic preset"
+    echo "    --source-commit <s>   Source commit for copied runs without .git"
+    echo "    --source-ref <s>      Source branch/ref for copied runs without .git"
+    echo "    --source-manifest <p> Source manifest path for copied runs"
     echo "    --help                Show this help message and exit"
     echo ""
     echo "  Suites (--suite):"
@@ -250,6 +298,16 @@ case "$STRAT" in
         ;;
 esac
 
+if $CONTROLLED; then
+    LEAN_ONLY=true
+    if [[ "$DOC_COUNT" -le 0 && "$STRAT_DOC_COUNT" -le 0 ]]; then
+        STRAT_DOC_COUNT=1000
+    fi
+    if [[ ${#STRAT_JOB_ARGS[@]} -eq 0 ]] && ! has_bdn_option --job -j; then
+        STRAT_JOB_ARGS=(--job short)
+    fi
+fi
+
 EFFECTIVE_DOC_COUNT=0
 if [[ "$DOC_COUNT" -gt 0 ]]; then
     EFFECTIVE_DOC_COUNT="$DOC_COUNT"
@@ -262,7 +320,6 @@ if [[ ! -f "$PROJECT_PATH" ]]; then
     exit 1
 fi
 
-# Prepare benchmark data if requested.
 if $PREPARE_DATA; then
     DATA_DIR="$REPO_ROOT/bench/data"
     GUTENBERG_DIR="$DATA_DIR/gutenberg-ebooks"
@@ -311,13 +368,30 @@ if [[ "$EFFECTIVE_DOC_COUNT" -gt 0 ]]; then
     export BENCH_DOC_COUNT="$EFFECTIVE_DOC_COUNT"
 fi
 
-ALL_EXTRA_ARGS=("${STRAT_JOB_ARGS[@]}")
+if [[ -n "$SOURCE_COMMIT" ]]; then
+    export BENCH_SOURCE_COMMIT="$SOURCE_COMMIT"
+fi
+if [[ -n "$SOURCE_REF" ]]; then
+    export BENCH_SOURCE_REF="$SOURCE_REF"
+fi
+if [[ -n "$SOURCE_MANIFEST" ]]; then
+    export BENCH_SOURCE_MANIFEST="$(cd "$(dirname "$SOURCE_MANIFEST")" && pwd)/$(basename "$SOURCE_MANIFEST")"
+fi
+
+ALL_EXTRA_ARGS=()
+if ! has_bdn_option --job -j; then
+    ALL_EXTRA_ARGS+=("${STRAT_JOB_ARGS[@]}")
+fi
 if [[ ${#EXTRA_ARGS[@]} -gt 0 ]]; then
     ALL_EXTRA_ARGS+=("${EXTRA_ARGS[@]}")
 fi
 
 echo "Suite:    $SUITE"
 echo "Strat:    $STRAT"
+echo "Framework: $TARGET_FRAMEWORK"
+if $CONTROLLED; then
+    echo "Mode:     controlled"
+fi
 if $LEAN_ONLY; then
     echo "LeanOnly: enabled"
 fi
@@ -330,7 +404,7 @@ fi
 
 if $DRY; then
     echo ""
-    cmd_display="dotnet run -c Release --project \"$PROJECT_PATH\" -- ${RUN_ARGS[*]}"
+    cmd_display="dotnet run -c Release --framework $TARGET_FRAMEWORK --project \"$PROJECT_PATH\" -- ${RUN_ARGS[*]}"
     if [[ ${#ALL_EXTRA_ARGS[@]} -gt 0 ]]; then
         cmd_display+=" ${ALL_EXTRA_ARGS[*]}"
     fi
@@ -338,6 +412,15 @@ if $DRY; then
     echo "  $cmd_display"
     if [[ "$EFFECTIVE_DOC_COUNT" -gt 0 ]]; then
         echo "  env: BENCH_DOC_COUNT=$EFFECTIVE_DOC_COUNT"
+    fi
+    if [[ -n "${BENCH_SOURCE_COMMIT:-}" ]]; then
+        echo "  env: BENCH_SOURCE_COMMIT=$BENCH_SOURCE_COMMIT"
+    fi
+    if [[ -n "${BENCH_SOURCE_REF:-}" ]]; then
+        echo "  env: BENCH_SOURCE_REF=$BENCH_SOURCE_REF"
+    fi
+    if [[ -n "${BENCH_SOURCE_MANIFEST:-}" ]]; then
+        echo "  env: BENCH_SOURCE_MANIFEST=$BENCH_SOURCE_MANIFEST"
     fi
     echo ""
     exit 0
@@ -353,305 +436,4 @@ if $GCDUMP; then
 fi
 
 echo ""
-dotnet run -c Release --project "$PROJECT_PATH" -- "${RUN_ARGS[@]}" "${ALL_EXTRA_ARGS[@]}"
-
-# Unified LeanLucene benchmark runner.
-#
-# Usage:
-#   ./scripts/benchmark.sh [options] [BenchmarkDotNet args...]
-#
-# Options:
-#   --suite <name>      Benchmark suite to run (default: all)
-#   --strat <name>      Predefined strategy (default: default)
-#   --doccount <n>      Override document count (overrides --strat)
-#   --lean-only         Skip Lucene.NET comparison benchmarks
-#   --list              List available suites and strategies and exit
-#   --dry               Print the command that would run without executing it
-#   --gcdump            Collect GC heap dumps (requires dotnet-gcdump)
-#   --help              Show help and exit
-#
-# Extra arguments after -- are passed through to BenchmarkDotNet.
-#
-# Examples:
-#   ./scripts/benchmark.sh
-#   ./scripts/benchmark.sh --suite query
-#   ./scripts/benchmark.sh --suite gutenberg-search --lean-only
-#   ./scripts/benchmark.sh --strat fast --suite boolean
-#   ./scripts/benchmark.sh --strat intense --doccount 20000
-#   ./scripts/benchmark.sh --list
-#   ./scripts/benchmark.sh --dry --suite index --strat fast
-
-set -euo pipefail
-
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-PROJECT_PATH="$REPO_ROOT/src/Rowles.LeanLucene.Benchmarks/Rowles.LeanLucene.Benchmarks.csproj"
-
-SUITE="all"
-STRAT="default"
-DOC_COUNT=0
-LEAN_ONLY=false
-DRY=false
-LIST=false
-HELP=false
-GCDUMP=false
-EXTRA_ARGS=()
-
-declare -A SUITE_DESC=(
-    [all]="Run all standard benchmark suites (default)"
-    [index]="IndexingBenchmarks        -- bulk indexing throughput (vs Lucene.NET)"
-    [query]="TermQueryBenchmarks       -- single-term search (vs Lucene.NET)"
-    [analysis]="AnalysisBenchmarks        -- tokenisation pipeline"
-    [boolean]="BooleanQueryBenchmarks    -- Must / Should / MustNot"
-    [phrase]="PhraseQueryBenchmarks     -- exact and slop phrase"
-    [prefix]="PrefixQueryBenchmarks      -- prefix matching (vs Lucene.NET)"
-    [fuzzy]="FuzzyQueryBenchmarks      -- fuzzy/edit-distance"
-    [wildcard]="WildcardQueryBenchmarks   -- wildcard patterns"
-    [deletion]="DeletionBenchmarks        -- delete throughput (vs Lucene.NET)"
-    [suggester]="SuggesterBenchmarks       -- DidYouMean spelling (vs Lucene.NET)"
-    [schemajson]="SchemaAndJsonBenchmarks   -- schema validation + JSON mapping"
-    [compound]="CompoundFileIndex/Search  -- compound file read/write (vs Lucene.NET)"
-    [indexsort]="IndexSortIndex/Search     -- index-time sort + early termination"
-    [blockjoin]="BlockJoinBenchmarks       -- block-join queries (vs Lucene.NET)"
-    ["gutenberg-analysis"]="GutenbergAnalysis         -- analysis on real ebook text (explicit only)"
-    ["gutenberg-index"]="GutenbergIndex            -- indexing real ebook data (explicit only)"
-    ["gutenberg-search"]="GutenbergSearch           -- search on real ebook data (explicit only)"
-    [tokenbudget]="TokenBudgetBenchmarks     -- token budget enforcement overhead (explicit only)"
-    [diagnostics]="DiagnosticsBenchmarks     -- SlowQueryLog + Analytics overhead (explicit only)"
-)
-
-SUITE_ORDER=(
-    all index query analysis boolean phrase prefix fuzzy wildcard deletion
-    suggester schemajson compound indexsort blockjoin
-    gutenberg-analysis gutenberg-index gutenberg-search tokenbudget diagnostics
-)
-
-declare -A STRAT_DESC=(
-    [default]="No overrides, uses BDN defaults."
-    [fast]="500 docs, --job dry (minimal smoke-test)."
-    [quick-compare]="1000 docs, --job short (quick comparison)."
-    [intense]="10000 docs, default BDN job."
-    [stress]="50000 docs, default BDN job."
-)
-
-STRAT_ORDER=(default fast quick-compare intense stress)
-
-contains() {
-    local needle="$1"
-    shift
-    local item
-    for item in "$@"; do
-        if [[ "$item" == "$needle" ]]; then
-            return 0
-        fi
-    done
-    return 1
-}
-
-while [[ $# -gt 0 ]]; do
-    case "$1" in
-        --suite)
-            SUITE="${2:-}"
-            shift 2
-            ;;
-        --strat)
-            STRAT="${2:-}"
-            shift 2
-            ;;
-        --doccount)
-            DOC_COUNT="${2:-}"
-            shift 2
-            ;;
-        --lean-only)
-            LEAN_ONLY=true
-            shift
-            ;;
-        --dry)
-            DRY=true
-            shift
-            ;;
-        --list)
-            LIST=true
-            shift
-            ;;
-        --gcdump)
-            GCDUMP=true
-            shift
-            ;;
-        --help|-h)
-            HELP=true
-            shift
-            ;;
-        --)
-            shift
-            EXTRA_ARGS+=("$@")
-            break
-            ;;
-        *)
-            EXTRA_ARGS+=("$1")
-            shift
-            ;;
-    esac
-done
-
-if ! contains "$SUITE" "${SUITE_ORDER[@]}"; then
-    echo "Error: invalid suite '$SUITE'. Valid: ${SUITE_ORDER[*]}" >&2
-    exit 1
-fi
-
-if ! contains "$STRAT" "${STRAT_ORDER[@]}"; then
-    echo "Error: invalid strat '$STRAT'. Valid: ${STRAT_ORDER[*]}" >&2
-    exit 1
-fi
-
-if $HELP; then
-    echo ""
-    echo "  LeanLucene Benchmark Runner"
-    echo "  ============================"
-    echo ""
-    echo "  Usage:"
-    echo "    ./scripts/benchmark.sh [options] [BenchmarkDotNet args...]"
-    echo ""
-    echo "  Options:"
-    echo "    --suite <name>      Benchmark suite to run (default: all)"
-    echo "    --strat <name>      Predefined strategy (default: default)"
-    echo "    --doccount <n>      Override document count (overrides --strat)"
-    echo "    --lean-only         Skip Lucene.NET comparison benchmarks"
-    echo "    --list              List available suites and strategies and exit"
-    echo "    --dry               Print the command that would run without executing it"
-    echo "    --gcdump            Collect GC heap dumps (requires dotnet-gcdump)"
-    echo "    --help              Show this help message and exit"
-    echo ""
-    echo "  Suites (--suite):"
-    for name in "${SUITE_ORDER[@]}"; do
-        printf "    %-22s %s\n" "$name" "${SUITE_DESC[$name]}"
-    done
-    echo ""
-    echo "  Strategies (--strat):"
-    for name in "${STRAT_ORDER[@]}"; do
-        printf "    %-16s %s\n" "$name" "${STRAT_DESC[$name]}"
-    done
-    echo ""
-    echo "  Output:"
-    echo "    bench/{machine-name}/{yyyy-MM-dd}/{HH-mm}/"
-    echo "    bench/{machine-name}/index.json   Per-machine run index"
-    echo ""
-    echo "  BenchmarkDotNet pass-through examples:"
-    echo "    --filter *Lean*            Run only methods whose name contains Lean"
-    echo "    --job short                Use the Short job instead of Default"
-    echo "    --runtimes net10.0         Override the target runtime"
-    echo ""
-    echo "  Examples:"
-    echo "    ./scripts/benchmark.sh                                     # all suites"
-    echo "    ./scripts/benchmark.sh --suite query                       # query only"
-    echo "    ./scripts/benchmark.sh --suite gutenberg-search --lean-only # real data, lean only"
-    echo "    ./scripts/benchmark.sh --strat fast --suite boolean        # smoke: boolean"
-    echo "    ./scripts/benchmark.sh --strat intense --doccount 20000    # full: 20K docs"
-    echo "    ./scripts/benchmark.sh --list                               # list suites"
-    echo "    ./scripts/benchmark.sh --dry --suite index --strat fast    # dry run"
-    echo ""
-    exit 0
-fi
-
-if $LIST; then
-    echo ""
-    echo "  Available benchmark suites (--suite):"
-    echo ""
-    for name in "${SUITE_ORDER[@]}"; do
-        printf "    %-22s %s\n" "$name" "${SUITE_DESC[$name]}"
-    done
-    echo ""
-    echo "  Available strategies (--strat):"
-    echo ""
-    for name in "${STRAT_ORDER[@]}"; do
-        printf "    %-16s %s\n" "$name" "${STRAT_DESC[$name]}"
-    done
-    echo ""
-    exit 0
-fi
-
-STRAT_DOC_COUNT=0
-STRAT_JOB_ARGS=()
-
-case "$STRAT" in
-    fast)
-        STRAT_DOC_COUNT=500
-        STRAT_JOB_ARGS=(--job dry)
-        ;;
-    quick-compare)
-        STRAT_DOC_COUNT=1000
-        STRAT_JOB_ARGS=(--job short)
-        ;;
-    intense)
-        STRAT_DOC_COUNT=10000
-        ;;
-    stress)
-        STRAT_DOC_COUNT=50000
-        ;;
-esac
-
-EFFECTIVE_DOC_COUNT=0
-if [[ "$DOC_COUNT" -gt 0 ]]; then
-    EFFECTIVE_DOC_COUNT="$DOC_COUNT"
-elif [[ "$STRAT_DOC_COUNT" -gt 0 ]]; then
-    EFFECTIVE_DOC_COUNT="$STRAT_DOC_COUNT"
-fi
-
-if [[ ! -f "$PROJECT_PATH" ]]; then
-    echo "Error: benchmark project not found at: $PROJECT_PATH" >&2
-    exit 1
-fi
-
-RUN_ARGS=(--suite "$SUITE")
-if $LEAN_ONLY; then
-    RUN_ARGS+=(--lean-only)
-fi
-
-if [[ "$EFFECTIVE_DOC_COUNT" -gt 0 ]]; then
-    RUN_ARGS+=(--doccount "$EFFECTIVE_DOC_COUNT")
-    export BENCH_DOC_COUNT="$EFFECTIVE_DOC_COUNT"
-fi
-
-ALL_EXTRA_ARGS=("${STRAT_JOB_ARGS[@]}")
-if [[ ${#EXTRA_ARGS[@]} -gt 0 ]]; then
-    ALL_EXTRA_ARGS+=("${EXTRA_ARGS[@]}")
-fi
-
-echo "Suite:    $SUITE"
-echo "Strat:    $STRAT"
-if $LEAN_ONLY; then
-    echo "LeanOnly: enabled"
-fi
-if [[ "$EFFECTIVE_DOC_COUNT" -gt 0 ]]; then
-    echo "Docs:     $EFFECTIVE_DOC_COUNT"
-fi
-if [[ ${#ALL_EXTRA_ARGS[@]} -gt 0 ]]; then
-    echo "Extra:    ${ALL_EXTRA_ARGS[*]}"
-fi
-
-if $DRY; then
-    echo ""
-    cmd_display="dotnet run -c Release --project \"$PROJECT_PATH\" -- ${RUN_ARGS[*]}"
-    if [[ ${#ALL_EXTRA_ARGS[@]} -gt 0 ]]; then
-        cmd_display+=" ${ALL_EXTRA_ARGS[*]}"
-    fi
-    echo "Dry run - command that would execute:"
-    echo "  $cmd_display"
-    if [[ "$EFFECTIVE_DOC_COUNT" -gt 0 ]]; then
-        echo "  env: BENCH_DOC_COUNT=$EFFECTIVE_DOC_COUNT"
-    fi
-    echo ""
-    exit 0
-fi
-
-if $GCDUMP; then
-    RUN_ARGS+=(--gcdump)
-    if ! command -v dotnet-gcdump &>/dev/null; then
-        echo "Installing dotnet-gcdump global tool..."
-        dotnet tool install -g dotnet-gcdump
-    fi
-    echo "GcDump:   enabled"
-fi
-
-echo ""
-dotnet run -c Release --project "$PROJECT_PATH" -- "${RUN_ARGS[@]}" "${ALL_EXTRA_ARGS[@]}"
+dotnet run -c Release --framework "$TARGET_FRAMEWORK" --project "$PROJECT_PATH" -- "${RUN_ARGS[@]}" "${ALL_EXTRA_ARGS[@]}"
