@@ -59,6 +59,9 @@ public sealed partial class IndexWriter : IDisposable
     private readonly Lock _writeLock = new();
     private readonly SemaphoreSlim? _backpressureSemaphore;
     private int _flushElection;
+    // Files modified after this time are considered dirty for the next durable commit.
+    // Initialised to MinValue so the first commit fsyncs every file in the directory.
+    private DateTime _lastCommitFsyncUtc = DateTime.MinValue;
     private int _semaphoreSlotsHeld;
     private readonly List<IndexSnapshot> _heldSnapshots = [];
     private int _disposed;      // 0 = alive, 1 = disposed (atomically set via Interlocked)
@@ -406,15 +409,20 @@ public sealed partial class IndexWriter : IDisposable
 
         if (_config.DurableCommits)
         {
-            // Belt-and-braces durability: fsync every committed segment file before writing
-            // the segments_N pointer. Codec writers don't all use IndexOutput, so we do a
-            // post-hoc sweep here rather than thread a flag through every writer.
+            // Belt-and-braces durability: fsync every segment file modified since the last
+            // commit. The first commit ever (cutoff == MinValue) fsyncs everything; subsequent
+            // commits only fsync newly created or rewritten files. A small skew is subtracted
+            // to tolerate filesystems with low-resolution mtimes and clock drift.
+            var fsyncCutoff = _lastCommitFsyncUtc == DateTime.MinValue
+                ? DateTime.MinValue
+                : _lastCommitFsyncUtc - TimeSpan.FromSeconds(2);
             foreach (var path in Directory.EnumerateFiles(_directory.DirectoryPath))
             {
                 var name = Path.GetFileName(path);
                 if (name.StartsWith("segments_", StringComparison.Ordinal)) continue;
                 if (string.Equals(name, "write.lock", StringComparison.Ordinal)) continue;
                 if (name.EndsWith(".tmp", StringComparison.Ordinal)) continue;
+                if (fsyncCutoff != DateTime.MinValue && File.GetLastWriteTimeUtc(path) <= fsyncCutoff) continue;
                 Store.DirectoryFsync.SyncFile(path);
             }
 
@@ -433,6 +441,7 @@ public sealed partial class IndexWriter : IDisposable
 
             // Sync the directory again so the rename itself is durable.
             Store.DirectoryFsync.Sync(_directory.DirectoryPath);
+            _lastCommitFsyncUtc = DateTime.UtcNow;
         }
         else
         {
