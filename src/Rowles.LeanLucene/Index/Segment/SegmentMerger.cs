@@ -134,6 +134,31 @@ public sealed class SegmentMerger
         var newSegId = $"seg_{nextSegmentOrdinal++}";
         var basePath = Path.Combine(_directory.DirectoryPath, newSegId);
 
+        // Open one SegmentReader per source segment up front and keep it open for the
+        // whole merge. The merge has three passes (doc-id remap, field copy, norm copy)
+        // and previously each opened its own SegmentReader, tripling mmap creation and
+        // file-handle pressure.
+        var readers = new Dictionary<string, SegmentReader>(StringComparer.Ordinal);
+        try
+        {
+            foreach (var segInfo in segments)
+                readers[segInfo.SegmentId] = new SegmentReader(_directory, segInfo);
+
+            return MergeSegmentsCore(segments, readers, newSegId, basePath);
+        }
+        finally
+        {
+            foreach (var r in readers.Values)
+                r.Dispose();
+        }
+    }
+
+    private SegmentInfo? MergeSegmentsCore(
+        List<SegmentInfo> segments,
+        IReadOnlyDictionary<string, SegmentReader> readers,
+        string newSegId,
+        string basePath)
+    {
         // Collect all postings from all segments, re-mapping doc IDs
         var allPostings = new SortedDictionary<string, List<int>>(StringComparer.Ordinal);
         var allFreqs = new Dictionary<string, Dictionary<int, int>>();
@@ -163,7 +188,7 @@ public sealed class SegmentMerger
         foreach (var segInfo in segments)
         {
             var segBasePath = Path.Combine(_directory.DirectoryPath, segInfo.SegmentId);
-            using var reader = new SegmentReader(_directory, segInfo);
+            var reader = readers[segInfo.SegmentId];
 
             // Build old→new doc ID mapping (only live docs)
             var docIdMap = new Dictionary<int, int>();
@@ -212,7 +237,7 @@ public sealed class SegmentMerger
         int remapDocId = 0;
         foreach (var segInfo in segments)
         {
-            using var reader = new SegmentReader(_directory, segInfo);
+            var reader = readers[segInfo.SegmentId];
 
             // Cache per-segment readers to avoid repeated lookups inside the doc loop.
             bool segHasTermVectors = reader.HasTermVectors;
@@ -424,7 +449,7 @@ public sealed class SegmentMerger
             int normIdx = 0;
             foreach (var segInfo in segments)
             {
-                using var normReader = new SegmentReader(_directory, segInfo);
+                var normReader = readers[segInfo.SegmentId];
                 for (int oldDocId = 0; oldDocId < segInfo.DocCount; oldDocId++)
                 {
                     if (!normReader.IsLive(oldDocId)) continue;
