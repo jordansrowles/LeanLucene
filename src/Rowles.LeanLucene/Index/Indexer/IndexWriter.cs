@@ -404,8 +404,7 @@ public sealed partial class IndexWriter : IDisposable
         // the rename did not flush) can be detected on recovery. The trailer line is
         // optional on read, for backward compatibility with files written before this
         // line was added.
-        var crc = Util.Crc32.Compute(commitData);
-        var fileContent = commitData + "\n#crc32=" + crc.ToString("x8") + "\n";
+        var fileContent = CommitFileFormat.Wrap(commitData);
 
         if (_config.DurableCommits)
         {

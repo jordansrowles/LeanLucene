@@ -94,14 +94,14 @@ public class CrashRecoveryTests : IDisposable
         }
 
         var segments2 = Path.Combine(_dir, "segments_2");
-        var json = File.ReadAllText(segments2);
+        var json = Rowles.LeanLucene.Index.CommitFileFormat.ReadJson(segments2);
         var commit = JsonSerializer.Deserialize<JsonElement>(json);
-        var corruptCommit = JsonSerializer.Serialize(new
+        var corruptCommit = Rowles.LeanLucene.Index.CommitFileFormat.Wrap(JsonSerializer.Serialize(new
         {
             Segments = commit.GetProperty("Segments"),
             Generation = 999,
             ContentToken = commit.GetProperty("ContentToken").GetInt64()
-        });
+        }));
         File.WriteAllText(segments2, corruptCommit);
 
         using var searcher = new IndexSearcher(new MMapDirectory(_dir));
@@ -240,7 +240,7 @@ public class CrashRecoveryTests : IDisposable
 
         // Read segments_2 to find its segment IDs, then delete one segment file
         var segments2 = Path.Combine(_dir, "segments_2");
-        var json = File.ReadAllText(segments2);
+        var json = Rowles.LeanLucene.Index.CommitFileFormat.ReadJson(segments2);
         var commit = JsonSerializer.Deserialize<JsonElement>(json);
         var segments = commit.GetProperty("Segments");
         var lastSeg = segments[segments.GetArrayLength() - 1].GetString()!;

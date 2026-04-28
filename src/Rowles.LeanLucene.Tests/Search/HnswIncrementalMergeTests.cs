@@ -93,11 +93,11 @@ public sealed class HnswIncrementalMergeTests : IClassFixture<TestDirectoryFixtu
         int generation = Directory.GetFiles(dir, "segments_*")
             .Select(p => int.TryParse(Path.GetFileName(p).AsSpan("segments_".Length), out int g) ? g : 0)
             .DefaultIfEmpty(0).Max() + 1;
-        File.WriteAllText(Path.Combine(dir, $"segments_{generation}"), JsonSerializer.Serialize(new
+        File.WriteAllText(Path.Combine(dir, $"segments_{generation}"), Rowles.LeanLucene.Index.CommitFileFormat.Wrap(JsonSerializer.Serialize(new
         {
             Segments = mergedSegments.Select(s => s.SegmentId).ToArray(),
             Generation = generation,
-        }));
+        })));
 
         // Top-1 self-recall: each indexed vector should retrieve a near-perfect cosine match
         // (≈1.0) somewhere in the top-K. Validates the merged graph still finds the original.

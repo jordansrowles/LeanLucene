@@ -84,7 +84,7 @@ public class CommitDurabilityTests : IDisposable
         AssertNonEmptyFile(segmentsFile);
         AssertNonEmptyFile(Path.Combine(_dir, "stats_1.json"));
 
-        var json = File.ReadAllText(segmentsFile);
+        var json = Rowles.LeanLucene.Index.CommitFileFormat.ReadJson(segmentsFile);
         var commit = JsonSerializer.Deserialize<JsonElement>(json);
         var segments = commit.GetProperty("Segments");
         Assert.NotEmpty(segments.EnumerateArray());

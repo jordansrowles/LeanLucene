@@ -31,7 +31,7 @@ public static class IndexValidator
         List<string> segmentIds;
         try
         {
-            var json = File.ReadAllText(commitPath);
+            var json = CommitFileFormat.ReadJson(commitPath);
             using var doc = JsonDocument.Parse(json);
             segmentIds = doc.RootElement.GetProperty("Segments")
                 .EnumerateArray()

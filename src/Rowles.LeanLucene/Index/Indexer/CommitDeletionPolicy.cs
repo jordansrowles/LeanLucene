@@ -23,7 +23,7 @@ internal static class CommitDeletionPolicy
         if (protectedSegmentIds.Count == 0 || !File.Exists(commitFilePath))
             return false;
 
-        using var stream = File.OpenRead(commitFilePath);
+        using var stream = new MemoryStream(System.Text.Encoding.UTF8.GetBytes(CommitFileFormat.ReadJson(commitFilePath)));
         using var document = JsonDocument.Parse(stream);
         if (!document.RootElement.TryGetProperty("Segments", out var segments) ||
             segments.ValueKind != JsonValueKind.Array)
