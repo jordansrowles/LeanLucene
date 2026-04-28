@@ -355,11 +355,10 @@ internal sealed class HnswGraph
         IBitSet? allowList,
         out int nodesVisited)
     {
-        var visited = new HashSet<int>(ef * 2);
-        // Frontier: min-heap by distance ascending (closest popped first).
-        var frontier = new PriorityQueue<int, float>();
-        // Result set: max-heap by distance descending (furthest popped first), capped at ef.
-        var results = new PriorityQueue<int, float>(Comparer<float>.Create((a, b) => b.CompareTo(a)));
+        using var scratch = HnswSearchScratch.Borrow();
+        var visited = scratch.Visited;
+        var frontier = scratch.Frontier;
+        var results = scratch.Results;
 
         foreach (var ep in entryPoints)
         {
