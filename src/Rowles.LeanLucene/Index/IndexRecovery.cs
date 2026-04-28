@@ -82,7 +82,10 @@ public static class IndexRecovery
     {
         try
         {
-            var json = File.ReadAllText(commitFilePath);
+            var raw = File.ReadAllText(commitFilePath);
+            var json = StripAndValidateCrcTrailer(raw);
+            if (json is null)
+                return null; // CRC mismatch — torn write
             var commitData = JsonSerializer.Deserialize<CommitData>(json);
             if (commitData is null || commitData.Segments is null)
                 return null;
@@ -124,6 +127,27 @@ public static class IndexRecovery
         {
             return null; // file read error
         }
+    }
+
+    /// <summary>
+    /// Strips the optional CRC32 trailer from a commit-file payload and validates it.
+    /// Returns the JSON payload on success, or null if the CRC mismatches. If no trailer
+    /// is present (older commits), the input is returned unchanged.
+    /// </summary>
+    private static string? StripAndValidateCrcTrailer(string raw)
+    {
+        const string marker = "\n#crc32=";
+        int idx = raw.LastIndexOf(marker, StringComparison.Ordinal);
+        if (idx < 0) return raw;
+
+        var json = raw.Substring(0, idx);
+        var trailer = raw.Substring(idx + marker.Length).TrimEnd('\r', '\n');
+        if (!uint.TryParse(trailer, System.Globalization.NumberStyles.HexNumber,
+                System.Globalization.CultureInfo.InvariantCulture, out var expected))
+            return null;
+
+        var actual = Util.Crc32.Compute(json);
+        return actual == expected ? json : null;
     }
 
     /// <summary>
