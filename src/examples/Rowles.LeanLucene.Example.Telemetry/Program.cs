@@ -19,19 +19,32 @@ var builder = Host.CreateApplicationBuilder(args);
 
 // ── OpenTelemetry ────────────────────────────────────────────────────────────
 // When run under Aspire, OTEL_EXPORTER_OTLP_ENDPOINT is injected automatically.
-// Calling AddOtlpExporter() with no arguments lets the SDK read it from the
-// environment, rather than overriding it with a hardcoded address.
+// We also export a periodic console reader so you can confirm metrics are firing
+// even before they reach the dashboard.
+
+// Required for plain-text gRPC over HTTP/2 (Aspire standalone dashboard default).
+AppContext.SetSwitch("System.Net.Http.SocketsHttpHandler.Http2UnencryptedSupport", true);
+
+// Surface OTel SDK diagnostic messages so silent export failures become visible.
+Environment.SetEnvironmentVariable("OTEL_DIAGNOSTICS_LEVEL", "Warning");
 
 builder.Services
     .AddOpenTelemetry()
     .ConfigureResource(r => r.AddService("LeanLucene.Telemetry"))
     .WithTracing(tracing => tracing
         .AddSource("Rowles.LeanLucene")
-        .AddOtlpExporter())
+        .AddOtlpExporter()
+        .AddConsoleExporter())
     .WithMetrics(metrics => metrics
         .AddMeter("Rowles.LeanLucene")
         .AddRuntimeInstrumentation()
-        .AddOtlpExporter());
+        .AddOtlpExporter((exporterOptions, readerOptions) =>
+        {
+            // Default is 60s — shorten so the Aspire dashboard updates promptly
+            readerOptions.PeriodicExportingMetricReaderOptions.ExportIntervalMilliseconds = 5_000;
+        })
+        .AddConsoleExporter((_, readerOptions) =>
+            readerOptions.PeriodicExportingMetricReaderOptions.ExportIntervalMilliseconds = 10_000));
 
 // ── Demo worker ──────────────────────────────────────────────────────────────
 
