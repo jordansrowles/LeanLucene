@@ -21,6 +21,9 @@ internal static class BenchmarkData
         return [defaultCount];
     }
 
+    public static BenchmarkDataSourceReport[] GetLoadedDataSources()
+        => RealDataPool.GetLoadedDataSources();
+
     /// <summary>Returns real-world document bodies from the data pool, wrapping round-robin if needed.</summary>
     public static string[] BuildDocuments(int count)
         => RealDataPool.GetBodies(count);

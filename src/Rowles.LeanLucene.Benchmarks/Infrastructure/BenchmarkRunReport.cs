@@ -1,7 +1,11 @@
 using BenchmarkDotNet.Engines;
 using BenchmarkDotNet.Reports;
+using BenchmarkDotNet.Running;
 using System.Globalization;
 using System.Reflection;
+using System.Runtime.InteropServices;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 
 namespace Rowles.LeanLucene.Benchmarks;
@@ -16,8 +20,38 @@ internal sealed class BenchmarkRunReport
     public string HostMachineName { get; set; } = Environment.MachineName;
     public string CommitHash { get; set; } = string.Empty;
     public string DotnetVersion { get; set; } = Environment.Version.ToString();
+    public BenchmarkProvenanceReport? Provenance { get; set; }
     public int TotalBenchmarkCount { get; set; }
     public List<BenchmarkSuiteReport> Suites { get; set; } = [];
+}
+
+internal sealed class BenchmarkProvenanceReport
+{
+    public string SourceCommit { get; set; } = string.Empty;
+    public string SourceRef { get; set; } = string.Empty;
+    public string SourceManifestPath { get; set; } = string.Empty;
+    public string GitCommitHash { get; set; } = string.Empty;
+    public bool GitAvailable { get; set; }
+    public bool? GitDirty { get; set; }
+    public string BenchmarkDotNetVersion { get; set; } = string.Empty;
+    public string RuntimeFramework { get; set; } = RuntimeInformation.FrameworkDescription;
+    public string RuntimeIdentifier { get; set; } = RuntimeInformation.RuntimeIdentifier;
+    public string OSDescription { get; set; } = RuntimeInformation.OSDescription;
+    public string ProcessArchitecture { get; set; } = RuntimeInformation.ProcessArchitecture.ToString();
+    public int? EffectiveDocCount { get; set; }
+    public string DataFingerprintSha256 { get; set; } = string.Empty;
+    public BenchmarkDataSourceReport[] DataSources { get; set; } = [];
+}
+
+internal sealed class BenchmarkDataSourceReport
+{
+    public string Name { get; set; } = string.Empty;
+    public string Path { get; set; } = string.Empty;
+    public int FileCount { get; set; }
+    public long ByteCount { get; set; }
+    public int DocumentCount { get; set; }
+    public string FingerprintSha256 { get; set; } = string.Empty;
+    public bool FallbackUsed { get; set; }
 }
 
 internal sealed class BenchmarkSuiteReport
@@ -73,6 +107,8 @@ internal sealed class BenchmarkRunIndexEntry
     public string File { get; set; } = string.Empty;
     public int BenchmarkCount { get; set; }
     public string[] Suites { get; set; } = [];
+    public string DataFingerprintSha256 { get; set; } = string.Empty;
+    public string Toolchain { get; set; } = string.Empty;
 }
 
 internal static class BenchmarkRunReportBuilder
@@ -238,6 +274,87 @@ internal static class BenchmarkRunReportBuilder
     }
 }
 
+internal static class BenchmarkProvenanceBuilder
+{
+    public static BenchmarkProvenanceReport Build(string repoRoot, string gitCommitHash, int? effectiveDocCount)
+    {
+        var dataSources = BenchmarkData.GetLoadedDataSources();
+        var sourceCommit = FirstNonEmpty(
+            Environment.GetEnvironmentVariable("BENCH_SOURCE_COMMIT"),
+            gitCommitHash);
+
+        return new BenchmarkProvenanceReport
+        {
+            SourceCommit = sourceCommit,
+            SourceRef = Environment.GetEnvironmentVariable("BENCH_SOURCE_REF") ?? string.Empty,
+            SourceManifestPath = Environment.GetEnvironmentVariable("BENCH_SOURCE_MANIFEST") ?? string.Empty,
+            GitCommitHash = gitCommitHash,
+            GitAvailable = Directory.Exists(Path.Combine(repoRoot, ".git")),
+            GitDirty = TryReadGitDirty(repoRoot),
+            BenchmarkDotNetVersion = GetBenchmarkDotNetVersion(),
+            EffectiveDocCount = effectiveDocCount,
+            DataSources = dataSources,
+            DataFingerprintSha256 = BuildCombinedFingerprint(dataSources)
+        };
+    }
+
+    private static string GetBenchmarkDotNetVersion()
+    {
+        var assembly = typeof(BenchmarkRunner).Assembly;
+        return assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion
+            ?? assembly.GetName().Version?.ToString()
+            ?? string.Empty;
+    }
+
+    private static string BuildCombinedFingerprint(BenchmarkDataSourceReport[] dataSources)
+    {
+        if (dataSources.Length == 0)
+            return string.Empty;
+
+        var builder = new StringBuilder();
+        foreach (var source in dataSources.OrderBy(s => s.Name, StringComparer.Ordinal))
+        {
+            builder
+                .Append(source.Name).Append('\0')
+                .Append(source.FingerprintSha256).Append('\0')
+                .Append(source.DocumentCount.ToString(CultureInfo.InvariantCulture)).Append('\0');
+        }
+        return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(builder.ToString())));
+    }
+
+    private static bool? TryReadGitDirty(string repoRoot)
+    {
+        if (!Directory.Exists(Path.Combine(repoRoot, ".git")))
+            return null;
+
+        try
+        {
+            using var process = new System.Diagnostics.Process();
+            process.StartInfo = new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = "git",
+                Arguments = "status --porcelain",
+                WorkingDirectory = repoRoot,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+            process.Start();
+            var output = process.StandardOutput.ReadToEnd();
+            process.WaitForExit(5000);
+            return process.ExitCode == 0 ? !string.IsNullOrWhiteSpace(output) : null;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static string FirstNonEmpty(params string?[] values)
+        => values.FirstOrDefault(static value => !string.IsNullOrWhiteSpace(value)) ?? string.Empty;
+}
+
 internal static class BenchmarkRunReportWriter
 {
     private static readonly JsonSerializerOptions JsonOptions = new()
@@ -269,7 +386,9 @@ internal static class BenchmarkRunReportWriter
             CommitHash = report.CommitHash,
             File = Path.GetRelativePath(machineDir, reportPath),
             BenchmarkCount = report.TotalBenchmarkCount,
-            Suites = report.Suites.Select(s => s.SuiteName).ToArray()
+            Suites = report.Suites.Select(s => s.SuiteName).ToArray(),
+            DataFingerprintSha256 = report.Provenance?.DataFingerprintSha256 ?? string.Empty,
+            Toolchain = report.Provenance?.BenchmarkDotNetVersion ?? string.Empty
         });
 
         runIndex.Runs = runIndex.Runs

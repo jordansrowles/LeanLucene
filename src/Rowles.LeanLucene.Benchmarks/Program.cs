@@ -32,7 +32,11 @@ internal static class Program
             now.ToString("HH-mm", CultureInfo.InvariantCulture));
         Directory.CreateDirectory(runDir);
 
-        var commitHash = GetGitShortHash(repoRoot);
+        var gitCommitHash = GetGitShortHash(repoRoot);
+        var sourceCommit = Environment.GetEnvironmentVariable("BENCH_SOURCE_COMMIT");
+        var commitHash = !string.IsNullOrWhiteSpace(sourceCommit)
+            ? sourceCommit
+            : gitCommitHash;
         var runId = string.IsNullOrEmpty(commitHash)
             ? now.ToString("yyyy-MM-dd HH-mm", CultureInfo.InvariantCulture)
             : $"{now.ToString("yyyy-MM-dd HH-mm", CultureInfo.InvariantCulture)} ({commitHash})";
@@ -115,6 +119,10 @@ internal static class Program
             suiteSummaries);
         report.CommitHash = commitHash;
         report.RunType = effectiveRunType;
+        report.Provenance = BenchmarkProvenanceBuilder.Build(
+            repoRoot,
+            gitCommitHash,
+            docCount ?? BenchmarkData.DefaultDocCount);
 
         BenchmarkRunReportWriter.WriteReport(runDir, machineDir, report);
 
@@ -245,6 +253,12 @@ internal static class Program
                 continue;
             }
 
+            if (string.Equals(args[i], "--", StringComparison.Ordinal))
+            {
+                benchmarkArgs.AddRange(args[(i + 1)..]);
+                break;
+            }
+
             if (string.Equals(args[i], "--gcdump", StringComparison.OrdinalIgnoreCase))
             {
                 gcDump = true;
@@ -279,11 +293,26 @@ internal static class Program
             benchmarkArgs.Add(args[i]);
         }
 
-        // Inject BDN filter to exclude Lucene.NET benchmarks
-        if (leanOnly)
+        // Inject BDN filter to exclude Lucene.NET benchmarks unless a caller supplied a more specific BDN filter.
+        if (leanOnly && !HasBenchmarkDotNetOption(benchmarkArgs, "--filter", "-f"))
             benchmarkArgs.AddRange(["--filter", "*LeanLucene*"]);
 
         return (suites, runType, [.. benchmarkArgs], showHelp, docCount, gcDump);
+    }
+
+    private static bool HasBenchmarkDotNetOption(IEnumerable<string> args, params string[] names)
+    {
+        foreach (var arg in args)
+        {
+            foreach (var name in names)
+            {
+                if (string.Equals(arg, name, StringComparison.OrdinalIgnoreCase) ||
+                    arg.StartsWith(name + "=", StringComparison.OrdinalIgnoreCase))
+                    return true;
+            }
+        }
+
+        return false;
     }
 
     private static HashSet<BenchmarkSuite> ParseSuites(string value)

@@ -1,4 +1,6 @@
 using System.Text.RegularExpressions;
+using System.Security.Cryptography;
+using System.Text;
 
 namespace Rowles.LeanLucene.Benchmarks;
 
@@ -15,7 +17,13 @@ namespace Rowles.LeanLucene.Benchmarks;
 /// </remarks>
 internal static class RealDataPool
 {
-    private static readonly Lazy<string[]> Pool =
+    private sealed class LoadedDataSet
+    {
+        public string[] Bodies { get; init; } = [];
+        public BenchmarkDataSourceReport[] Sources { get; init; } = [];
+    }
+
+    private static readonly Lazy<LoadedDataSet> DataSet =
         new(LoadAll, LazyThreadSafetyMode.ExecutionAndPublication);
 
     private const int MinBodyLength = 40;
@@ -32,7 +40,7 @@ internal static class RealDataPool
     /// </summary>
     public static string[] GetBodies(int count)
     {
-        var pool = Pool.Value;
+        var pool = DataSet.Value.Bodies;
         if (pool.Length == 0)
             return BuildSynthetic(count);
 
@@ -42,7 +50,10 @@ internal static class RealDataPool
         return result;
     }
 
-    private static string[] LoadAll()
+    public static BenchmarkDataSourceReport[] GetLoadedDataSources()
+        => DataSet.IsValueCreated ? DataSet.Value.Sources : [];
+
+    private static LoadedDataSet LoadAll()
     {
         var root = GutenbergDataLoader.FindRepositoryRoot();
         var benchDir = Path.Combine(root, "bench", "data");
@@ -52,33 +63,61 @@ internal static class RealDataPool
             Console.Error.WriteLine(
                 $"[RealDataPool] bench/data not found at '{benchDir}'. " +
                 "Run the download scripts first. Falling back to synthetic data.");
-            return [];
+            return new LoadedDataSet
+            {
+                Sources =
+                [
+                    new BenchmarkDataSourceReport
+                    {
+                        Name = "synthetic",
+                        Path = benchDir,
+                        FallbackUsed = true,
+                    }
+                ]
+            };
         }
 
         var bodies = new List<string>(60_000);
+        var sources = new List<BenchmarkDataSourceReport>(3);
 
-        LoadGutenberg(benchDir, bodies);
-        Load20Newsgroups(benchDir, bodies);
-        LoadReuters(benchDir, bodies);
+        sources.Add(LoadGutenberg(benchDir, bodies));
+        sources.Add(Load20Newsgroups(benchDir, bodies));
+        sources.Add(LoadReuters(benchDir, bodies));
 
         if (bodies.Count == 0)
         {
             Console.Error.WriteLine(
                 "[RealDataPool] No documents loaded from bench/data. " +
                 "Run the download scripts first. Falling back to synthetic data.");
-            return [];
+            return new LoadedDataSet
+            {
+                Sources =
+                [
+                    new BenchmarkDataSourceReport
+                    {
+                        Name = "synthetic",
+                        Path = benchDir,
+                        FallbackUsed = true,
+                    }
+                ]
+            };
         }
 
         Console.Error.WriteLine($"[RealDataPool] Loaded {bodies.Count:N0} real-data documents.");
-        return [.. bodies];
+        return new LoadedDataSet
+        {
+            Bodies = [.. bodies],
+            Sources = [.. sources]
+        };
     }
 
-    private static void LoadGutenberg(string benchDir, List<string> bodies)
+    private static BenchmarkDataSourceReport LoadGutenberg(string benchDir, List<string> bodies)
     {
         var dir = Path.Combine(benchDir, "gutenberg-ebooks");
         if (!Directory.Exists(dir))
-            return;
+            return BuildMissingSource("gutenberg", dir);
 
+        var before = bodies.Count;
         try
         {
             // Reuse existing loader; extract paragraph bodies
@@ -90,13 +129,14 @@ internal static class RealDataPool
         {
             // No .txt files found - skip silently
         }
+        return BuildSourceReport("gutenberg", dir, bodies.Count - before);
     }
 
-    private static void Load20Newsgroups(string benchDir, List<string> bodies)
+    private static BenchmarkDataSourceReport Load20Newsgroups(string benchDir, List<string> bodies)
     {
         var dir = Path.Combine(benchDir, "20newsgroups");
         if (!Directory.Exists(dir))
-            return;
+            return BuildMissingSource("20newsgroups", dir);
 
         var count = 0;
         foreach (var file in Directory.GetFiles(dir, "*", SearchOption.AllDirectories)
@@ -113,13 +153,14 @@ internal static class RealDataPool
                 count++;
             }
         }
+        return BuildSourceReport("20newsgroups", dir, count);
     }
 
-    private static void LoadReuters(string benchDir, List<string> bodies)
+    private static BenchmarkDataSourceReport LoadReuters(string benchDir, List<string> bodies)
     {
         var dir = Path.Combine(benchDir, "reuters21578");
         if (!Directory.Exists(dir))
-            return;
+            return BuildMissingSource("reuters21578", dir);
 
         var count = 0;
         foreach (var file in Directory.GetFiles(dir, "*.sgm", SearchOption.TopDirectoryOnly)
@@ -141,6 +182,48 @@ internal static class RealDataPool
                 }
             }
         }
+        return BuildSourceReport("reuters21578", dir, count);
+    }
+
+    private static BenchmarkDataSourceReport BuildMissingSource(string name, string path)
+    {
+        return new BenchmarkDataSourceReport
+        {
+            Name = name,
+            Path = path,
+            FallbackUsed = false,
+        };
+    }
+
+    private static BenchmarkDataSourceReport BuildSourceReport(string name, string path, int documentCount)
+    {
+        var files = Directory.Exists(path)
+            ? Directory.GetFiles(path, "*", SearchOption.AllDirectories)
+                .OrderBy(file => file, StringComparer.OrdinalIgnoreCase)
+                .ToArray()
+            : [];
+
+        long byteCount = 0;
+        var builder = new StringBuilder();
+        foreach (var file in files)
+        {
+            var info = new FileInfo(file);
+            byteCount += info.Length;
+            builder
+                .Append(Path.GetRelativePath(path, file)).Append('\0')
+                .Append(info.Length.ToString(System.Globalization.CultureInfo.InvariantCulture)).Append('\0')
+                .Append(info.LastWriteTimeUtc.Ticks.ToString(System.Globalization.CultureInfo.InvariantCulture)).Append('\0');
+        }
+
+        return new BenchmarkDataSourceReport
+        {
+            Name = name,
+            Path = path,
+            FileCount = files.Length,
+            ByteCount = byteCount,
+            DocumentCount = documentCount,
+            FingerprintSha256 = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(builder.ToString()))),
+        };
     }
 
     // Non-greedy match of <BODY>...</BODY> in Reuters SGML
