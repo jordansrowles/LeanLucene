@@ -4,6 +4,22 @@
 /// Thread-safe LRU query result cache. Entries are keyed by (Query, topN) and
 /// invalidated when the commit generation changes.
 /// </summary>
+/// <remarks>
+/// <para>
+/// Invalidation contract: the cache is keyed against a single commit generation.
+/// Callers must invoke <see cref="Invalidate"/> (or assign a fresh cache) whenever
+/// the underlying searcher is swapped to a newer commit, otherwise stale results
+/// may be returned. Cached results are <em>snapshot views</em>: doc IDs and scores
+/// reflect the segments visible at the moment of caching, and remain valid for as
+/// long as those segments are still referenced by the live searcher.
+/// </para>
+/// <para>
+/// Recommended placement: hold one cache per <see cref="SearcherManager"/> rather
+/// than per <see cref="IndexSearcher"/>, and call <see cref="Invalidate"/> from the
+/// refresh hook. This avoids a write race where two concurrent searches racing
+/// against a commit could publish results from differing generations.
+/// </para>
+/// </remarks>
 public sealed class QueryCache
 {
     private readonly int _maxEntries;
