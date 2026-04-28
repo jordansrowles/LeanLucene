@@ -19,6 +19,40 @@ public sealed class SearcherManager : IDisposable
 
     private volatile SearcherRef _current;
     private int _disposed;
+    private volatile Exception? _lastRefreshError;
+    private long _lastRefreshErrorAtTicks;
+    private long _consecutiveRefreshFailures;
+
+    /// <summary>
+    /// The exception thrown by the most recent refresh attempt, or null if the most recent
+    /// refresh succeeded (or none has run yet).
+    /// </summary>
+    public Exception? LastRefreshError => _lastRefreshError;
+
+    /// <summary>
+    /// The UTC timestamp at which <see cref="LastRefreshError"/> was recorded, or null if
+    /// no refresh has failed yet.
+    /// </summary>
+    public DateTime? LastRefreshErrorAt
+    {
+        get
+        {
+            var ticks = Interlocked.Read(ref _lastRefreshErrorAtTicks);
+            return ticks == 0 ? null : new DateTime(ticks, DateTimeKind.Utc);
+        }
+    }
+
+    /// <summary>
+    /// Number of consecutive failed refreshes since the last successful one. Reset to zero
+    /// on each successful refresh.
+    /// </summary>
+    public long ConsecutiveRefreshFailures => Interlocked.Read(ref _consecutiveRefreshFailures);
+
+    /// <summary>
+    /// Raised when a refresh fails. The exception is also stored on
+    /// <see cref="LastRefreshError"/> for callers that prefer polling.
+    /// </summary>
+    public event EventHandler<RefreshFailedEventArgs>? RefreshFailed;
 
     /// <summary>
     /// Initialises a new <see cref="SearcherManager"/> for the specified directory, opening an initial
@@ -122,9 +156,20 @@ public sealed class SearcherManager : IDisposable
                 TryRefresh();
             }
             catch (OperationCanceledException) { break; }
-            catch (IOException) { /* Transient I/O — will retry next interval */ }
-            catch (InvalidDataException) { /* Corrupt segment — will retry next interval */ }
+            catch (Exception ex) when (ex is IOException or InvalidDataException)
+            {
+                RecordRefreshFailure(ex);
+            }
         }
+    }
+
+    private void RecordRefreshFailure(Exception ex)
+    {
+        _lastRefreshError = ex;
+        Interlocked.Exchange(ref _lastRefreshErrorAtTicks, DateTime.UtcNow.Ticks);
+        var failures = Interlocked.Increment(ref _consecutiveRefreshFailures);
+        try { RefreshFailed?.Invoke(this, new RefreshFailedEventArgs(ex, failures)); }
+        catch { /* never let a subscriber's exception break the refresh loop */ }
     }
 
     private bool TryRefresh()
@@ -132,6 +177,22 @@ public sealed class SearcherManager : IDisposable
         if (Volatile.Read(ref _disposed) != 0)
             return false;
 
+        try
+        {
+            var refreshed = TryRefreshCore();
+            // Successful path resets failure counter.
+            Interlocked.Exchange(ref _consecutiveRefreshFailures, 0);
+            return refreshed;
+        }
+        catch (Exception ex) when (ex is IOException or InvalidDataException)
+        {
+            RecordRefreshFailure(ex);
+            return false;
+        }
+    }
+
+    private bool TryRefreshCore()
+    {
         // Check if the commit generation on disk is newer than what we have
         var latestCommit = Index.IndexRecovery.RecoverLatestCommit(_directory.DirectoryPath, cleanupOrphans: false);
         if (latestCommit is null) return false;
