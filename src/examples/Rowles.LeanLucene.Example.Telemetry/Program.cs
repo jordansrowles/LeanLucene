@@ -1,7 +1,9 @@
 using System.Diagnostics.Metrics;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using OpenTelemetry;
+using OpenTelemetry.Logs;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
@@ -46,6 +48,16 @@ builder.Services
         .AddConsoleExporter((_, readerOptions) =>
             readerOptions.PeriodicExportingMetricReaderOptions.ExportIntervalMilliseconds = 10_000));
 
+// Structured logs — pipe ILogger output through the OTel OTLP exporter so the
+// Aspire dashboard's "Structured" log view picks them up.
+builder.Logging.AddOpenTelemetry(logging =>
+{
+    logging.IncludeFormattedMessage = true;
+    logging.IncludeScopes           = true;
+    logging.ParseStateValues        = true;
+    logging.AddOtlpExporter();
+});
+
 // ── Demo worker ──────────────────────────────────────────────────────────────
 
 builder.Services.AddHostedService<DemoWorker>();
@@ -60,7 +72,7 @@ await host.RunAsync();
 /// search analytics, near-real-time refresh via <see cref="SearcherManager"/>,
 /// index-size reporting, and spell suggestions via <see cref="DidYouMeanSuggester"/>.
 /// </summary>
-internal sealed class DemoWorker(IMeterFactory meterFactory) : BackgroundService
+internal sealed class DemoWorker(IMeterFactory meterFactory, ILogger<DemoWorker> logger) : BackgroundService
 {
     private static readonly (string Title, string Author, int Year, string Genre)[] Books =
     [
@@ -106,10 +118,9 @@ internal sealed class DemoWorker(IMeterFactory meterFactory) : BackgroundService
         Console.WriteLine("Seeding index...");
         SeedIndex(writer);
         var otlpEndpoint = Environment.GetEnvironmentVariable("OTEL_EXPORTER_OTLP_ENDPOINT") ?? "http://localhost:4317";
-        Console.WriteLine($"Seeded {Books.Length} documents.");
-        Console.WriteLine($"Sending telemetry to {otlpEndpoint}");
-        Console.WriteLine($"Slow query log  → {slowLogPath}");
-        Console.WriteLine();
+        logger.LogInformation("Index seeded with {DocumentCount} documents at {IndexPath}", Books.Length, indexPath);
+        logger.LogInformation("Sending telemetry to {OtlpEndpoint}", otlpEndpoint);
+        logger.LogInformation("Slow query log path: {SlowLogPath}", slowLogPath);
 
         var searcherConfig = new IndexSearcherConfig
         {
@@ -133,7 +144,17 @@ internal sealed class DemoWorker(IMeterFactory meterFactory) : BackgroundService
         {
             var query = queries[iteration % queries.Length];
             int hits  = manager.UsingSearcher(s => s.Search(query, topN: 5).TotalHits);
-            Console.WriteLine($"[{iteration,4}] {DescribeQuery(query),-52} → {hits} hit(s)");
+
+            using (logger.BeginScope(new Dictionary<string, object>
+            {
+                ["iteration"] = iteration,
+                ["queryType"] = query.GetType().Name,
+            }))
+            {
+                logger.LogInformation(
+                    "Search {Iteration:D4} {QueryDescription} returned {HitCount} hit(s)",
+                    iteration, DescribeQuery(query), hits);
+            }
 
             // Repeat every third query to generate cache hits
             if (iteration % 3 == 0)
@@ -163,7 +184,7 @@ internal sealed class DemoWorker(IMeterFactory meterFactory) : BackgroundService
             await Task.Delay(TimeSpan.FromSeconds(2), stoppingToken);
         }
 
-        Console.WriteLine("Demo finished.");
+        logger.LogInformation("Demo finished after {Iterations} iterations", iteration);
     }
 
     private void SeedIndex(IndexWriter writer)
@@ -181,65 +202,66 @@ internal sealed class DemoWorker(IMeterFactory meterFactory) : BackgroundService
         writer.Commit();
     }
 
-    private static void AddDynamicDocument(IndexWriter writer, int iteration)
+    private void AddDynamicDocument(IndexWriter writer, int iteration)
     {
-        var doc = new LeanDocument();
+        var docId = $"dyn-{iteration}";
+        var doc   = new LeanDocument();
         doc.Add(new TextField("title",  $"Dynamic Document {iteration}"));
         doc.Add(new TextField("author", "Demo Author"));
         doc.Add(new NumericField("year", 2024));
         doc.Add(new StringField("genre", "programming"));
-        doc.Add(new StringField("id",    $"dyn-{iteration}"));
+        doc.Add(new StringField("id",    docId));
         writer.AddDocument(doc);
         writer.Commit();
-        Console.WriteLine($"  ↳ Committed dyn-{iteration} — SearcherManager will refresh shortly");
+        logger.LogInformation("Committed dynamic document {DocumentId}; SearcherManager will refresh shortly", docId);
     }
 
-    private static void PrintSuggestions(SearcherManager manager)
+    private void PrintSuggestions(SearcherManager manager)
     {
         // "programing" is an intentional typo — the suggester should correct it to "programming"
-        var suggestions = manager.UsingSearcher(s =>
-            DidYouMeanSuggester.Suggest(s, "title", "programing", maxEdits: 2, topN: 3));
+        const string typo = "programing";
+        var suggestions   = manager.UsingSearcher(s =>
+            DidYouMeanSuggester.Suggest(s, "title", typo, maxEdits: 2, topN: 3));
 
         if (suggestions.Count > 0)
-            Console.WriteLine($"  Did you mean: {string.Join(", ", suggestions.Select(s => s.Term))}");
+            logger.LogInformation("Did-you-mean suggestions for {Term}: {Suggestions}",
+                typo, string.Join(", ", suggestions.Select(s => s.Term)));
     }
 
-    private static void PrintAnalytics(SearchAnalytics analytics)
+    private void PrintAnalytics(SearchAnalytics analytics)
     {
         var events = analytics.GetRecentEvents(8);
         if (events.Count == 0) return;
 
-        Console.WriteLine();
-        Console.WriteLine("  ── Recent search events ──────────────────────────────────────");
+        using var scope = logger.BeginScope("RecentSearchEvents");
         foreach (var e in events)
-            Console.WriteLine($"  {e.QueryType,-26} {e.ElapsedMs,6:F2}ms  hits={e.TotalHits,3}  cached={e.CacheHit}");
-        Console.WriteLine();
+        {
+            logger.LogInformation(
+                "Recent {QueryType} took {ElapsedMs:F2}ms returning {TotalHits} hits (cached={CacheHit})",
+                e.QueryType, e.ElapsedMs, e.TotalHits, e.CacheHit);
+        }
     }
 
-    private static void PrintMetricsSnapshot(MetricsSnapshot snap)
+    private void PrintMetricsSnapshot(MetricsSnapshot snap)
     {
-        Console.WriteLine();
-        Console.WriteLine("  ── Metrics snapshot ──────────────────────────────────────────");
-        Console.WriteLine($"  Searches : {snap.SearchCount}  avg={snap.SearchAvgMs:F2}ms  max={snap.SearchMaxMs}ms");
-        Console.WriteLine($"  Cache    : {snap.CacheHits} hits / {snap.CacheMisses} misses  ({snap.CacheHitRate:P0} hit rate)");
-        Console.WriteLine($"  Commits  : {snap.CommitCount}  ({snap.CommitTotalMs}ms total)");
-        Console.WriteLine($"  Merges   : {snap.MergeCount}  ({snap.MergeSegments} segment(s) merged)");
+        logger.LogInformation(
+            "Metrics: searches={SearchCount} avg={SearchAvgMs:F2}ms max={SearchMaxMs}ms cacheHitRate={CacheHitRate:P0} commits={CommitCount} merges={MergeCount}",
+            snap.SearchCount, snap.SearchAvgMs, snap.SearchMaxMs,
+            snap.CacheHitRate, snap.CommitCount, snap.MergeCount);
 
         if (snap.LatencyHistogram is { } hist)
         {
-            string[] labels  = ["<1ms", "<5ms", "<10ms", "<50ms", "<100ms", "<500ms", "<1s", "≥1s"];
-            var      buckets = string.Join("  ", Enumerable.Range(0, hist.Length).Select(i => $"{labels[i]}:{hist[i]}"));
-            Console.WriteLine($"  Latency  : {buckets}");
+            string[] labels  = ["<1ms", "<5ms", "<10ms", "<50ms", "<100ms", "<500ms", "<1s", ">=1s"];
+            var      buckets = string.Join(" ", Enumerable.Range(0, hist.Length).Select(i => $"{labels[i]}={hist[i]}"));
+            logger.LogInformation("Latency histogram: {Buckets}", buckets);
         }
-
-        Console.WriteLine();
     }
 
-    private static void PrintIndexSize(string indexPath)
+    private void PrintIndexSize(string indexPath)
     {
         var report = IndexSizeCalculator.Calculate(indexPath);
-        Console.WriteLine($"  ── Index size: {FormatBytes(report.TotalSizeBytes)}  ({report.Segments.Count} segment(s)) ──");
-        Console.WriteLine();
+        logger.LogInformation("Index size {Size} across {SegmentCount} segment(s)",
+            FormatBytes(report.TotalSizeBytes), report.Segments.Count);
     }
 
     /// <summary>
