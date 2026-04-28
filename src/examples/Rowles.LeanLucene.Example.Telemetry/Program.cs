@@ -18,19 +18,20 @@ using Rowles.LeanLucene.Store;
 var builder = Host.CreateApplicationBuilder(args);
 
 // ── OpenTelemetry ────────────────────────────────────────────────────────────
-
-const string OtlpEndpoint = "http://localhost:4317";
+// When run under Aspire, OTEL_EXPORTER_OTLP_ENDPOINT is injected automatically.
+// Calling AddOtlpExporter() with no arguments lets the SDK read it from the
+// environment, rather than overriding it with a hardcoded address.
 
 builder.Services
     .AddOpenTelemetry()
     .ConfigureResource(r => r.AddService("LeanLucene.Telemetry"))
     .WithTracing(tracing => tracing
         .AddSource("Rowles.LeanLucene")
-        .AddOtlpExporter(o => o.Endpoint = new Uri(OtlpEndpoint)))
+        .AddOtlpExporter())
     .WithMetrics(metrics => metrics
         .AddMeter("Rowles.LeanLucene")
         .AddRuntimeInstrumentation()
-        .AddOtlpExporter(o => o.Endpoint = new Uri(OtlpEndpoint)));
+        .AddOtlpExporter());
 
 // ── Demo worker ──────────────────────────────────────────────────────────────
 
@@ -48,11 +49,9 @@ await host.RunAsync();
 /// </summary>
 internal sealed class DemoWorker(IMeterFactory meterFactory) : BackgroundService
 {
-    private const string OtlpEndpoint = "http://localhost:4317";
-
     private static readonly (string Title, string Author, int Year, string Genre)[] Books =
     [
-        ("The Rust Programming Language",                    "Steve Klabnik",         2019, "programming"),
+        ("The Rust Programming Language","Steve Klabnik",         2019, "programming"),
         ("Clean Code",                                        "Robert C. Martin",      2008, "programming"),
         ("Domain-Driven Design",                              "Eric Evans",            2003, "architecture"),
         ("Designing Data-Intensive Applications",             "Martin Kleppmann",      2017, "distributed"),
@@ -93,8 +92,9 @@ internal sealed class DemoWorker(IMeterFactory meterFactory) : BackgroundService
 
         Console.WriteLine("Seeding index...");
         SeedIndex(writer);
+        var otlpEndpoint = Environment.GetEnvironmentVariable("OTEL_EXPORTER_OTLP_ENDPOINT") ?? "http://localhost:4317";
         Console.WriteLine($"Seeded {Books.Length} documents.");
-        Console.WriteLine($"Sending telemetry to {OtlpEndpoint}");
+        Console.WriteLine($"Sending telemetry to {otlpEndpoint}");
         Console.WriteLine($"Slow query log  → {slowLogPath}");
         Console.WriteLine();
 
