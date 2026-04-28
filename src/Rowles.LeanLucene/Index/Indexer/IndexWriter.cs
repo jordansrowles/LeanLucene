@@ -34,7 +34,7 @@ public sealed partial class IndexWriter : IDisposable
     private Dictionary<string, int[]> _docTokenCounts = new(StringComparer.Ordinal);
     // Track field names seen in this flush
     private readonly HashSet<string> _fieldNames = new(StringComparer.Ordinal);
-    // Cache qualified term strings to avoid repeated string.Concat — keyed by the qualified term itself
+    // Cache qualified term strings to avoid repeated string.Concat, keyed by the qualified term itself
     private Dictionary<string, string> _qualifiedTermPool = new(8192, StringComparer.Ordinal);
     // Cache field name prefixes ("fieldName\0") to avoid repeated prefix construction
     private readonly Dictionary<string, string> _fieldPrefixCache = new(StringComparer.Ordinal);
@@ -134,19 +134,16 @@ public sealed partial class IndexWriter : IDisposable
         // re-acquiring _writeLock and sequentially calling FlushSegment when only one flush is needed.
         AcquireBackpressureSlot();
 
-        // We hold a semaphore slot at this point (or backpressure is disabled).
-        // Track the slot before any work that could throw, so the catch's release
-        // is balanced even if FlushSegment below fails.
-        if (_backpressureSemaphore is not null)
-        {
-            lock (_writeLock)
-                _semaphoreSlotsHeld++;
-        }
-
         try
         {
             lock (_writeLock)
             {
+                // We hold a semaphore slot at this point. Track it under the
+                // existing write lock so AddDocument does not take a second lock
+                // just for backpressure accounting.
+                if (_backpressureSemaphore is not null)
+                    _semaphoreSlotsHeld++;
+
                 // Merge backpressure: if too many unmerged segments, flush and merge now
                 if (ShouldThrottleForMerge() && _bufferedDocCount > 0)
                     FlushSegment();
@@ -178,6 +175,12 @@ public sealed partial class IndexWriter : IDisposable
     {
         ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
         if (documents.Count == 0) return;
+        if (_backpressureSemaphore is not null && documents.Count > _config.MaxQueuedDocs)
+        {
+            foreach (var document in documents)
+                AddDocument(document);
+            return;
+        }
 
         int acquired = 0;
         bool addedToHeldSlots = false;
@@ -241,6 +244,9 @@ public sealed partial class IndexWriter : IDisposable
         ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
         if (block.Count < 2)
             throw new ArgumentException("A document block requires at least one child and one parent document.", nameof(block));
+        if (_backpressureSemaphore is not null && block.Count > _config.MaxQueuedDocs)
+            throw new InvalidOperationException(
+                $"Document block contains {block.Count} documents, which exceeds MaxQueuedDocs ({_config.MaxQueuedDocs}).");
 
         int acquired = 0;
         bool addedToHeldSlots = false;
@@ -345,7 +351,7 @@ public sealed partial class IndexWriter : IDisposable
     private void CommitCore()
     {
         // Snapshot the segments that exist BEFORE flushing. Deletions from
-        // UpdateDocument must only target these older segments — not the
+        // UpdateDocument must only target these older segments, not the
         // replacement segment that will be flushed next.
         var preFlushSegmentCount = _committedSegments.Count;
 
@@ -601,7 +607,7 @@ public sealed partial class IndexWriter : IDisposable
     }
 
     /// <summary>
-    /// Returns the estimated RAM used by all buffered data. O(1) — uses the
+    /// Returns the estimated RAM used by all buffered data. O(1), using the
     /// incrementally tracked <c>_postingsRamBytes</c> instead of iterating
     /// every <see cref="PostingAccumulator"/>.
     /// </summary>
