@@ -97,28 +97,28 @@ public sealed partial class SegmentReader
     }
 
     /// <summary>Returns whether this segment has vector data.</summary>
-    public bool HasVectors => _vectorReaders.Count > 0;
+    public bool HasVectors => _vectorPaths.Count > 0;
 
     /// <summary>Reads the vector for a given document from the first available vector field (legacy convenience).</summary>
     public float[]? GetVector(int docId)
     {
-        foreach (var kv in _vectorReaders)
-            return kv.Value.ReadVector(docId);
+        foreach (var fieldName in _vectorPaths.Keys)
+            return EnsureVectorReader(fieldName)?.ReadVector(docId);
         return null;
     }
 
     /// <summary>Reads the vector for a given document on the named vector field.</summary>
     public float[]? GetVector(string fieldName, int docId)
     {
-        if (_vectorReaders.TryGetValue(fieldName, out var r))
+        if (EnsureVectorReader(fieldName) is { } r)
             return r.ReadVector(docId);
-        if (string.IsNullOrEmpty(fieldName) && _vectorReaders.Count == 1)
+        if (string.IsNullOrEmpty(fieldName) && _vectorPaths.Count == 1)
             return GetVector(docId);
         return null;
     }
 
     /// <summary>Returns the field names with vector data in this segment.</summary>
-    public IReadOnlyCollection<string> VectorFieldNames => _vectorReaders.Keys;
+    public IReadOnlyCollection<string> VectorFieldNames => _vectorPaths.Keys;
 
     /// <summary>
     /// Returns the (lazy-loaded) HNSW graph for the given vector field, or null if no graph exists.
@@ -132,7 +132,8 @@ public sealed partial class SegmentReader
             if (_hnswGraphs.TryGetValue(fieldName, out cached)) return cached;
             var path = VectorFilePaths.HnswFile(_basePath, fieldName);
             HnswGraph? graph = null;
-            if (File.Exists(path) && _vectorReaders.TryGetValue(fieldName, out var vr))
+            var vr = EnsureVectorReaderNoLock(fieldName);
+            if (File.Exists(path) && vr is not null)
             {
                 var src = new VectorReaderSource(vr);
                 bool? expectedNormalised = _info.VectorFields
@@ -142,6 +143,29 @@ public sealed partial class SegmentReader
             _hnswGraphs[fieldName] = graph;
             return graph;
         }
+    }
+
+    private VectorReader? EnsureVectorReader(string fieldName)
+    {
+        if (_vectorReaders.TryGetValue(fieldName, out var reader))
+            return reader;
+
+        lock (_hnswLoadLock)
+        {
+            return EnsureVectorReaderNoLock(fieldName);
+        }
+    }
+
+    private VectorReader? EnsureVectorReaderNoLock(string fieldName)
+    {
+        if (_vectorReaders.TryGetValue(fieldName, out var reader))
+            return reader;
+        if (!_vectorPaths.TryGetValue(fieldName, out var path))
+            return null;
+
+        reader = VectorReader.Open(path);
+        _vectorReaders[fieldName] = reader;
+        return reader;
     }
 
     private static Dictionary<string, Dictionary<int, double>> ReadNumericIndex(string filePath)

@@ -21,6 +21,7 @@ public sealed partial class SegmentReader : IDisposable
     private readonly StoredFieldsReader? _storedReader;
     private readonly FrozenDictionary<string, byte[]> _fieldNorms;
     private readonly FrozenDictionary<string, int[]> _fieldLengthsPerField;
+    private readonly Dictionary<string, string> _vectorPaths = new(StringComparer.Ordinal);
     private readonly Dictionary<string, VectorReader> _vectorReaders = new(StringComparer.Ordinal);
     private readonly Dictionary<string, HnswGraph?> _hnswGraphs = new(StringComparer.Ordinal);
     private readonly object _hnswLoadLock = new();
@@ -101,14 +102,15 @@ public sealed partial class SegmentReader : IDisposable
             _fieldLengthsPerField = tempLengths.ToFrozenDictionary(StringComparer.Ordinal);
         }
 
-        // Vector fields: open per-field .vec eagerly, defer .hnsw to first search.
+        // Vector fields: record paths only. Opening the mmap-backed readers is deferred
+        // until a VectorQuery or explicit vector read actually needs them.
         if (info.VectorFields.Count > 0)
         {
             foreach (var vf in info.VectorFields)
             {
                 var perFieldVecPath = VectorFilePaths.VectorFile(_basePath, vf.FieldName);
                 if (File.Exists(perFieldVecPath))
-                    _vectorReaders[vf.FieldName] = VectorReader.Open(perFieldVecPath);
+                    _vectorPaths[vf.FieldName] = perFieldVecPath;
             }
         }
         else
@@ -116,7 +118,7 @@ public sealed partial class SegmentReader : IDisposable
             // Legacy single-vector segment: pre-multi-vector layout.
             var legacyVecPath = _basePath + ".vec";
             if (File.Exists(legacyVecPath))
-                _vectorReaders[string.Empty] = VectorReader.Open(legacyVecPath);
+                _vectorPaths[string.Empty] = legacyVecPath;
         }
 
         // Stage 2 features: numeric index, numeric doc values, and sorted doc values are now lazy-loaded
@@ -325,6 +327,7 @@ public sealed partial class SegmentReader : IDisposable
         _storedReader?.Dispose();
         foreach (var r in _vectorReaders.Values) r.Dispose();
         _vectorReaders.Clear();
+        _vectorPaths.Clear();
         _termVectorsReader?.Dispose();
     }
 
