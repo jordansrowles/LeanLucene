@@ -58,6 +58,7 @@ public sealed partial class IndexWriter : IDisposable
     private readonly List<(string field, string term)> _pendingDeletes = [];
     private readonly Lock _writeLock = new();
     private readonly SemaphoreSlim? _backpressureSemaphore;
+    private int _flushElection;
     private int _semaphoreSlotsHeld;
     private readonly List<IndexSnapshot> _heldSnapshots = [];
     private int _disposed;      // 0 = alive, 1 = disposed (atomically set via Interlocked)
@@ -125,17 +126,10 @@ public sealed partial class IndexWriter : IDisposable
 
         // Apply backpressure if enabled: wait for a semaphore slot before acquiring the write lock.
         // This prevents unbounded memory growth when documents are queued faster than they can be flushed.
-        // Use TryWait first — if the semaphore is exhausted, force a flush to release slots
-        // (avoids deadlock when MaxBufferedDocs > MaxQueuedDocs).
-        if (_backpressureSemaphore is not null && !_backpressureSemaphore.Wait(0))
-        {
-            lock (_writeLock)
-            {
-                if (_bufferedDocCount > 0)
-                    FlushSegment();
-            }
-            _backpressureSemaphore.Wait();
-        }
+        // When the semaphore is exhausted, ONE thread is elected to flush while others
+        // simply Wait() for the slot to become available. The election prevents N threads from all
+        // re-acquiring _writeLock and sequentially calling FlushSegment when only one flush is needed.
+        AcquireBackpressureSlot();
 
         // We hold a semaphore slot at this point (or backpressure is disabled).
         // Track the slot before any work that could throw, so the catch's release
@@ -190,15 +184,7 @@ public sealed partial class IndexWriter : IDisposable
             {
                 for (int i = 0; i < documents.Count; i++)
                 {
-                    if (!_backpressureSemaphore.Wait(0))
-                    {
-                        lock (_writeLock)
-                        {
-                            if (_bufferedDocCount > 0)
-                                FlushSegment();
-                        }
-                        _backpressureSemaphore.Wait();
-                    }
+                    AcquireBackpressureSlot();
                     acquired++;
                 }
             }
@@ -261,15 +247,7 @@ public sealed partial class IndexWriter : IDisposable
             {
                 for (int i = 0; i < block.Count; i++)
                 {
-                    if (!_backpressureSemaphore.Wait(0))
-                    {
-                        lock (_writeLock)
-                        {
-                            if (_bufferedDocCount > 0)
-                                FlushSegment();
-                        }
-                        _backpressureSemaphore.Wait();
-                    }
+                    AcquireBackpressureSlot();
                     acquired++;
                 }
             }
@@ -419,6 +397,13 @@ public sealed partial class IndexWriter : IDisposable
             ContentToken = _contentToken
         });
 
+        // Append a CRC32 trailer so torn writes (where the JSON byte-tail survives but
+        // the rename did not flush) can be detected on recovery. The trailer line is
+        // optional on read, for backward compatibility with files written before this
+        // line was added.
+        var crc = Util.Crc32.Compute(commitData);
+        var fileContent = commitData + "\n#crc32=" + crc.ToString("x8") + "\n";
+
         if (_config.DurableCommits)
         {
             // Belt-and-braces durability: fsync every committed segment file before writing
@@ -440,7 +425,7 @@ public sealed partial class IndexWriter : IDisposable
             using (var fs = new FileStream(tempFile, FileMode.Create, FileAccess.Write, FileShare.None))
             using (var sw = new StreamWriter(fs))
             {
-                sw.Write(commitData);
+                sw.Write(fileContent);
                 sw.Flush();
                 fs.Flush(flushToDisk: true);
             }
@@ -451,7 +436,7 @@ public sealed partial class IndexWriter : IDisposable
         }
         else
         {
-            File.WriteAllText(tempFile, commitData);
+            File.WriteAllText(tempFile, fileContent);
             File.Move(tempFile, commitFile, overwrite: true);
         }
     }
@@ -573,6 +558,34 @@ public sealed partial class IndexWriter : IDisposable
     /// When <see cref="IndexWriterConfig.MergeThrottleSegments"/> is set and the
     /// number of committed segments exceeds it, this returns true.
     /// </summary>
+    /// <summary>
+    /// Acquires one semaphore slot. If the semaphore is exhausted, the first contending
+    /// thread is elected to perform a flush; the rest simply <see cref="SemaphoreSlim.Wait()"/>.
+    /// Caller must hold no locks.
+    /// </summary>
+    private void AcquireBackpressureSlot()
+    {
+        if (_backpressureSemaphore is null) return;
+        if (_backpressureSemaphore.Wait(0)) return;
+
+        if (Interlocked.CompareExchange(ref _flushElection, 1, 0) == 0)
+        {
+            try
+            {
+                lock (_writeLock)
+                {
+                    if (_bufferedDocCount > 0)
+                        FlushSegment();
+                }
+            }
+            finally
+            {
+                Volatile.Write(ref _flushElection, 0);
+            }
+        }
+        _backpressureSemaphore.Wait();
+    }
+
     private bool ShouldThrottleForMerge()
     {
         return _config.MergeThrottleSegments > 0
