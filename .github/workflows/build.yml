@@ -30,11 +30,11 @@ jobs:
       - name: Add .NET tools to PATH
         run: echo "$HOME/.dotnet/tools" >> "$GITHUB_PATH"
 
-      - name: Restore
-        run: dotnet restore Rowles.LeanLucene.slnx
+      - name: Restore tests
+        run: dotnet restore src/Rowles.LeanLucene.Tests/Rowles.LeanLucene.Tests.csproj
 
-      - name: Build
-        run: dotnet build Rowles.LeanLucene.slnx -c Release --no-restore
+      - name: Build tests
+        run: dotnet build src/Rowles.LeanLucene.Tests/Rowles.LeanLucene.Tests.csproj -c Release --no-restore
 
       - name: Test
         run: dotnet test src/Rowles.LeanLucene.Tests/Rowles.LeanLucene.Tests.csproj -c Release --no-build --logger "trx;LogFileName=test-results.trx"
