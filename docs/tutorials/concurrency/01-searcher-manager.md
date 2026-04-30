@@ -22,6 +22,15 @@ A background loop polls for new commits at `RefreshInterval`.
 
 ## Acquire and release
 
+Prefer `AcquireLease` for new code:
+
+```csharp
+using var lease = manager.AcquireLease();
+var hits = lease.Searcher.Search(query, 10);
+```
+
+The older acquire/release pair is still available:
+
 ```csharp
 var searcher = manager.Acquire();
 try
@@ -49,7 +58,20 @@ bool refreshedAsync = await manager.MaybeRefreshAsync();
 
 Returns `true` when a newer commit was loaded.
 
+## Refresh failures
+
+Refresh errors are captured instead of crashing the background loop:
+
+```csharp
+manager.RefreshFailed += (_, e) =>
+    logger.LogWarning(e.Error, "Searcher refresh failed {Count} time(s)", e.ConsecutiveFailures);
+
+if (manager.LastRefreshError is not null)
+    Console.Error.WriteLine(manager.LastRefreshError.Message);
+```
+
 ## See also
 
+- [Refresh failures](04-refresh-failures.md)
 - <xref:Rowles.LeanLucene.Search.Searcher.SearcherManager>
 - <xref:Rowles.LeanLucene.Search.Searcher.SearcherManagerConfig>

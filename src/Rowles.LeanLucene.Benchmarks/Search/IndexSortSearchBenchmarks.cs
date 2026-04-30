@@ -11,7 +11,7 @@ using LeanTextField = Rowles.LeanLucene.Document.Fields.TextField;
 namespace Rowles.LeanLucene.Benchmarks;
 
 /// <summary>
-/// Measures sorted-search benefit: early termination (sorted index) vs post-sort (unsorted index).
+/// Measures sorted-search behaviour with sorted and unsorted indices.
 /// </summary>
 [MemoryDiagnoser]
 [HtmlExporter]

@@ -2,8 +2,7 @@
 
 /// <summary>
 /// Defines the sort order applied to documents within a segment at flush time.
-/// When configured, documents are physically reordered before writing, enabling
-/// early termination during sorted searches.
+/// When configured, documents are physically reordered before writing.
 /// </summary>
 public sealed class IndexSort : IEquatable<IndexSort>
 {

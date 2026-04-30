@@ -1,0 +1,10 @@
+- name: Overview
+  href: index.md
+- name: Aspire telemetry
+  href: 01-aspire-telemetry.md
+- name: HNSW vector search
+  href: 02-hnsw-vector-search.md
+- name: Benchmark provenance
+  href: 03-benchmark-provenance.md
+- name: Reliable commits
+  href: 04-reliable-commits.md

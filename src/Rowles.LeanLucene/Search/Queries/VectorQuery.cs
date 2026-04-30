@@ -4,7 +4,7 @@ using System.Runtime.InteropServices;
 namespace Rowles.LeanLucene.Search.Queries;
 
 /// <summary>
-/// ANN search over .vec data using a flat SIMD cosine similarity scan.
+/// ANN search over vector data using HNSW when available, with a flat SIMD fallback.
 /// </summary>
 public sealed class VectorQuery : Query
 {

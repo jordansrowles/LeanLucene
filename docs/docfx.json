@@ -25,6 +25,9 @@
         "files": [ "tutorials/**.md", "tutorials/**/toc.yml", "tutorials/toc.yml" ]
       },
       {
+        "files": [ "articles/**.md", "articles/toc.yml" ]
+      },
+      {
         "files": [ "benchmarks/*.md", "benchmarks/toc.yml" ]
       }
     ],

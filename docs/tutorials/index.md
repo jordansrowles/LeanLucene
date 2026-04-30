@@ -33,12 +33,14 @@ the [API reference](../api/index.md) for full signatures.
 - [Vector search](advanced/05-vector-search.md)
 - [Block-join (nested documents)](advanced/06-block-join.md)
 - [More like this](advanced/07-more-like-this.md)
+- [Filtered vector search](advanced/08-filtered-vector-search.md)
 
 ## Concurrency and Near Real Time
 
 - [Searcher manager](concurrency/01-searcher-manager.md)
 - [Concurrent indexing](concurrency/02-concurrent-indexing.md)
 - [Snapshots and deletion policies](concurrency/03-snapshots-and-policies.md)
+- [Refresh failures](concurrency/04-refresh-failures.md)
 
 ## Index Management
 
@@ -52,6 +54,7 @@ the [API reference](../api/index.md) for full signatures.
 - [Slow query log](observability/02-slow-query-log.md)
 - [Search analytics](observability/03-search-analytics.md)
 - [OpenTelemetry](observability/04-opentelemetry.md)
+- [Aspire dashboard](observability/05-aspire-dashboard.md)
 
 ## Tips and How-to
 

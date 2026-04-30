@@ -50,6 +50,8 @@
       href: advanced/06-block-join.md
     - name: More like this
       href: advanced/07-more-like-this.md
+    - name: Filtered vector search
+      href: advanced/08-filtered-vector-search.md
 
 - name: Concurrency
   items:
@@ -59,6 +61,8 @@
       href: concurrency/02-concurrent-indexing.md
     - name: Snapshots and policies
       href: concurrency/03-snapshots-and-policies.md
+    - name: Refresh failures
+      href: concurrency/04-refresh-failures.md
 
 - name: Index Management
   items:
@@ -79,6 +83,8 @@
       href: observability/03-search-analytics.md
     - name: OpenTelemetry
       href: observability/04-opentelemetry.md
+    - name: Aspire dashboard
+      href: observability/05-aspire-dashboard.md
 
 - name: Tips
   items:

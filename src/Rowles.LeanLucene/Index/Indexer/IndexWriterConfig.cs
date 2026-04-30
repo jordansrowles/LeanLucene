@@ -121,8 +121,7 @@ public sealed class IndexWriterConfig
 
     /// <summary>
     /// Optional index-time sort order. When set, documents within each segment
-    /// are physically reordered at flush time, enabling early termination for
-    /// searches that match this sort. Default: null (insertion order).
+    /// are physically reordered at flush time. Default: null (insertion order).
     /// </summary>
     public IndexSort? IndexSort { get; set; }
 

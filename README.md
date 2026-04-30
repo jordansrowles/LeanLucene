@@ -10,6 +10,7 @@ A .NET-native full-text search engine. Segment-centric indexing, memory-mapped r
 | `Rowles.LeanLucene.Tests` | xUnit test suite |
 | `Rowles.LeanLucene.Benchmarks` | BenchmarkDotNet suites, compared against Lucene.NET |
 | `Rowles.LeanLucene.Example.JsonApi` | ASP.NET Minimal API example |
+| `Rowles.LeanLucene.Example.Telemetry` | OpenTelemetry traces, metrics and structured logs example |
 
 ## Building and Testing
 
@@ -107,7 +108,7 @@ Built-in analysers:
 - `StemmedAnalyser` - wraps any stemmer
 - `LanguageAnalyser` - language-specific pipelines
 
-Built-in stemmers: English, French, German, Russian.
+Built-in stemmers: English, French, German, Spanish, Italian, Portuguese, Dutch, Russian, and Arabic.
 
 Built-in tokenisers: standard, N-gram, edge N-gram, CJK bigram.
 
@@ -158,7 +159,7 @@ var query = new BooleanQueryBuilder()
 
 ## Scoring
 
-Default similarity is BM25 (`Bm25Similarity.Instance`). TF-IDF is also available. The scoring model is set on both `IndexWriterConfig.Similarity` and `IndexSearcherConfig.Similarity`. Multi-segment searches use BlockMaxWAND for early termination. `IndexSort` enables additional early termination for sort-aligned queries.
+Default similarity is BM25 (`Bm25Similarity.Instance`). TF-IDF is also available. The scoring model is set on both `IndexWriterConfig.Similarity` and `IndexSearcherConfig.Similarity`. Multi-segment searches use BlockMaxWAND for early termination. `IndexSort` controls segment order at flush time.
 
 Score explanations:
 
@@ -268,9 +269,9 @@ Benchmark suites compare LeanLucene against Lucene.NET across indexing, search, 
 .\scripts\benchmark.ps1 -List
 ```
 
-Available suites: `index`, `query`, `analysis`, `boolean`, `phrase`, `prefix`, `fuzzy`, `wildcard`, `deletion`, `smallindex`, `tokenbudget`, `diagnostics`, `suggester`, `schemajson`, `compound`, `indexsort`, `blockjoin`.
+Available suites: `index`, `query`, `analysis`, `boolean`, `phrase`, `prefix`, `fuzzy`, `wildcard`, `deletion`, `suggester`, `schemajson`, `compound`, `indexsort`, `blockjoin`, `gutenberg-analysis`, `gutenberg-index`, `gutenberg-search`, `tokenbudget`, `diagnostics`.
 
-Output is written to `bench/data/<type>/<runId>/<suite>/` with JSON, Markdown, and HTML reports.
+Output is written to `bench/{machine}/{yyyy-MM-dd}/{HH-mm}/` with JSON, Markdown, HTML, a consolidated `report.json`, and a per-machine `index.json`.
 
 ## Example JSON API
 

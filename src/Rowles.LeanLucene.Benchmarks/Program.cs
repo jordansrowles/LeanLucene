@@ -207,7 +207,7 @@ internal static class Program
               deletion         DeletionBenchmarks -- delete throughput (vs Lucene.NET)
               suggester        SuggesterBenchmarks -- DidYouMean spelling correction (vs Lucene.NET)
               schemajson       SchemaAndJsonBenchmarks -- schema validation + JSON mapping
-              indexsort        IndexSortIndex/SearchBenchmarks -- index-time sort + early termination
+              indexsort        IndexSortIndex/SearchBenchmarks -- index-time sort + sorted search
               blockjoin        BlockJoinBenchmarks -- block-join queries (vs Lucene.NET)
 
               gutenberg-analysis  GutenbergAnalysisBenchmarks -- analysis on real ebook text

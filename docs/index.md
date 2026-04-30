@@ -4,7 +4,7 @@ _layout: landing
 
 # LeanLucene
 
-A fast, embeddable, zero-dependency full-text search engine for .NET. No external processes, no
+A fast, embeddable full-text search engine for .NET. No external processes, no
 JVM, no Lucene. Write an index, run a query, ship your app.
 
 ```bash
@@ -19,13 +19,13 @@ dotnet add package LeanLucene
 
 | Area | Details |
 |---|---|
-| **Indexing** | Memory-mapped segments, BM25 scoring, index-time sorting, schema validation, concurrent multi-thread indexing |
+| **Indexing** | Memory-mapped segments, BM25 scoring, index-time sorting, schema validation, concurrent multi-thread indexing, CRC-protected commits |
 | **Queries** | Term, boolean, phrase, prefix, wildcard, fuzzy, range, regexp, span, geo bounding box, geo distance, disjunction max |
-| **Advanced queries** | Vector ANN (`VectorQuery`), reciprocal rank fusion (`RrfQuery`), block-join, more-like-this, function score, constant score |
+| **Advanced queries** | HNSW vector ANN (`VectorQuery`), filtered vector search, reciprocal rank fusion (`RrfQuery`), block-join, more-like-this, function score, constant score |
 | **Analysis** | Pluggable tokenisers (standard, n-gram, edge n-gram, CJK bigram), char filters, token filters, stemmers for 10+ languages |
 | **Search features** | Facets, aggregations, highlighting, spell-check suggestions, field collapsing, query caching |
 | **Concurrency** | `SearcherManager` for near-real-time search, snapshot-based backup, configurable commit retention policies |
-| **Observability** | `ActivitySource` traces, `System.Diagnostics.Metrics` via `MeterMetricsCollector`, slow query log, search analytics |
+| **Observability** | `ActivitySource` traces, `System.Diagnostics.Metrics` via `MeterMetricsCollector`, structured logs through OpenTelemetry, slow query log, search analytics |
 
 ---
 
@@ -73,5 +73,6 @@ engine uses SIMD posting intersection and BlockMax WAND for early termination on
 
 ## Explore
 
-- [Tutorials](tutorials/index.md) — step-by-step guides for common tasks
-- [API reference](api/index.md) — full type and member documentation
+- [Tutorials](tutorials/index.md) - step-by-step guides for common tasks
+- [Articles](articles/index.md) - short notes on recent features
+- [API reference](api/index.md) - full type and member documentation

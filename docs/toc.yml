@@ -3,6 +3,9 @@
 - name: Tutorials
   href: tutorials/
   homepage: tutorials/index.md
+- name: Articles
+  href: articles/
+  homepage: articles/index.md
 - name: API Reference
   href: api/
   homepage: api/index.md

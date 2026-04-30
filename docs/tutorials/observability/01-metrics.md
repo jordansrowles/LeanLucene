@@ -25,8 +25,10 @@ Console.WriteLine($"Cache hit rate: {snap.CacheHitRate:P0}");
 
 `SearchCount`, `SearchTotalMs`, `SearchMaxMs`, `SearchAvgMs`, `CacheHits`,
 `CacheMisses`, `CacheHitRate`, `FlushCount`, `FlushTotalMs`, `MergeCount`,
-`MergeSegments`, `MergeTotalMs`, `CommitCount`, `CommitTotalMs`, plus a
-`LatencyHistogram` with buckets at `<1, <5, <10, <50, <100, <500, <1000, ≥1000` ms.
+`MergeSegments`, `MergeTotalMs`, `CommitCount`, `CommitTotalMs`,
+`HnswSearchCount`, `HnswSearchTotalMs`, `HnswNodesVisited`, `HnswBuildCount`,
+`HnswBuildTotalMs`, `HnswNodesBuilt`, plus a `LatencyHistogram` with buckets at
+`<1, <5, <10, <50, <100, <500, <1000, >=1000` ms.
 
 ## MeterMetricsCollector
 

@@ -35,6 +35,12 @@ if (commit is null)
 `IndexWriter` runs writer-side recovery on open. Reader-side polling
 (via `SearcherManager`) calls it with `cleanupOrphans: false`.
 
+## Commit CRC
+
+New commit files include a CRC32 trailer. Recovery validates it before loading the
+JSON body. A mismatch is treated as a torn or corrupt commit, so recovery falls
+back to an older valid generation.
+
 ## See also
 
 - <xref:Rowles.LeanLucene.Index.IndexValidator>

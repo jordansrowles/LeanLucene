@@ -23,8 +23,8 @@ Sort field types include `Score`, `String`, `Long`, `Int`, `Double`, `Float`.
 ## Index-time sort
 
 Configure <xref:Rowles.LeanLucene.Index.Indexer.IndexSort> on the writer to
-physically reorder documents within each segment as they are flushed. This enables
-early termination during sorted searches.
+physically reorder documents within each segment as they are flushed. Query-time
+sorted searches still collect and order matching hits by the requested field.
 
 ```csharp
 var config = new IndexWriterConfig
