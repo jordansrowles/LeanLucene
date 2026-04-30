@@ -58,6 +58,23 @@ function Clear-ApiMetadata {
     }
 }
 
+function Set-GeneratedContent {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][object]$Value
+    )
+
+    for ($attempt = 1; $attempt -le 5; $attempt++) {
+        try {
+            Set-Content -Path $Path -Value $Value -Encoding utf8
+            return
+        } catch [System.IO.IOException] {
+            if ($attempt -eq 5) { throw }
+            Start-Sleep -Milliseconds (100 * $attempt)
+        }
+    }
+}
+
 function Add-InternalApiBadges {
     $apiDir = Join-Path $docsDir "api"
     if (-not (Test-Path $apiDir)) { return }
@@ -71,7 +88,6 @@ function Add-InternalApiBadges {
         $lines = [System.Collections.Generic.List[string]]::new()
         $lines.AddRange([string[]](Get-Content $file.FullName))
         $currentUid = $null
-        $fileInternalUids = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
 
         foreach ($line in $lines) {
             if ($line -match '^- uid: (.+)$') {
@@ -79,32 +95,31 @@ function Add-InternalApiBadges {
                 continue
             }
 
-            if ($currentUid -and $line -match '^\s+content(?:\.vb)?: .*\binternal\b') {
-                [void]$fileInternalUids.Add($currentUid)
+            if ($currentUid -and $line -match '^\s+content(?:\.vb)?: .*\b(internal|Friend)\b') {
                 [void]$internalUids.Add($currentUid)
             }
         }
-
-        if ($fileInternalUids.Count -eq 0) { continue }
-
-        $currentUid = $null
-        for ($i = 0; $i -lt $lines.Count; $i++) {
-            if ($lines[$i] -match '^- uid: (.+)$') {
-                $currentUid = $Matches[1]
-                continue
-            }
-
-            if ($currentUid -and $fileInternalUids.Contains($currentUid) -and
-                $lines[$i] -match '^(\s+name: )(.+)$' -and
-                $lines[$i] -notmatch [regex]::Escape($lock)) {
-                $lines[$i] = "$($Matches[1])$($Matches[2]) $lock"
-            }
-        }
-
-        Set-Content -Path $file.FullName -Value $lines -Encoding utf8
     }
 
     if ($internalUids.Count -eq 0) { return }
+
+    foreach ($file in Get-ChildItem $apiDir -Filter '*.yml' -File) {
+        if ($file.Name -eq 'toc.yml') { continue }
+
+        $lines = [string[]](Get-Content $file.FullName)
+        $out = [System.Collections.Generic.List[string]]::new()
+        for ($i = 0; $i -lt $lines.Length; $i++) {
+            $out.Add($lines[$i])
+
+            if ($lines[$i] -match '^- uid: (.+)$' -and $internalUids.Contains($Matches[1])) {
+                if ($i + 1 -ge $lines.Length -or $lines[$i + 1] -ne '  apiAccessOverride: internal') {
+                    $out.Add('  apiAccessOverride: internal')
+                }
+            }
+        }
+
+        Set-GeneratedContent -Path $file.FullName -Value $out
+    }
 
     $tocPath = Join-Path $apiDir 'toc.yml'
     if (-not (Test-Path $tocPath)) { return }
@@ -125,7 +140,7 @@ function Add-InternalApiBadges {
         }
     }
 
-    Set-Content -Path $tocPath -Value $tocLines -Encoding utf8
+    Set-GeneratedContent -Path $tocPath -Value $tocLines
 }
 
 function Remove-PrivateApiEntries {
@@ -231,7 +246,7 @@ function Remove-PrivateApiEntries {
         }
 
         $out.AddRange([string[]]$entry.Value.References)
-        Set-Content -Path $entry.Key -Value $out -Encoding utf8
+        Set-GeneratedContent -Path $entry.Key -Value $out
     }
 
     $tocPath = Join-Path $apiDir 'toc.yml'
@@ -256,7 +271,7 @@ function Remove-PrivateApiEntries {
         $outToc.Add($tocLines[$i])
     }
 
-    Set-Content -Path $tocPath -Value $outToc -Encoding utf8
+    Set-GeneratedContent -Path $tocPath -Value $outToc
 }
 
 function Remove-ExternalInheritedMembers {
@@ -292,7 +307,7 @@ function Remove-ExternalInheritedMembers {
             $i--
         }
 
-        Set-Content -Path $file.FullName -Value $out -Encoding utf8
+        Set-GeneratedContent -Path $file.FullName -Value $out
     }
 }
 
@@ -335,7 +350,7 @@ function Remove-ExternalInheritanceEntries {
             $i--
         }
 
-        Set-Content -Path $file.FullName -Value $out -Encoding utf8
+        Set-GeneratedContent -Path $file.FullName -Value $out
     }
 }
 
@@ -394,7 +409,7 @@ function Remove-ExternalReferenceEntries {
             $out.AddRange([string[]]$currentBlock)
         }
 
-        Set-Content -Path $file.FullName -Value $out -Encoding utf8
+        Set-GeneratedContent -Path $file.FullName -Value $out
     }
 }
 

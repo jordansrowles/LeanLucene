@@ -15,6 +15,7 @@
     }
   ],
   "build": {
+    "prettyUrls": true,
     "content": [
       {
         "files": [ "api/**.yml", "api/index.md" ]
@@ -32,9 +33,13 @@
         "files": [ "benchmarks/*.md", "benchmarks/toc.yml" ]
       }
     ],
-    "resource": [],
     "output": "site",
-    "template": [ "default", "modern" ],
+    "template": [ "default", "modern", "templates/leanlucene" ],
+    "resource": [
+      {
+        "files": [ "assets/**" ]
+      }
+    ],
     "globalMetadata": {
       "_appTitle": "LeanLucene",
       "_appName": "LeanLucene",
