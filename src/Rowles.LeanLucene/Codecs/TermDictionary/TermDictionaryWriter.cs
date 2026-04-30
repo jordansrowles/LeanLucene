@@ -13,6 +13,6 @@ internal static class TermDictionaryWriter
     {
         using var output = new IndexOutput(filePath, durable);
         CodecConstants.WriteHeader(output, CodecConstants.TermDictionaryVersion);
-        FSTBuilder.Write(output, sortedTerms, postingsOffsets);
+        TermDictionaryFstBuilder.Write(output, sortedTerms, postingsOffsets);
     }
 }

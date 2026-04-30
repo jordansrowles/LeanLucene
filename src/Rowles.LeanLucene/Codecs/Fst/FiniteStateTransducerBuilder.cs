@@ -1,4 +1,4 @@
-﻿namespace Rowles.LeanLucene.Codecs.FST;
+﻿namespace Rowles.LeanLucene.Codecs.Fst;
 
 /// <summary>
 /// Builds a minimal acyclic finite state transducer (FST) from sorted byte-sequence keys

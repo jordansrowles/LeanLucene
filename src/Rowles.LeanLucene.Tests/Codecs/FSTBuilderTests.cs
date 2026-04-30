@@ -1,7 +1,7 @@
 using System.Text;
-using Rowles.LeanLucene.Codecs.FST;
+using Rowles.LeanLucene.Codecs.Fst;
 
-namespace Rowles.LeanLucene.Tests.Codecs.FST;
+namespace Rowles.LeanLucene.Tests.Codecs.Fst;
 
 /// <summary>
 /// Tests for <see cref="FSTBuilder"/> — the minimal acyclic FST builder.

@@ -10,7 +10,7 @@ namespace Rowles.LeanLucene.Codecs.Fst;
 /// Terms are re-sorted in UTF-8 byte order to ensure binary search correctness
 /// (string ordinal sort can differ from UTF-8 byte sort for supplementary characters).
 /// </summary>
-internal static class FSTBuilder
+internal static class TermDictionaryFstBuilder
 {
     /// <summary>
     /// Writes sorted terms and their postings offsets in v2 format to the given <paramref name="output"/>.
