@@ -1,5 +1,7 @@
 # Rowles.LeanLucene
 
+![NuGet Version](https://img.shields.io/nuget/v/LeanLucene?style=flat-square)
+
 A .NET-native full-text search engine. Segment-centric indexing, memory-mapped reads, and atomic commit semantics. Targets `net10.0` and `net11.0`. The only external dependency for the core library is [NativeCompressions](https://www.nuget.org/packages/NativeCompressions) (LZ4 + Zstandard). Everything else uses BCL types.
 
 ## Projects
