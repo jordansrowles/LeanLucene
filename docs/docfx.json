@@ -10,7 +10,8 @@
       "dest": "api",
       "namespaceLayout": "nested",
       "memberLayout": "separatePages",
-      "allowCompilationErrors": false
+      "allowCompilationErrors": false,
+      "includePrivateMembers": true
     }
   ],
   "build": {

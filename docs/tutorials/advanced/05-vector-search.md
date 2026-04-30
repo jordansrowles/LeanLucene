@@ -41,6 +41,9 @@ vectors).
 ## Build settings
 
 ```csharp
+using Rowles.LeanLucene.Codecs.Hnsw;
+using Rowles.LeanLucene.Index.Indexer;
+
 var config = new IndexWriterConfig
 {
     NormaliseVectors = true,

@@ -1,7 +1,7 @@
-﻿namespace Rowles.LeanLucene.Codecs.Hnsw;
+namespace Rowles.LeanLucene.Codecs.Hnsw;
 
 /// <summary>
-/// Build-time configuration for an <see cref="HnswGraph"/>.
+/// Build-time configuration for HNSW vector graphs.
 /// </summary>
 public sealed class HnswBuildConfig
 {
