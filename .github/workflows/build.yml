@@ -45,14 +45,14 @@ jobs:
 
       - name: Upload test results
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: test-results
           path: src/Rowles.LeanLucene.Tests/TestResults/*.trx
           if-no-files-found: ignore
 
       - name: Upload docs artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: leanlucene-docs-site
           path: docs/site
