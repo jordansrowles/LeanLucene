@@ -37,7 +37,7 @@
     "template": [ "default", "modern", "templates/leanlucene" ],
     "resource": [
       {
-        "files": [ "assets/**" ]
+        "files": [ "assets/**", "_redirects" ]
       }
     ],
     "globalMetadata": {

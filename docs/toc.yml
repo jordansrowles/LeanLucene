@@ -7,7 +7,6 @@
   href: articles/
   homepage: articles/index.md
 - name: API
-  href: api/
-  homepage: api/index.md
+  href: api/index.html
 - name: Benchmarks
   href: benchmarks/
