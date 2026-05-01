@@ -134,31 +134,9 @@ internal sealed class FSTReader
         Span<byte> prefixUtf8 = prefixByteCount <= 256 ? stackalloc byte[prefixByteCount] : new byte[prefixByteCount];
         Encoding.UTF8.GetBytes(fieldPrefix, prefixUtf8);
 
-        // Extract the non-wildcard literal prefix for a tighter lower bound scan.
-        int literalEnd = 0;
-        while (literalEnd < pattern.Length && pattern[literalEnd] != '*' && pattern[literalEnd] != '?')
-            literalEnd++;
-
-        int scanPrefixLen;
-        int literalByteCount = 0;
-        byte[]? scanBuf = null;
-        if (literalEnd > 0)
-        {
-            var literalSpan = pattern[..literalEnd];
-            literalByteCount = Encoding.UTF8.GetByteCount(literalSpan);
-            scanPrefixLen = prefixByteCount + literalByteCount;
-            scanBuf = new byte[scanPrefixLen];
-            prefixUtf8.CopyTo(scanBuf);
-            Encoding.UTF8.GetBytes(literalSpan, scanBuf.AsSpan(prefixByteCount));
-        }
-        else
-        {
-            scanPrefixLen = prefixByteCount;
-        }
-
-        ReadOnlySpan<byte> scanPrefix = scanBuf is not null ? scanBuf.AsSpan(0, scanPrefixLen) : prefixUtf8;
-
+        var scanPrefix = BuildWildcardScanPrefix(prefixUtf8, pattern, out byte[]? scanBuffer);
         var results = new List<(string, long)>();
+        bool patternIsAscii = IsAscii(pattern);
         int start = LowerBound(scanPrefix);
 
         for (int i = start; i < _termCount; i++)
@@ -167,15 +145,63 @@ internal sealed class FSTReader
             if (!key.StartsWith(prefixUtf8))
                 break;
 
-            // Only decode terms whose bytes match the literal prefix
-            if (scanBuf is not null && !key.StartsWith(scanPrefix))
+            if (!key.StartsWith(scanPrefix))
                 break;
 
+            var bareTerm = key[prefixByteCount..];
+            if (patternIsAscii && IsAscii(bareTerm))
+            {
+                if (!MatchesAsciiWildcard(bareTerm, pattern))
+                    continue;
+
+                results.Add((DecodeKey(i), _offsets[i]));
+                continue;
+            }
+
             var fullTerm = DecodeKey(i);
-            var bareTerm = fullTerm.AsSpan(fieldPrefix.Length);
-            if (WildcardQuery.Matches(bareTerm, pattern))
+            if (WildcardQuery.Matches(fullTerm.AsSpan(fieldPrefix.Length), pattern))
                 results.Add((fullTerm, _offsets[i]));
         }
+
+        _ = scanBuffer;
+        return results;
+    }
+
+    /// <summary>Returns postings offsets for wildcard matches without materialising term strings.</summary>
+    internal List<long> GetTermOffsetsMatching(string fieldPrefix, ReadOnlySpan<char> pattern)
+    {
+        int prefixByteCount = Encoding.UTF8.GetByteCount(fieldPrefix);
+        Span<byte> prefixUtf8 = prefixByteCount <= 256 ? stackalloc byte[prefixByteCount] : new byte[prefixByteCount];
+        Encoding.UTF8.GetBytes(fieldPrefix, prefixUtf8);
+
+        var scanPrefix = BuildWildcardScanPrefix(prefixUtf8, pattern, out byte[]? scanBuffer);
+        var results = new List<long>();
+        bool patternIsAscii = IsAscii(pattern);
+        int start = LowerBound(scanPrefix);
+
+        for (int i = start; i < _termCount; i++)
+        {
+            var key = GetKeySpan(i);
+            if (!key.StartsWith(prefixUtf8))
+                break;
+
+            if (!key.StartsWith(scanPrefix))
+                break;
+
+            var bareTerm = key[prefixByteCount..];
+            if (patternIsAscii && IsAscii(bareTerm))
+            {
+                if (MatchesAsciiWildcard(bareTerm, pattern))
+                    results.Add(_offsets[i]);
+                continue;
+            }
+
+            var fullTerm = DecodeKey(i);
+            if (WildcardQuery.Matches(fullTerm.AsSpan(fieldPrefix.Length), pattern))
+                results.Add(_offsets[i]);
+        }
+
+        _ = scanBuffer;
         return results;
     }
 
@@ -649,6 +675,109 @@ internal sealed class FSTReader
             hash *= 16777619;
         }
         return (int)(hash & 0x7FFFFFFF);
+    }
+
+    private static ReadOnlySpan<byte> BuildWildcardScanPrefix(
+        ReadOnlySpan<byte> fieldPrefixUtf8,
+        ReadOnlySpan<char> pattern,
+        out byte[]? scanBuffer)
+    {
+        scanBuffer = null;
+
+        int literalEnd = 0;
+        while (literalEnd < pattern.Length && pattern[literalEnd] != '*' && pattern[literalEnd] != '?')
+            literalEnd++;
+
+        if (literalEnd == 0)
+            return fieldPrefixUtf8;
+
+        var literalPrefix = pattern[..literalEnd];
+        int literalByteCount = Encoding.UTF8.GetByteCount(literalPrefix);
+        scanBuffer = new byte[fieldPrefixUtf8.Length + literalByteCount];
+        fieldPrefixUtf8.CopyTo(scanBuffer);
+        Encoding.UTF8.GetBytes(literalPrefix, scanBuffer.AsSpan(fieldPrefixUtf8.Length));
+        return scanBuffer;
+    }
+
+    private static bool MatchesAsciiWildcard(ReadOnlySpan<byte> term, ReadOnlySpan<char> pattern)
+    {
+        if (!MatchesAsciiTrailingLiteral(term, pattern))
+            return false;
+
+        int t = 0, p = 0;
+        int starT = -1, starP = -1;
+
+        while (t < term.Length)
+        {
+            if (p < pattern.Length && (pattern[p] == '?' || (byte)pattern[p] == term[t]))
+            {
+                t++;
+                p++;
+            }
+            else if (p < pattern.Length && pattern[p] == '*')
+            {
+                starP = p++;
+                starT = t;
+            }
+            else if (starP >= 0)
+            {
+                p = starP + 1;
+                t = ++starT;
+            }
+            else
+            {
+                return false;
+            }
+        }
+
+        while (p < pattern.Length && pattern[p] == '*')
+            p++;
+
+        return p == pattern.Length;
+    }
+
+    private static bool MatchesAsciiTrailingLiteral(ReadOnlySpan<byte> term, ReadOnlySpan<char> pattern)
+    {
+        int suffixStart = pattern.Length;
+        while (suffixStart > 0 && pattern[suffixStart - 1] != '*' && pattern[suffixStart - 1] != '?')
+            suffixStart--;
+
+        int suffixLength = pattern.Length - suffixStart;
+        if (suffixLength == 0)
+            return true;
+        if (term.Length < suffixLength)
+            return false;
+
+        int termStart = term.Length - suffixLength;
+        for (int i = 0; i < suffixLength; i++)
+        {
+            if (term[termStart + i] != (byte)pattern[suffixStart + i])
+                return false;
+        }
+
+        return true;
+    }
+
+    private static bool IsAscii(ReadOnlySpan<char> value)
+    {
+        foreach (char c in value)
+        {
+            if (c > 0x7F)
+                return false;
+        }
+
+        return true;
+    }
+
+    private static bool IsAscii(ReadOnlySpan<byte> value)
+    {
+        foreach (byte b in value)
+        {
+            if (b > 0x7F)
+                return false;
+        }
+
+        return true;
     }
 
     /// <summary>Returns the raw UTF-8 byte span for term at ordinal index.</summary>

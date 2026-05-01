@@ -173,6 +173,59 @@ public sealed class FSTDictionaryTests : IClassFixture<TestDirectoryFixture>
         Assert.Equal(3, matches.Count);
     }
 
+    [Fact]
+    public void WildcardScan_MidPatternShortPrefix_ReturnsExpectedMatches()
+    {
+        var path = DicPath("wildcard_mid_short_prefix");
+        var terms = new List<string>
+        {
+            "body\0market",
+            "body\0markets",
+            "body\0markup",
+            "body\0muppet",
+            "body\0preexisting",
+            "body\0president"
+        };
+        terms.Sort(StringComparer.Ordinal);
+        var offsets = new Dictionary<string, long>();
+        for (int i = 0; i < terms.Count; i++) offsets[terms[i]] = i;
+
+        WriteDictionary(path, terms, offsets);
+        using var reader = TermDictionaryReader.Open(path);
+
+        var matches = reader.GetTermsMatching("body\0", "m*rket".AsSpan());
+        var offsetsOnly = reader.GetTermOffsetsMatching("body\0", "m*rket".AsSpan());
+
+        var match = Assert.Single(matches);
+        Assert.Equal("body\0market", match.Term);
+        Assert.Equal([offsets["body\0market"]], offsetsOnly);
+    }
+
+    [Fact]
+    public void WildcardScan_TrailingWildcard_EqualsPrefixScan()
+    {
+        var path = DicPath("wildcard_prefix_equivalent");
+        var terms = new List<string>
+        {
+            "body\0government",
+            "body\0governor",
+            "body\0govt",
+            "body\0growth",
+            "title\0government"
+        };
+        terms.Sort(StringComparer.Ordinal);
+        var offsets = new Dictionary<string, long>();
+        for (int i = 0; i < terms.Count; i++) offsets[terms[i]] = i;
+
+        WriteDictionary(path, terms, offsets);
+        using var reader = TermDictionaryReader.Open(path);
+
+        var wildcardMatches = reader.GetTermsMatching("body\0", "gov*".AsSpan()).Select(x => x.Term).ToArray();
+        var prefixMatches = reader.GetTermsWithPrefix("body\0gov".AsSpan()).Select(x => x.Term).ToArray();
+
+        Assert.Equal(prefixMatches, wildcardMatches);
+    }
+
     // ── Fuzzy matching ──────────────────────────────────────────────────────
 
     [Fact]

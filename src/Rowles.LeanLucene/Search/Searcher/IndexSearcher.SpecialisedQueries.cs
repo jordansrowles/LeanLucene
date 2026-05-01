@@ -74,24 +74,60 @@ public sealed partial class IndexSearcher
     private void ExecuteWildcardQuery(WildcardQuery query, SegmentReader reader,
         Dictionary<(string Field, string Term), int> globalDFs, ref TopNCollector collector)
     {
-        var fieldPrefix = $"{query.Field}\x00";
-        var matchingTerms = reader.GetTermsMatching(fieldPrefix, query.Pattern.AsSpan());
-        if (matchingTerms.Count == 0) return;
+        if (TryGetSimpleTrailingWildcardPrefix(query.Pattern, out var prefix))
+        {
+            var prefixQuery = new PrefixQuery(query.Field, prefix) { Boost = query.Boost };
+            ExecutePrefixQuery(prefixQuery, reader, globalDFs, ref collector);
+            return;
+        }
 
+        var fieldPrefix = $"{query.Field}\x00";
         float boost = query.Boost;
         float avgDocLength = _stats.GetAvgFieldLength(query.Field);
         int docBase = reader.DocBase;
+        reader.TryGetFieldLengths(query.Field, out var fieldLengths);
+
+        if (globalDFs.Count == 0)
+        {
+            var matchingOffsets = reader.GetTermOffsetsMatching(fieldPrefix, query.Pattern.AsSpan());
+            if (matchingOffsets.Count == 0) return;
+
+            foreach (var postingsOffset in matchingOffsets)
+            {
+                using var postings = reader.GetPostingsEnumAtOffset(postingsOffset);
+                if (postings.IsExhausted) continue;
+
+                var (f1, f2) = _similarity.PrecomputeFactors(_totalDocCount, postings.DocFreq, avgDocLength);
+
+                while (postings.MoveNext())
+                {
+                    int docId = postings.DocId;
+                    if (!reader.IsLive(docId)) continue;
+
+                    int tf = postings.Freq;
+                    int docLength = fieldLengths is not null && (uint)docId < (uint)fieldLengths.Length
+                        ? fieldLengths[docId] : 1;
+                    float score = _similarity.ScorePrecomputed(f1, f2, tf, docLength);
+                    if (boost != 1.0f) score *= boost;
+                    collector.Collect(docBase + docId, score);
+                }
+            }
+
+            return;
+        }
+
+        var matchingTerms = reader.GetTermsMatching(fieldPrefix, query.Pattern.AsSpan());
+        if (matchingTerms.Count == 0) return;
 
         foreach (var (qualifiedTerm, postingsOffset) in matchingTerms)
         {
             using var postings = reader.GetPostingsEnumAtOffset(postingsOffset);
             if (postings.IsExhausted) continue;
 
+            int docFreq = postings.DocFreq;
             var termPart = qualifiedTerm.AsSpan(query.Field.Length + 1).ToString();
-            int docFreq = globalDFs.GetValueOrDefault((query.Field, termPart), postings.DocFreq);
+            docFreq = globalDFs.GetValueOrDefault((query.Field, termPart), docFreq);
             var (f1, f2) = _similarity.PrecomputeFactors(_totalDocCount, docFreq, avgDocLength);
-
-            reader.TryGetFieldLengths(query.Field, out var fieldLengths);
 
             while (postings.MoveNext())
             {
@@ -106,6 +142,22 @@ public sealed partial class IndexSearcher
                 collector.Collect(docBase + docId, score);
             }
         }
+    }
+
+    private static bool TryGetSimpleTrailingWildcardPrefix(string pattern, out string prefix)
+    {
+        prefix = string.Empty;
+        if (pattern.Length == 0 || pattern[^1] != '*')
+            return false;
+
+        for (int i = 0; i < pattern.Length - 1; i++)
+        {
+            if (pattern[i] is '*' or '?')
+                return false;
+        }
+
+        prefix = pattern[..^1];
+        return true;
     }
 
     private void ExecuteFuzzyQuery(FuzzyQuery query, SegmentReader reader,

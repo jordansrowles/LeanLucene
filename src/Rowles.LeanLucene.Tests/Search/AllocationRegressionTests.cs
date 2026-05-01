@@ -250,6 +250,58 @@ public sealed class AllocationRegressionTests : IClassFixture<TestDirectoryFixtu
     }
 
     [Fact]
+    public void WildcardQuery_MidPatternShortPrefix_LowAllocationPerQuery()
+    {
+        const int nonMatchingTerms = 2_000;
+        const int warmup = 100;
+        const int measured = 50;
+        var dir = new MMapDirectory(SubDir("alloc_wildcard_mid_prefix"));
+
+        using (var writer = new IndexWriter(dir, new IndexWriterConfig { MaxBufferedDocs = 512 }))
+        {
+            for (int i = 0; i < nonMatchingTerms; i++)
+            {
+                var doc = new LeanDocument();
+                doc.Add(new TextField("body", $"mismatch{i:D5}"));
+                writer.AddDocument(doc);
+            }
+
+            for (int i = 0; i < 20; i++)
+            {
+                var doc = new LeanDocument();
+                doc.Add(new TextField("body", "market"));
+                writer.AddDocument(doc);
+            }
+
+            writer.Commit();
+        }
+
+        using var searcher = new IndexSearcher(dir);
+        var query = new WildcardQuery("body", "m*rket");
+
+        for (int i = 0; i < warmup; i++)
+            searcher.Search(query, 25);
+
+        long allocBefore = GC.GetAllocatedBytesForCurrentThread();
+        var sw = Stopwatch.StartNew();
+        for (int i = 0; i < measured; i++)
+            searcher.Search(query, 25);
+        sw.Stop();
+        long allocAfter = GC.GetAllocatedBytesForCurrentThread();
+
+        double avgBytes = (double)(allocAfter - allocBefore) / measured;
+        double avgUs = sw.Elapsed.TotalMicroseconds / measured;
+
+        _output.WriteLine($"WildcardQuery(\"m*rket\") over {nonMatchingTerms + 20} docs:");
+        _output.WriteLine($"  Avg allocation: {avgBytes:F0} bytes/query");
+        _output.WriteLine($"  Avg latency:    {avgUs:F1} µs/query");
+        _output.WriteLine($"  Total hits:     {searcher.Search(query, 25).TotalHits}");
+
+        Assert.True(avgBytes <= 102400,
+            $"WildcardQuery allocated {avgBytes:F0} bytes/query, budget is 102400 bytes");
+    }
+
+    [Fact]
     public void FuzzyQuery_LowAllocationPerQuery()
     {
         // Arrange: build a 500-doc index with diverse terms

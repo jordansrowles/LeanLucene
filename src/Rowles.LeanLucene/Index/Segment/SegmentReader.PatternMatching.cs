@@ -26,6 +26,12 @@ public sealed partial class SegmentReader
         return _dicReader.GetTermsMatching(fieldPrefix, pattern);
     }
 
+    /// <summary>Returns postings offsets for terms matching a wildcard pattern.</summary>
+    internal List<long> GetTermOffsetsMatching(string fieldPrefix, ReadOnlySpan<char> pattern)
+    {
+        return _dicReader.GetTermOffsetsMatching(fieldPrefix, pattern);
+    }
+
     /// <summary>Returns all terms for a given field.</summary>
     public List<(string Term, long Offset)> GetAllTermsForField(string fieldPrefix)
     {

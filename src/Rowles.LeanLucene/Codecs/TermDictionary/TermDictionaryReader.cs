@@ -162,6 +162,13 @@ internal sealed class TermDictionaryReader : IDisposable
         return GetTermsMatchingV1(fieldPrefix, pattern);
     }
 
+    internal List<long> GetTermOffsetsMatching(string fieldPrefix, ReadOnlySpan<char> pattern)
+    {
+        if (_fstReader is not null)
+            return _fstReader.GetTermOffsetsMatching(fieldPrefix, pattern);
+        return GetTermOffsetsMatchingV1(fieldPrefix, pattern);
+    }
+
     private List<(string Term, long Offset)> GetTermsMatchingV1(string fieldPrefix, ReadOnlySpan<char> pattern)
     {
         var results = new List<(string, long)>();
@@ -174,6 +181,22 @@ internal sealed class TermDictionaryReader : IDisposable
             var bareTerm = term.AsSpan(fieldPrefix.Length);
             if (WildcardQuery.Matches(bareTerm, pattern))
                 results.Add((term, _allOffsets![i]));
+        }
+        return results;
+    }
+
+    private List<long> GetTermOffsetsMatchingV1(string fieldPrefix, ReadOnlySpan<char> pattern)
+    {
+        var results = new List<long>();
+        int start = LowerBoundV1(fieldPrefix.AsSpan());
+        for (int i = start; i < _allTerms!.Length; i++)
+        {
+            var term = _allTerms[i];
+            if (!term.StartsWith(fieldPrefix, StringComparison.Ordinal))
+                break;
+            var bareTerm = term.AsSpan(fieldPrefix.Length);
+            if (WildcardQuery.Matches(bareTerm, pattern))
+                results.Add(_allOffsets![i]);
         }
         return results;
     }

@@ -258,7 +258,10 @@ public sealed partial class IndexSearcher : IDisposable
         if (query is TermQuery tq)
             return SearchTermQuery(tq, topN);
 
-        var globalDFs = PrecomputeGlobalDocFreqs(query);
+        bool skipGlobalDFs = query is PrefixQuery or WildcardQuery or FuzzyQuery;
+        var globalDFs = skipGlobalDFs
+            ? EmptyGlobalDFs
+            : PrecomputeGlobalDocFreqs(query);
         var collector = new TopNCollector(topN);
 
         foreach (var reader in _readers)

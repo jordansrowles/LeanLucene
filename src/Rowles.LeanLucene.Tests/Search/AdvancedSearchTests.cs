@@ -456,6 +456,8 @@ public sealed class AdvancedSearchTests : IClassFixture<TestDirectoryFixture>
     [InlineData("test", "t*t", true)]
     [InlineData("test", "x*", false)]
     [InlineData("test", "te?", false)]
+    [InlineData("café", "caf?", true)]
+    [InlineData("café", "ca?", false)]
     [InlineData("", "*", true)]
     [InlineData("", "?", false)]
     public void WildcardQuery_Matches_CorrectResults(string text, string pattern, bool expected)
