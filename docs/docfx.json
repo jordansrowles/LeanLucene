@@ -15,7 +15,6 @@
     }
   ],
   "build": {
-    "prettyUrls": true,
     "content": [
       {
         "files": [ "api/**.yml", "api/index.md" ]
@@ -37,7 +36,7 @@
     "template": [ "default", "modern", "templates/leanlucene" ],
     "resource": [
       {
-        "files": [ "assets/**", "_redirects" ]
+        "files": [ "assets/**" ]
       }
     ],
     "globalMetadata": {
