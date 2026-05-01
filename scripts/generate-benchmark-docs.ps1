@@ -62,7 +62,7 @@ $suiteNames = @{
 # Extracts just the GFM table rows from a BDN markdown file, skipping the
 # environment code block that BDN prepends.
 function Get-TableContent([string]$path) {
-    $lines = Get-Content $path
+    $lines = Get-Content $path -Encoding UTF8
     for ($i = 0; $i -lt $lines.Count; $i++) {
         if ($lines[$i] -match '^\|') {
             return ($lines[$i..($lines.Count - 1)] -join "`n").TrimEnd()
