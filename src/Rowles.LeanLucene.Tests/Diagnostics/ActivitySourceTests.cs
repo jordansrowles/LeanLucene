@@ -132,7 +132,10 @@ public sealed class ActivitySourceTests : IDisposable
     [Fact]
     public void NoListener_ProducesNoActivities()
     {
+        // Dispose our listener and drain anything already captured from other test classes
+        // running in parallel (the listener listens globally on the production source).
         _listener.Dispose();
+        while (_captured.TryTake(out _)) { }
 
         var noListenPath = Path.Combine(Path.GetTempPath(), "act_nolisten_" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(noListenPath);
@@ -146,8 +149,9 @@ public sealed class ActivitySourceTests : IDisposable
 
         try { Directory.Delete(noListenPath, true); } catch { }
 
-        // Activities produced before Dispose of the listener were already captured;
-        // the write above happened after Dispose so should add nothing new.
+        // Our listener is disposed, so writes above should not flow into _captured.
+        // Activities from other parallel tests can still produce items via *their* listeners
+        // but never via ours, so _captured remains empty.
         Assert.DoesNotContain(_captured, a => a.OperationName == "leanlucene.index.flush");
     }
 

@@ -73,7 +73,7 @@ public sealed class SearcherManagerTests : IDisposable
         writer.AddDocument(Doc("first"));
         writer.Commit();
 
-        using var mgr = new SearcherManager(dir);
+        using var mgr = new SearcherManager(dir, new SearcherManagerConfig { RefreshInterval = TimeSpan.FromMinutes(5) });
         var before = mgr.UsingSearcher(s => s.Stats.TotalDocCount);
 
         writer.AddDocument(Doc("second"));
