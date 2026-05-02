@@ -428,11 +428,11 @@ public sealed partial class IndexWriter : IDisposable
                 if (string.Equals(name, "write.lock", StringComparison.Ordinal)) continue;
                 if (name.EndsWith(".tmp", StringComparison.Ordinal)) continue;
                 if (fsyncCutoff != DateTime.MinValue && File.GetLastWriteTimeUtc(path) <= fsyncCutoff) continue;
-                Store.DirectoryFsync.SyncFile(path);
+                Store.DirectoryFsync.SyncFile(path, strict: true);
             }
 
             // Sync the directory itself so any prior file creations are durable before the rename.
-            Store.DirectoryFsync.Sync(_directory.DirectoryPath);
+            Store.DirectoryFsync.Sync(_directory.DirectoryPath, strict: true);
 
             // Write segments_N.tmp durably so its contents survive a crash before the rename.
             using (var fs = new FileStream(tempFile, FileMode.Create, FileAccess.Write, FileShare.None))
@@ -445,7 +445,7 @@ public sealed partial class IndexWriter : IDisposable
             File.Move(tempFile, commitFile, overwrite: true);
 
             // Sync the directory again so the rename itself is durable.
-            Store.DirectoryFsync.Sync(_directory.DirectoryPath);
+            Store.DirectoryFsync.Sync(_directory.DirectoryPath, strict: true);
             _lastCommitFsyncUtc = DateTime.UtcNow;
         }
         else
