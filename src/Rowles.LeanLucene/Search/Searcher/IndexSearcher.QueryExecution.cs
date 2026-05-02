@@ -637,6 +637,24 @@ public sealed partial class IndexSearcher
                         results.Add(new ScoreDoc(r.DocId, rqScore));
                     break;
                 }
+            case PrefixQuery pfq:
+                {
+                    var subCollector = new TopNCollector(reader.MaxDoc);
+                    ExecutePrefixQuery(pfq, reader, globalDFs, ref subCollector);
+                    var subDocs = subCollector.ToTopDocs();
+                    foreach (var sd in subDocs.ScoreDocs)
+                        results.Add(new ScoreDoc(sd.DocId - reader.DocBase, sd.Score));
+                    break;
+                }
+            case WildcardQuery wq:
+                {
+                    var subCollector = new TopNCollector(reader.MaxDoc);
+                    ExecuteWildcardQuery(wq, reader, globalDFs, ref subCollector);
+                    var subDocs = subCollector.ToTopDocs();
+                    foreach (var sd in subDocs.ScoreDocs)
+                        results.Add(new ScoreDoc(sd.DocId - reader.DocBase, sd.Score));
+                    break;
+                }
             case TermRangeQuery trq:
                 {
                     var subCollector = new TopNCollector(reader.MaxDoc);

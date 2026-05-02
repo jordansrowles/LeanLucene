@@ -95,6 +95,33 @@ public sealed class SearchTests : IClassFixture<TestDirectoryFixture>
         Assert.Equal(2, results.TotalHits);
     }
 
+    [Theory]
+    [InlineData("prefix", "wor")]
+    [InlineData("wildcard", "wor*")]
+    [InlineData("wildcard", "*or*")]
+    public void BooleanQuery_MustPatternClause_MatchesAnalysedTerm(string queryType, string pattern)
+    {
+        var pathPattern = pattern.Replace("*", "star", StringComparison.Ordinal);
+        var dir = new MMapDirectory(SubDir($"bool_must_{queryType}_{pathPattern}"));
+        using var writer = new IndexWriter(dir, new IndexWriterConfig());
+
+        var doc = new LeanDocument();
+        doc.Add(new TextField("title", "hello world"));
+        doc.Add(new StringField("id", "1"));
+        writer.AddDocument(doc);
+        writer.Commit();
+
+        using var searcher = new IndexSearcher(dir);
+        Query clause = queryType == "prefix"
+            ? new PrefixQuery("title", pattern)
+            : new WildcardQuery("title", pattern);
+        var query = new BooleanQuery();
+        query.Add(clause, Occur.Must);
+        var results = searcher.Search(query, 10);
+
+        Assert.Equal(1, results.TotalHits);
+    }
+
     [Fact]
     public void BooleanQuery_ShouldOr_ReturnsUnion()
     {
