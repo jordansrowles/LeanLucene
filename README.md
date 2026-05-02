@@ -32,6 +32,7 @@ using var writer = new IndexWriter(dir, config);
 var doc = new LeanDocument();
 doc.Add(new TextField("title", "hello world", stored: true));
 doc.Add(new StringField("id", "1", stored: true));
+doc.Add(new StoredField("source", "readme"));
 writer.AddDocument(doc);
 writer.Commit();
 

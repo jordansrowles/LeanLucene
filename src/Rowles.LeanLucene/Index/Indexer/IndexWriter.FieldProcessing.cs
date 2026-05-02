@@ -52,6 +52,9 @@ public sealed partial class IndexWriter
                     if (gf.IsStored)
                         AppendStoredField(gf.Name, gf.Value);
                     break;
+                case StoredField sf:
+                    AppendStoredField(sf.Name, sf.Value);
+                    break;
             }
         }
 

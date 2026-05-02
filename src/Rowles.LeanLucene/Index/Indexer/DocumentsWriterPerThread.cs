@@ -86,6 +86,15 @@ internal sealed class DocumentsWriterPerThread
                         _estimatedRamBytes += 48;
                     }
                     break;
+                case StoredField sf:
+                    if (!storedDoc.TryGetValue(sf.Name, out var storedList))
+                    {
+                        storedList = new List<string>();
+                        storedDoc[sf.Name] = storedList;
+                    }
+                    storedList.Add(sf.Value);
+                    _estimatedRamBytes += sf.Value.Length * 2 + 64;
+                    break;
             }
         }
 

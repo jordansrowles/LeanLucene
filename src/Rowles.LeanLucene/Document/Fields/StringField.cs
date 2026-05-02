@@ -9,9 +9,21 @@ public sealed class StringField : IField
     /// <param name="name">The field name. Must not be null.</param>
     /// <param name="value">The exact string value to index and store. Must not be null.</param>
     public StringField(string name, string value)
+        : this(name, value, stored: true)
+    {
+    }
+
+    /// <summary>
+    /// Initialises a new <see cref="StringField"/> with the specified name, value, and stored-field behaviour.
+    /// </summary>
+    /// <param name="name">The field name. Must not be null.</param>
+    /// <param name="value">The exact string value to index. Must not be null.</param>
+    /// <param name="stored">Whether the exact string value should be persisted in stored fields.</param>
+    public StringField(string name, string value, bool stored)
     {
         Name = name ?? throw new ArgumentNullException(nameof(name));
         Value = value ?? throw new ArgumentNullException(nameof(value));
+        IsStored = stored;
     }
 
     /// <inheritdoc/>
@@ -24,7 +36,7 @@ public sealed class StringField : IField
     public FieldType FieldType => FieldType.String;
 
     /// <inheritdoc/>
-    public bool IsStored => true;
+    public bool IsStored { get; }
 
     /// <inheritdoc/>
     public bool IsIndexed => true;

@@ -123,6 +123,49 @@ public sealed class SearchTests : IClassFixture<TestDirectoryFixture>
     }
 
     [Fact]
+    public void StoredParameter_False_IndexesWithoutStoringFieldValues()
+    {
+        var dir = new MMapDirectory(SubDir("stored_false"));
+        using var writer = new IndexWriter(dir, new IndexWriterConfig());
+
+        var doc = new LeanDocument();
+        doc.Add(new TextField("title", "hello world", stored: false));
+        doc.Add(new StringField("id", "1", stored: false));
+        writer.AddDocument(doc);
+        writer.Commit();
+
+        using var searcher = new IndexSearcher(dir);
+        var results = searcher.Search(new TermQuery("title", "world"), 10);
+        var stored = searcher.GetStoredFields(results.ScoreDocs[0].DocId);
+
+        Assert.Equal(1, results.TotalHits);
+        Assert.False(stored.ContainsKey("title"));
+        Assert.False(stored.ContainsKey("id"));
+    }
+
+    [Fact]
+    public void StoredField_StoresValueWithoutIndexing()
+    {
+        var dir = new MMapDirectory(SubDir("stored_only"));
+        using var writer = new IndexWriter(dir, new IndexWriterConfig());
+
+        var doc = new LeanDocument();
+        doc.Add(new TextField("body", "findable text", stored: false));
+        doc.Add(new StoredField("title", "hello world"));
+        writer.AddDocument(doc);
+        writer.Commit();
+
+        using var searcher = new IndexSearcher(dir);
+        var results = searcher.Search(new TermQuery("body", "findable"), 10);
+        var stored = searcher.GetStoredFields(results.ScoreDocs[0].DocId);
+        var storedOnlyResults = searcher.Search(new TermQuery("title", "hello world"), 10);
+
+        Assert.Equal(1, results.TotalHits);
+        Assert.Equal("hello world", stored["title"][0]);
+        Assert.Equal(0, storedOnlyResults.TotalHits);
+    }
+
+    [Fact]
     public void BooleanQuery_ShouldOr_ReturnsUnion()
     {
         var dir = new MMapDirectory(SubDir("bool_should"));

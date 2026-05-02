@@ -13,5 +13,8 @@ public enum FieldType
     Numeric,
 
     /// <summary>Dense float vector for semantic search.</summary>
-    Vector
+    Vector,
+
+    /// <summary>Stored-only value, not included in the inverted index.</summary>
+    Stored
 }
