@@ -268,7 +268,7 @@ internal static class StreamingPostingsMerger
                 {
                     _pos.Seek(skipOffset);
                     int skipCount = _pos.ReadInt32();
-                    _pos.Seek(_pos.Position + (long)skipCount * 12);
+                    _pos.Seek(_pos.Position + (long)skipCount * 15);
 
                     var posArr = new int[count][];
                     for (int j = 0; j < count; j++)
