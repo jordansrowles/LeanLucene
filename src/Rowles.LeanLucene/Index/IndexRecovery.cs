@@ -41,7 +41,10 @@ public static class IndexRecovery
             }
         }
 
-        return null;
+        // Commit files exist but none validated. The index is corrupt: refuse to open
+        // silently as an empty index, which would mask data loss.
+        throw new InvalidDataException(
+            $"Index at '{directoryPath}' is corrupt: {commitFiles.Count} commit file(s) found but none reference a valid set of segment files.");
     }
 
     /// <summary>
