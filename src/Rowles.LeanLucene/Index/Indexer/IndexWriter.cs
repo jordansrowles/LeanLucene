@@ -71,6 +71,11 @@ public sealed partial class IndexWriter : IDisposable
     private Task? _mergeTask;
     private readonly CancellationTokenSource _mergeCts = new();
     private readonly Lock _mergeLock = new();
+    // Serialises merge IO against operations that mutate per-segment files (ApplyPendingDeletions).
+    // Lock ordering invariant: _mergeIoLock is acquired BEFORE _writeLock.
+    // This lets long-running merge IO release _writeLock so AddDocument can proceed,
+    // while still preventing concurrent .del file mutation by Commit.
+    private readonly Lock _mergeIoLock = new();
 
     /// <summary>
     /// Initialises a new <see cref="IndexWriter"/> for the given directory with the specified configuration.
@@ -333,6 +338,10 @@ public sealed partial class IndexWriter : IDisposable
     public void Commit()
     {
         ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
+        // Lock ordering: _mergeIoLock first (so a running merge can finish before we
+        // mutate .del files), then _writeLock. AddDocument holds only _writeLock and
+        // continues to run while a merge IO phase is in progress.
+        lock (_mergeIoLock)
         lock (_writeLock)
         {
             using var activity = Diagnostics.LeanLuceneActivitySource.Source
