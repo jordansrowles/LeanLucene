@@ -139,7 +139,9 @@ public sealed partial class IndexWriter
                     DocCount = s.DocCount,
                     LiveDocCount = s.LiveDocCount,
                     CommitGeneration = s.CommitGeneration,
-                    FieldNames = [.. s.FieldNames]
+                    FieldNames = [.. s.FieldNames],
+                    IndexSortFields = s.IndexSortFields is null ? null : [.. s.IndexSortFields],
+                    VectorFields = [.. s.VectorFields]
                 }).ToList().AsReadOnly());
 
             _heldSnapshots.Add(snapshot);
