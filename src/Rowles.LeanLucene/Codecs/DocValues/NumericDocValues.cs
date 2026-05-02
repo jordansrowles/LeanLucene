@@ -38,7 +38,10 @@ internal static class NumericDocValuesWriter
             }
 
             output.WriteInt64(min);
-            ulong range = (ulong)(max - min);
+            // Subtract in ulong space so mixed-sign bit patterns (e.g. negative and
+            // positive doubles in the same column) do not overflow the long subtraction.
+            // Two's-complement reinterpretation gives the correct unsigned distance.
+            ulong range = (ulong)max - (ulong)min;
             int bitsPerValue = range == 0 ? 0 : 64 - System.Numerics.BitOperations.LeadingZeroCount(range);
             output.WriteByte((byte)bitsPerValue);
 
@@ -49,7 +52,7 @@ internal static class NumericDocValuesWriter
             int accBits = 0;
             for (int i = 0; i < docCount; i++)
             {
-                ulong delta = (ulong)(BitConverter.DoubleToInt64Bits(values[i]) - min);
+                ulong delta = (ulong)BitConverter.DoubleToInt64Bits(values[i]) - (ulong)min;
                 int remaining = bitsPerValue;
                 while (remaining > 0)
                 {

@@ -58,7 +58,7 @@ internal static class NumericDocValuesReader
                         accBits -= take;
                         collected += take;
                     }
-                    values[i] = BitConverter.Int64BitsToDouble(min + (long)val);
+                    values[i] = BitConverter.Int64BitsToDouble((long)((ulong)min + val));
                 }
             }
 

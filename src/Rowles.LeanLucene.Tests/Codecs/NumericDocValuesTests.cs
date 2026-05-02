@@ -72,4 +72,32 @@ public sealed class NumericDocValuesTests : IDisposable
         var result = NumericDocValuesReader.Read(Path.Combine(_dir, "nonexistent.dvn"));
         Assert.Empty(result);
     }
+
+    [Fact]
+    public void Roundtrip_MixedSignBitPatterns_PreservesValues()
+    {
+        // Negative and positive doubles produce bit patterns whose long subtraction
+        // overflows. The writer must subtract in ulong space.
+        var path = Path.Combine(_dir, "mixed-sign.dvn");
+        var values = new[] { -1.0, 1.0, -0.5, 0.5, double.MinValue, double.MaxValue, 0.0 };
+        var fields = new Dictionary<string, double[]> { ["v"] = values };
+
+        NumericDocValuesWriter.Write(path, fields, values.Length);
+        var result = NumericDocValuesReader.Read(path);
+
+        Assert.Equal(values, result["v"]);
+    }
+
+    [Fact]
+    public void Roundtrip_NegativeOnly_PreservesValues()
+    {
+        var path = Path.Combine(_dir, "neg.dvn");
+        var values = new[] { -100.0, -50.5, -1e9, -1e-9 };
+        var fields = new Dictionary<string, double[]> { ["v"] = values };
+
+        NumericDocValuesWriter.Write(path, fields, values.Length);
+        var result = NumericDocValuesReader.Read(path);
+
+        Assert.Equal(values, result["v"]);
+    }
 }
