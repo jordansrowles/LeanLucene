@@ -35,6 +35,8 @@ public sealed partial class SegmentReader : IDisposable
     private Dictionary<string, double[]>? _numericDocValues;
     private Dictionary<string, string[]>? _sortedDocValues;
     private TermVectorsReader? _termVectorsReader;
+    private Codecs.Bkd.BKDReader? _bkdReader;
+    private bool _bkdReaderLoaded;
     private object? _lazyInitLock;
     private readonly string _basePath;
     private ParentBitSet? _parentBitSet;
@@ -329,6 +331,7 @@ public sealed partial class SegmentReader : IDisposable
         _vectorReaders.Clear();
         _vectorPaths.Clear();
         _termVectorsReader?.Dispose();
+        _bkdReader?.Dispose();
     }
 
     private sealed class TermOffsetCache

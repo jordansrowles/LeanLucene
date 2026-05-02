@@ -84,6 +84,25 @@ public sealed partial class SegmentReader
     public List<(int DocId, double Value)> GetNumericRange(string field, double min, double max)
     {
         var results = new List<(int, double)>();
+
+        // Fast path: use the BKD tree if one is available for this segment.
+        var bkd = EnsureBkdReader();
+        if (bkd is not null && bkd.HasField(field))
+        {
+            var raw = bkd.RangeQuery(field, min, max);
+            if (_liveDocs is null)
+                return raw;
+            results.Capacity = raw.Count;
+            foreach (var hit in raw)
+            {
+                if (IsLive(hit.DocId))
+                    results.Add(hit);
+            }
+            return results;
+        }
+
+        // Fallback: linear scan of the sparse numeric index. Used for legacy segments
+        // written before BKD was wired or when the .bkd file is missing for this field.
         var numericIndex = EnsureNumericIndex();
         if (!numericIndex.TryGetValue(field, out var fieldMap))
             return results;
@@ -94,6 +113,37 @@ public sealed partial class SegmentReader
                 results.Add((docId, value));
         }
         return results;
+    }
+
+    /// <summary>
+    /// Lazily opens the BKD reader for this segment if a .bkd file is present.
+    /// Returns null when there is no BKD file or it cannot be opened.
+    /// </summary>
+    private Codecs.Bkd.BKDReader? EnsureBkdReader()
+    {
+        if (Volatile.Read(ref _bkdReaderLoaded)) return _bkdReader;
+
+        var lockObj = LazyInitializer.EnsureInitialized(ref _lazyInitLock)!;
+        lock (lockObj)
+        {
+            if (_bkdReaderLoaded) return _bkdReader;
+
+            var bkdPath = _basePath + ".bkd";
+            if (File.Exists(bkdPath))
+            {
+                try
+                {
+                    _bkdReader = Codecs.Bkd.BKDReader.Open(bkdPath);
+                }
+                catch (Exception ex) when (ex is IOException or InvalidDataException)
+                {
+                    // Corrupt or unreadable .bkd: fall back to the linear scan path.
+                    _bkdReader = null;
+                }
+            }
+            Volatile.Write(ref _bkdReaderLoaded, true);
+        }
+        return _bkdReader;
     }
 
     /// <summary>Returns whether this segment has vector data.</summary>
