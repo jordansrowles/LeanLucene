@@ -517,9 +517,29 @@ public sealed class SegmentMerger
     private static void WriteDocValueColumns(MergeContext ctx, string basePath)
     {
         if (ctx.NumericDocValues.Count > 0)
-            NumericDocValuesWriter.Write(basePath + ".dvn", ctx.NumericDocValues, ctx.TotalDocs);
+        {
+            using var output = new Store.IndexOutput(basePath + ".dvn");
+            CodecConstants.WriteHeader(output, CodecConstants.NumericDocValuesVersion);
+            output.WriteInt32(ctx.NumericDocValues.Count);
+            var fieldKeys = ctx.NumericDocValues.Keys.ToList();
+            foreach (var field in fieldKeys)
+            {
+                NumericDocValuesWriter.WriteFieldBlock(output, field, ctx.NumericDocValues[field], ctx.TotalDocs);
+                ctx.NumericDocValues.Remove(field);
+            }
+        }
         if (ctx.SortedDocValues.Count > 0)
-            SortedDocValuesWriter.Write(basePath + ".dvs", ctx.SortedDocValues, ctx.TotalDocs);
+        {
+            using var output = new Store.IndexOutput(basePath + ".dvs");
+            CodecConstants.WriteHeader(output, CodecConstants.SortedDocValuesVersion);
+            output.WriteInt32(ctx.SortedDocValues.Count);
+            var fieldKeys = ctx.SortedDocValues.Keys.ToList();
+            foreach (var field in fieldKeys)
+            {
+                SortedDocValuesWriter.WriteFieldBlock(output, field, ctx.SortedDocValues[field], ctx.TotalDocs);
+                ctx.SortedDocValues.Remove(field);
+            }
+        }
     }
 
     private static void WriteBkdTree(MergeContext ctx, string basePath)
