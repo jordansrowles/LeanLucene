@@ -281,15 +281,20 @@ public sealed partial class IndexWriter
             SortedDocValuesWriter.Write(basePath + ".dvs", dvs, _bufferedDocCount);
         }
 
-        // Write BKD tree for numeric fields (.bkd)
-        if (_numericDocValues.Count > 0)
+        // Write BKD tree for numeric fields (.bkd).
+        // Source from the sparse numeric index so docs without a value are not padded
+        // with a synthetic zero. This is what makes BKD safe to use on the read path.
+        if (_numericIndex.Count > 0)
         {
-            var bkdData = new Dictionary<string, List<(double Value, int DocId)>>(_numericDocValues.Count, StringComparer.Ordinal);
-            foreach (var (field, list) in _numericDocValues)
+            var bkdData = new Dictionary<string, List<(double Value, int DocId)>>(_numericIndex.Count, StringComparer.Ordinal);
+            foreach (var (field, docMap) in _numericIndex)
             {
-                var points = new List<(double Value, int DocId)>();
-                for (int i = 0; i < Math.Min(list.Count, _bufferedDocCount); i++)
-                    points.Add((list[i], i));
+                var points = new List<(double Value, int DocId)>(docMap.Count);
+                foreach (var (docId, value) in docMap)
+                {
+                    if (docId < _bufferedDocCount)
+                        points.Add((value, docId));
+                }
                 if (points.Count > 0)
                     bkdData[field] = points;
             }
