@@ -285,6 +285,130 @@ public sealed partial class IndexSearcher : IDisposable
         return Search(query, topN, cancellationToken);
     }
 
+    /// <summary>
+    /// Executes a query under the supplied <see cref="SearchOptions"/>.
+    /// The deadline and budget are checked at segment boundaries; on early
+    /// termination the returned <see cref="TopDocs"/> has
+    /// <see cref="TopDocs.IsPartial"/> set to true.
+    /// </summary>
+    /// <param name="query">The query to execute.</param>
+    /// <param name="topN">The maximum number of results to return.</param>
+    /// <param name="options">Per-query resource controls.</param>
+    public TopDocs Search(Query query, int topN, SearchOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        if (topN <= 0 || _readers.Count == 0)
+            return TopDocs.Empty;
+
+        long topNBytes = checked((long)topN * Scoring.ScoreDoc.EstimatedBytes);
+        if (topNBytes > options.MaxResultBytes)
+            throw new ArgumentException(
+                $"MaxResultBytes ({options.MaxResultBytes}) is smaller than the requested top-N heap ({topNBytes} bytes).",
+                nameof(options));
+
+        using var activity = Diagnostics.LeanLuceneActivitySource.Source
+            .StartActivity(Diagnostics.LeanLuceneActivitySource.Search);
+        activity?.SetTag("query.type", query.GetType().Name);
+        if (options.Timeout.HasValue)
+            activity?.SetTag("search.timeout_ms", (long)options.Timeout.Value.TotalMilliseconds);
+
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        long? deadlineTicks = options.Timeout.HasValue
+            ? sw.ElapsedTicks + (long)(options.Timeout.Value.TotalSeconds * System.Diagnostics.Stopwatch.Frequency)
+            : null;
+
+        var result = SearchCoreBudgeted(query, topN, options, deadlineTicks, sw);
+
+        sw.Stop();
+        _config.Metrics.RecordSearchLatency(sw.Elapsed);
+        activity?.SetTag("search.total_hits", result.TotalHits);
+        activity?.SetTag("search.is_partial", result.IsPartial);
+
+        _config.SlowQueryLog?.MaybeLog(query, sw.Elapsed, result.TotalHits);
+        _config.SearchAnalytics?.Record(query, sw.Elapsed, result.TotalHits, cacheHit: false);
+        return result;
+    }
+
+    private TopDocs SearchCoreBudgeted(Query query, int topN, SearchOptions options,
+        long? deadlineTicks, System.Diagnostics.Stopwatch sw)
+    {
+        bool skipGlobalDFs = query is PrefixQuery or WildcardQuery or FuzzyQuery;
+        var globalDFs = skipGlobalDFs ? EmptyGlobalDFs : PrecomputeGlobalDocFreqs(query);
+        var collector = new TopNCollector(topN);
+        bool partial = false;
+        long topNBytes = (long)topN * Scoring.ScoreDoc.EstimatedBytes;
+
+        foreach (var reader in _readers)
+        {
+            if (options.CancellationToken.IsCancellationRequested)
+            {
+                partial = true;
+                break;
+            }
+            if (deadlineTicks.HasValue && sw.ElapsedTicks > deadlineTicks.Value)
+            {
+                partial = true;
+                break;
+            }
+            long approxBytes = topNBytes + (long)collector.TotalHits * Scoring.ScoreDoc.EstimatedBytes;
+            if (approxBytes > options.MaxResultBytes)
+            {
+                partial = true;
+                break;
+            }
+            ExecuteQuery(query, reader, globalDFs, ref collector);
+        }
+
+        var docs = collector.ToTopDocs();
+        return partial ? docs.AsPartial() : docs;
+    }
+
+    /// <summary>
+    /// Executes a query and yields matches in segment order, segment by segment.
+    /// Honours <see cref="SearchOptions.Timeout"/>, <see cref="SearchOptions.MaxResultBytes"/>,
+    /// and <see cref="SearchOptions.CancellationToken"/> between segments. Results are
+    /// not globally sorted by score: the caller receives each segment's local top-N,
+    /// in segment order, with global doc IDs.
+    /// </summary>
+    /// <remarks>
+    /// Use this when the caller wants to process results as they arrive, or when the
+    /// total candidate count is too large to retain a global heap. The per-segment
+    /// top-N matches the supplied <paramref name="perSegmentTopN"/>; pass
+    /// <see cref="int.MaxValue"/> to retain every match per segment.
+    /// </remarks>
+    public IEnumerable<ScoreDoc> SearchStreaming(Query query, int perSegmentTopN = 1024,
+        SearchOptions? options = null)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+        if (perSegmentTopN <= 0 || _readers.Count == 0)
+            yield break;
+
+        options ??= SearchOptions.Default;
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        long? deadlineTicks = options.Timeout.HasValue
+            ? (long)(options.Timeout.Value.TotalSeconds * System.Diagnostics.Stopwatch.Frequency)
+            : null;
+
+        bool skipGlobalDFs = query is PrefixQuery or WildcardQuery or FuzzyQuery;
+        var globalDFs = skipGlobalDFs ? EmptyGlobalDFs : PrecomputeGlobalDocFreqs(query);
+        long perSegmentBytes = (long)perSegmentTopN * Scoring.ScoreDoc.EstimatedBytes;
+        long emittedBytes = 0;
+
+        foreach (var reader in _readers)
+        {
+            if (options.CancellationToken.IsCancellationRequested) yield break;
+            if (deadlineTicks.HasValue && sw.ElapsedTicks > deadlineTicks.Value) yield break;
+            if (emittedBytes + perSegmentBytes > options.MaxResultBytes) yield break;
+
+            var segmentCollector = new TopNCollector(perSegmentTopN);
+            ExecuteQuery(query, reader, globalDFs, ref segmentCollector);
+            var segmentDocs = segmentCollector.ToTopDocs();
+            emittedBytes += (long)segmentDocs.ScoreDocs.Length * Scoring.ScoreDoc.EstimatedBytes;
+            foreach (var sd in segmentDocs.ScoreDocs)
+                yield return sd;
+        }
+    }
+
     private IndexStats ComputeStats()
     {
         if (_readers.Count == 0)
