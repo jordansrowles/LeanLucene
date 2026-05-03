@@ -27,6 +27,49 @@ public sealed class CollectionManager : IDisposable
         }
     }
 
+    private sealed class CreationLock
+    {
+        private int _refCount;
+        private int _removed;
+        private int _disposed;
+
+        public SemaphoreSlim Semaphore { get; } = new(1, 1);
+
+        public bool IsRemoved => Volatile.Read(ref _removed) != 0;
+
+        public bool TryAddRef()
+        {
+            if (IsRemoved) return false;
+
+            Interlocked.Increment(ref _refCount);
+            if (!IsRemoved) return true;
+
+            ReleaseRef();
+            return false;
+        }
+
+        public void MarkRemoved()
+        {
+            Volatile.Write(ref _removed, 1);
+            DisposeWhenUnused();
+        }
+
+        public void ReleaseRef()
+        {
+            if (Interlocked.Decrement(ref _refCount) == 0)
+                DisposeWhenUnused();
+        }
+
+        private void DisposeWhenUnused()
+        {
+            if (!IsRemoved || Volatile.Read(ref _refCount) != 0)
+                return;
+
+            if (Interlocked.Exchange(ref _disposed, 1) == 0)
+                Semaphore.Dispose();
+        }
+    }
+
     private readonly string _rootPath;
     private readonly ILogger<CollectionManager>? _logger;
     private readonly Dictionary<string, CollectionEntry> _collections = new(StringComparer.Ordinal);
@@ -34,7 +77,7 @@ public sealed class CollectionManager : IDisposable
     private readonly Lock _lock = new();
     // Per-collection semaphores ensure that slow IndexWriter construction for a NEW collection
     // does not block reads and writes to existing, already-open collections.
-    private readonly ConcurrentDictionary<string, SemaphoreSlim> _creationLocks = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, CreationLock> _creationLocks = new(StringComparer.Ordinal);
 
     public CollectionManager(string rootPath, ILogger<CollectionManager>? logger = null)
     {
@@ -109,17 +152,29 @@ public sealed class CollectionManager : IDisposable
 
     public bool DropCollection(string name)
     {
-        lock (_lock)
+        var creationLock = AcquireCreationLock(name);
+        creationLock.Semaphore.Wait();
+        try
         {
-            if (!_collections.TryGetValue(name, out var entry))
-                return false;
+            CollectionEntry entry;
+            lock (_lock)
+            {
+                if (!_collections.Remove(name, out entry!))
+                    return false;
+            }
 
             entry.Dispose();
-            _collections.Remove(name);
             string colPath = CollectionPath(name);
             if (Directory.Exists(colPath))
                 DeleteDirectorySafely(colPath);
             return true;
+        }
+        finally
+        {
+            if (_creationLocks.TryRemove(new KeyValuePair<string, CreationLock>(name, creationLock)))
+                creationLock.MarkRemoved();
+            creationLock.Semaphore.Release();
+            creationLock.ReleaseRef();
         }
     }
 
@@ -155,34 +210,53 @@ public sealed class CollectionManager : IDisposable
             if (_collections.TryGetValue(name, out var existing)) return existing;
         }
 
-        // Slow path: creation may involve segment recovery. Use a per-collection semaphore
-        // so parallel creates for the SAME name are serialised without blocking other names.
-        var sem = _creationLocks.GetOrAdd(name, static _ => new SemaphoreSlim(1, 1));
-        sem.Wait();
-        try
+        while (true)
         {
-            // Re-check after acquiring the semaphore; another thread may have created it.
-            lock (_lock)
+            // Slow path: creation may involve segment recovery. Use a per-collection semaphore
+            // so parallel creates for the SAME name are serialised without blocking other names.
+            var creationLock = AcquireCreationLock(name);
+            creationLock.Semaphore.Wait();
+            try
             {
-                if (_collections.TryGetValue(name, out var existing)) return existing;
+                if (creationLock.IsRemoved)
+                    continue;
+
+                // Re-check after acquiring the semaphore; another thread may have created it.
+                lock (_lock)
+                {
+                    if (_collections.TryGetValue(name, out var existing)) return existing;
+                }
+
+                string path = CollectionPath(name);
+                Directory.CreateDirectory(path);
+                var dir = new MMapDirectory(path);
+                var writer = new IndexWriter(dir, new IndexWriterConfig());
+                var searcherManager = new SearcherManager(dir);
+                var entry = new CollectionEntry(writer, dir, searcherManager);
+
+                lock (_lock)
+                {
+                    _collections[name] = entry;
+                }
+                return entry;
             }
-
-            string path = CollectionPath(name);
-            Directory.CreateDirectory(path);
-            var dir = new MMapDirectory(path);
-            var writer = new IndexWriter(dir, new IndexWriterConfig());
-            var searcherManager = new SearcherManager(dir);
-            var entry = new CollectionEntry(writer, dir, searcherManager);
-
-            lock (_lock)
+            finally
             {
-                _collections[name] = entry;
+                creationLock.Semaphore.Release();
+                creationLock.ReleaseRef();
             }
-            return entry;
         }
-        finally
+    }
+
+    private CreationLock AcquireCreationLock(string name)
+    {
+        while (true)
         {
-            sem.Release();
+            var creationLock = _creationLocks.GetOrAdd(name, static _ => new CreationLock());
+            if (creationLock.TryAddRef())
+                return creationLock;
+
+            _creationLocks.TryRemove(new KeyValuePair<string, CreationLock>(name, creationLock));
         }
     }
 
@@ -252,6 +326,12 @@ public sealed class CollectionManager : IDisposable
             foreach (var entry in _collections.Values)
                 entry.Dispose();
             _collections.Clear();
+        }
+
+        foreach (var pair in _creationLocks.ToArray())
+        {
+            if (_creationLocks.TryRemove(pair))
+                pair.Value.MarkRemoved();
         }
     }
 }
