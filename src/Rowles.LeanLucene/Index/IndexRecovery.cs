@@ -76,7 +76,18 @@ public static class IndexRecovery
     /// Required per-segment file extensions checked during recovery. A commit referencing a
     /// segment whose required files are missing or empty falls back to the prior generation.
     /// </summary>
-    private static readonly string[] RequiredSegmentExtensions = [".seg", ".dic", ".pos", ".nrm"];
+    private static readonly string[] RequiredSegmentExtensions = [".seg", ".dic", ".pos", ".nrm", ".fdt", ".fdx"];
+
+    /// <summary>
+    /// Per-extension expected codec magic header version. Files that exist but fail header
+    /// validation cause the commit to be rejected and recovery to fall back.
+    /// </summary>
+    private static readonly (string Ext, byte Version, string FileType)[] HeaderChecks =
+    [
+        (".dic", Codecs.CodecConstants.TermDictionaryVersion, "term dictionary"),
+        (".pos", Codecs.CodecConstants.PostingsVersion, "postings"),
+        (".nrm", Codecs.CodecConstants.NormsVersion, "norms"),
+    ];
 
     /// <summary>
     /// Tries to load and validate a specific commit file.
@@ -149,6 +160,30 @@ public static class IndexRecovery
         catch (Exception)
         {
             return false;
+        }
+
+        // Validate codec headers on the per-segment files that carry them.
+        foreach (var (ext, version, fileType) in HeaderChecks)
+        {
+            var path = basePath + ext;
+            if (!File.Exists(path)) return false;
+            try
+            {
+                using var fs = File.OpenRead(path);
+                using var reader = new BinaryReader(fs);
+                Codecs.CodecConstants.ValidateHeader(reader, version, fileType);
+            }
+            catch (Exception)
+            {
+                return false;
+            }
+        }
+
+        // .del file is optional but, when declared via DelGeneration, must exist.
+        if (segInfo.DelGeneration is int delGen)
+        {
+            var delPath = $"{basePath}_gen_{delGen}.del";
+            if (!File.Exists(delPath)) return false;
         }
 
         foreach (var vf in segInfo.VectorFields)

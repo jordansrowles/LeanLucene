@@ -13,12 +13,12 @@ namespace Rowles.LeanLucene.Example.JsonApi;
 /// </summary>
 public sealed class CollectionManager : IDisposable
 {
-    private sealed class CollectionState(IndexWriter writer, MMapDirectory dir, SearcherManager searcherManager) : IDisposable
+    /// <summary>
+    /// Per-collection runtime handles. Searchers are never exposed directly; callers
+    /// always go through <see cref="SearcherManager.AcquireLease"/>.
+    /// </summary>
+    private sealed record CollectionEntry(IndexWriter Writer, MMapDirectory Dir, SearcherManager SearcherManager) : IDisposable
     {
-        public readonly IndexWriter Writer = writer;
-        public readonly MMapDirectory Dir = dir;
-        public readonly SearcherManager SearcherManager = searcherManager;
-
         public void Dispose()
         {
             SearcherManager.Dispose();
@@ -29,7 +29,7 @@ public sealed class CollectionManager : IDisposable
 
     private readonly string _rootPath;
     private readonly ILogger<CollectionManager>? _logger;
-    private readonly Dictionary<string, CollectionState> _collections = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, CollectionEntry> _collections = new(StringComparer.Ordinal);
     private readonly Dictionary<string, Exception> _corruptCollections = new(StringComparer.Ordinal);
     private readonly Lock _lock = new();
     // Per-collection semaphores ensure that slow IndexWriter construction for a NEW collection
@@ -111,10 +111,10 @@ public sealed class CollectionManager : IDisposable
     {
         lock (_lock)
         {
-            if (!_collections.TryGetValue(name, out var state))
+            if (!_collections.TryGetValue(name, out var entry))
                 return false;
 
-            state.Dispose();
+            entry.Dispose();
             _collections.Remove(name);
             string colPath = CollectionPath(name);
             if (Directory.Exists(colPath))
@@ -130,22 +130,22 @@ public sealed class CollectionManager : IDisposable
 
     public void CommitAndRefresh(string name)
     {
-        CollectionState state;
+        CollectionEntry entry;
         lock (_lock)
         {
-            if (!_collections.TryGetValue(name, out state!))
-                state = EnsureOpen(name);
+            if (!_collections.TryGetValue(name, out entry!))
+                entry = EnsureOpen(name);
         }
-        state.Writer.Commit();
-        state.SearcherManager.MaybeRefresh();
+        entry.Writer.Commit();
+        entry.SearcherManager.MaybeRefresh();
     }
 
     /// <summary>
-    /// Returns an existing <see cref="CollectionState"/>, or creates one if it does not yet exist.
+    /// Returns an existing <see cref="CollectionEntry"/>, or creates one if it does not yet exist.
     /// Construction happens outside the global lock to prevent blocking other collections; a
     /// per-collection semaphore serialises concurrent creation of the same new collection.
     /// </summary>
-    private CollectionState EnsureOpen(string name)
+    private CollectionEntry EnsureOpen(string name)
     {
         ValidateCollectionName(name);
 
@@ -172,13 +172,13 @@ public sealed class CollectionManager : IDisposable
             var dir = new MMapDirectory(path);
             var writer = new IndexWriter(dir, new IndexWriterConfig());
             var searcherManager = new SearcherManager(dir);
-            var state = new CollectionState(writer, dir, searcherManager);
+            var entry = new CollectionEntry(writer, dir, searcherManager);
 
             lock (_lock)
             {
-                _collections[name] = state;
+                _collections[name] = entry;
             }
-            return state;
+            return entry;
         }
         finally
         {
@@ -249,8 +249,8 @@ public sealed class CollectionManager : IDisposable
     {
         lock (_lock)
         {
-            foreach (var state in _collections.Values)
-                state.Dispose();
+            foreach (var entry in _collections.Values)
+                entry.Dispose();
             _collections.Clear();
         }
     }
