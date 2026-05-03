@@ -129,6 +129,22 @@ public sealed class SearchOptionsTests : IClassFixture<TestDirectoryFixture>
     }
 
     [Fact]
+    public void Search_WithBudgetLargeEnoughForTopN_DoesNotStopAfterManyHits()
+    {
+        var dir = IndexSampleDocs("opts_budget_many_hits", 200);
+        using var searcher = new IndexSearcher(dir);
+
+        var query = new TermQuery("body", "payload");
+        var opts = SearchOptions.WithBudget(ScoreDoc.EstimatedBytes);
+
+        var result = searcher.Search(query, topN: 1, opts);
+
+        Assert.False(result.IsPartial);
+        Assert.Equal(200, result.TotalHits);
+        Assert.Single(result.ScoreDocs);
+    }
+
+    [Fact]
     public void Search_WithCancelledToken_ReturnsPartial()
     {
         var dir = IndexSampleDocs("opts_cancel", 20);

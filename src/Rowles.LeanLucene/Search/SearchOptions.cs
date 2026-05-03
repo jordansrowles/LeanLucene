@@ -7,17 +7,17 @@
 /// results in segment order rather than fully collected.
 /// </summary>
 /// <remarks>
-/// Enforcement is checked at segment boundaries. A query already inside a hot
-/// inner loop will complete that segment before the deadline or budget is honoured.
-/// On early termination the returned <see cref="Scoring.TopDocs.IsPartial"/> is set.
+/// Timeouts and cancellation are checked at segment boundaries. A query already
+/// inside a hot inner loop will complete that segment before the deadline is
+/// honoured. On early termination the returned <see cref="Scoring.TopDocs.IsPartial"/> is set.
 /// </remarks>
 public sealed class SearchOptions
 {
     /// <summary>
-    /// Approximate budget on the bytes the result accumulator may hold. Each retained
-    /// candidate costs roughly 12 bytes (one <see cref="Scoring.ScoreDoc"/>). The cap
-    /// is checked between segments. Set <see cref="long.MaxValue"/> for unlimited (default).
-    /// When the budget would be exceeded, the search stops and returns a partial result.
+    /// Approximate budget on the bytes the retained result accumulator may hold.
+    /// Each retained candidate costs roughly 12 bytes (one <see cref="Scoring.ScoreDoc"/>).
+    /// Regular top-N searches throw if the requested heap cannot fit within this budget.
+    /// Streaming searches check the budget between segments and stop yielding when it is exhausted.
     /// </summary>
     public long MaxResultBytes { get; init; } = long.MaxValue;
 

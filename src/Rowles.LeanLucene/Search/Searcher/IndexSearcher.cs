@@ -287,9 +287,9 @@ public sealed partial class IndexSearcher : IDisposable
 
     /// <summary>
     /// Executes a query under the supplied <see cref="SearchOptions"/>.
-    /// The deadline and budget are checked at segment boundaries; on early
-    /// termination the returned <see cref="TopDocs"/> has
-    /// <see cref="TopDocs.IsPartial"/> set to true.
+    /// The top-N heap must fit within the configured result-byte budget.
+    /// The deadline and cancellation token are checked at segment boundaries; on
+    /// early termination the returned <see cref="TopDocs"/> has <see cref="TopDocs.IsPartial"/> set to true.
     /// </summary>
     /// <param name="query">The query to execute.</param>
     /// <param name="topN">The maximum number of results to return.</param>
@@ -346,12 +346,6 @@ public sealed partial class IndexSearcher : IDisposable
                 break;
             }
             if (deadlineTicks.HasValue && sw.ElapsedTicks > deadlineTicks.Value)
-            {
-                partial = true;
-                break;
-            }
-            long approxBytes = topNBytes + (long)collector.TotalHits * Scoring.ScoreDoc.EstimatedBytes;
-            if (approxBytes > options.MaxResultBytes)
             {
                 partial = true;
                 break;

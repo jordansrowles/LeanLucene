@@ -13,8 +13,8 @@ public sealed class TopDocs
 
     /// <summary>
     /// Gets a value indicating whether the search terminated before all segments were
-    /// scored, due to a <c>SearchOptions.Timeout</c> deadline or <c>MaxResultBytes</c>
-    /// budget. When true, <see cref="ScoreDocs"/> and <see cref="TotalHits"/> reflect
+    /// scored, due to a <c>SearchOptions.Timeout</c> deadline or cancellation.
+    /// When true, <see cref="ScoreDocs"/> and <see cref="TotalHits"/> reflect
     /// only the work completed before termination.
     /// </summary>
     public bool IsPartial { get; }
