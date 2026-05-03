@@ -29,7 +29,7 @@ public sealed class QueryParser
     public Query Parse(string queryString)
     {
         if (string.IsNullOrWhiteSpace(queryString))
-            return new BooleanQuery();
+            return new BooleanQuery.Builder().Build();
 
         var tokens = Tokenize(queryString);
         int pos = 0;
@@ -71,10 +71,10 @@ public sealed class QueryParser
         if (clauses.Count == 1 && clauses[0].Occur == Occur.Should)
             return clauses[0].Query;
 
-        var boolQuery = new BooleanQuery();
+        var builder = new BooleanQuery.Builder();
         foreach (var c in clauses)
-            boolQuery.Add(c.Query, c.Occur);
-        return boolQuery;
+            builder.Add(c.Query, c.Occur);
+        return builder.Build();
     }
 
     private Query? ParseClause(List<QToken> tokens, ref int pos)

@@ -84,6 +84,9 @@ public sealed partial class IndexWriter
                         _committedSegments.AddRange(newSegments);
                         _nextSegmentOrdinal = Math.Max(_nextSegmentOrdinal, localNextOrd);
 
+                        // Increment content token so searcher refresh logic detects
+                        // the changed segment composition produced by the merge.
+                        _contentToken++;
                         _commitGeneration++;
                         WriteCommitFile(_commitGeneration);
                         WriteCommitStats(_commitGeneration);
@@ -109,13 +112,17 @@ public sealed partial class IndexWriter
     /// <summary>
     /// Returns all committed and flushed segments for near-real-time search.
     /// Flushes any buffered documents first but does not write a commit file.
+    /// Returns a snapshot copy of the segment list that is safe to read concurrently.
     /// </summary>
     public IReadOnlyList<SegmentInfo> GetNrtSegments()
     {
         ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
-        if (_bufferedDocCount > 0)
-            FlushSegment();
-        return _committedSegments.AsReadOnly();
+        lock (_writeLock)
+        {
+            if (_bufferedDocCount > 0)
+                FlushSegment();
+            return _committedSegments.ToList().AsReadOnly();
+        }
     }
 
     /// <summary>
@@ -139,6 +146,7 @@ public sealed partial class IndexWriter
                     DocCount = s.DocCount,
                     LiveDocCount = s.LiveDocCount,
                     CommitGeneration = s.CommitGeneration,
+                    DelGeneration = s.DelGeneration,
                     FieldNames = [.. s.FieldNames],
                     IndexSortFields = s.IndexSortFields is null ? null : [.. s.IndexSortFields],
                     VectorFields = [.. s.VectorFields]

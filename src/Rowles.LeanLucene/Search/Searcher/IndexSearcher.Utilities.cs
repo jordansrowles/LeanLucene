@@ -374,7 +374,7 @@ public sealed partial class IndexSearcher
         int termCount = Math.Min(candidates.Count, p.MaxQueryTerms);
 
         // Build a BooleanQuery with Should clauses
-        var boolQ = new BooleanQuery();
+        var boolQBuilder = new BooleanQuery.Builder();
         float maxScore = candidates[0].Score;
 
         for (int i = 0; i < termCount; i++)
@@ -383,8 +383,10 @@ public sealed partial class IndexSearcher
             var tq = new TermQuery(field, term);
             if (p.BoostByScore && maxScore > 0)
                 tq.Boost = score / maxScore;
-            boolQ.Add(tq, Occur.Should);
+            boolQBuilder.Add(tq, Occur.Should);
         }
+
+        var boolQ = boolQBuilder.Build();
 
         // Execute via the existing search path (bypasses cache to avoid recursion)
         return SearchCore(boolQ, topN + 1);

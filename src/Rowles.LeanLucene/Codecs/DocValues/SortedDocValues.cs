@@ -1,12 +1,13 @@
 ﻿using Rowles.LeanLucene.Store;
+using Rowles.LeanLucene.Util;
 
 namespace Rowles.LeanLucene.Codecs.DocValues;
 
 /// <summary>
 /// Writes per-document string values in a column-stride format (.dvs).
-/// Layout: [fieldCount: int32] per field: [fieldName] [docCount: int32]
-/// [ordCount: int32] [ord table: length-prefixed strings] [ords: packed ints].
-/// Deduplicates values via an ordinal table.
+/// Layout (v2): [fieldName] [presenceByteCount: int32] [presenceBitmap: bytes if count > 0]
+/// [docCount: int32] [ordCount: int32] [ord table: length-prefixed strings] [ords: packed ints].
+/// Deduplicates values via an ordinal table. Null entries in the values array indicate absent docs.
 /// </summary>
 internal static class SortedDocValuesWriter
 {
@@ -32,6 +33,29 @@ internal static class SortedDocValuesWriter
         output.WriteVarInt(nameBytes.Length);
         foreach (var b in nameBytes)
             output.WriteByte(b);
+
+        // Presence bitmap: tracks which docs have an explicit (non-null) value.
+        int presentCount = 0;
+        for (int i = 0; i < docCount; i++)
+            if (values[i] is not null) presentCount++;
+
+        if (presentCount < docCount)
+        {
+            var bitmap = new RoaringBitmap();
+            for (int i = 0; i < docCount; i++)
+                if (values[i] is not null) bitmap.Add(i);
+            using var ms = new System.IO.MemoryStream();
+            using var bw = new System.IO.BinaryWriter(ms, System.Text.Encoding.UTF8, leaveOpen: true);
+            bitmap.Serialise(bw);
+            bw.Flush();
+            var bitmapBytes = ms.ToArray();
+            output.WriteInt32(bitmapBytes.Length);
+            output.WriteBytes(bitmapBytes);
+        }
+        else
+        {
+            output.WriteInt32(0); // all docs present
+        }
 
         output.WriteInt32(docCount);
 

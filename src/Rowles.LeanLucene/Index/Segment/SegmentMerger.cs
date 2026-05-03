@@ -317,9 +317,13 @@ public sealed class SegmentMerger
                     dst[remapDocId] = fl[oldDocId];
                 }
 
-                foreach (var (field, arr) in segNumericDvs)
+                foreach (var (field, arr) in segNumericDvs.Values)
                 {
                     if ((uint)oldDocId >= (uint)arr.Length) continue;
+                    // Skip docs absent from this field according to the presence bitmap.
+                    if (segNumericDvs.Presence.TryGetValue(field, out var presenceBitmap) &&
+                        presenceBitmap is not null && !presenceBitmap.Contains(oldDocId))
+                        continue;
                     if (!ctx.NumericDocValues.TryGetValue(field, out var dst))
                     {
                         dst = new double[ctx.TotalDocs];
@@ -328,9 +332,13 @@ public sealed class SegmentMerger
                     dst[remapDocId] = arr[oldDocId];
                 }
 
-                foreach (var (field, arr) in segSortedDvs)
+                foreach (var (field, arr) in segSortedDvs.Values)
                 {
                     if ((uint)oldDocId >= (uint)arr.Length) continue;
+                    // Skip docs absent from this field according to the presence bitmap.
+                    if (segSortedDvs.Presence.TryGetValue(field, out var presenceBitmap) &&
+                        presenceBitmap is not null && !presenceBitmap.Contains(oldDocId))
+                        continue;
                     if (!ctx.SortedDocValues.TryGetValue(field, out var dst))
                     {
                         dst = new string?[ctx.TotalDocs];
@@ -524,7 +532,12 @@ public sealed class SegmentMerger
             var fieldKeys = ctx.NumericDocValues.Keys.ToList();
             foreach (var field in fieldKeys)
             {
-                NumericDocValuesWriter.WriteFieldBlock(output, field, ctx.NumericDocValues[field], ctx.TotalDocs);
+                // Derive presence from the sparse numeric index (documents that truly have this field).
+                ctx.NumericFields.TryGetValue(field, out var sparseMap);
+                IReadOnlySet<int>? presenceSet = sparseMap is not null
+                    ? (IReadOnlySet<int>)sparseMap.Keys.ToHashSet()
+                    : null;
+                NumericDocValuesWriter.WriteFieldBlock(output, field, ctx.NumericDocValues[field], ctx.TotalDocs, presenceSet);
                 ctx.NumericDocValues.Remove(field);
             }
         }
@@ -565,10 +578,14 @@ public sealed class SegmentMerger
 
     internal void CleanupSegmentFiles(SegmentInfo seg)
     {
-        // Delete every file belonging to this segment (any extension), not a hardcoded list.
-        // This is immune to future codec additions and prevents orphan-file disk leaks.
-        var pattern = $"{seg.SegmentId}.*";
-        foreach (var filePath in Directory.GetFiles(_directory.DirectoryPath, pattern))
+        // Delete every file belonging to this segment (any extension).
+        foreach (var filePath in Directory.GetFiles(_directory.DirectoryPath, $"{seg.SegmentId}.*"))
+        {
+            try { File.Delete(filePath); }
+            catch { /* best-effort cleanup */ }
+        }
+        // Also sweep generation-versioned deletion files (e.g. seg_0_gen_3.del).
+        foreach (var filePath in Directory.GetFiles(_directory.DirectoryPath, $"{seg.SegmentId}_gen_*.del"))
         {
             try { File.Delete(filePath); }
             catch { /* best-effort cleanup */ }

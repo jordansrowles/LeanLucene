@@ -314,17 +314,28 @@ public sealed partial class IndexWriter : IDisposable
     }
 
     /// <summary>Atomically deletes documents matching the selector and adds the replacement.</summary>
+    /// <remarks>
+    /// The deletion targets only segments that existed at the time of this call.
+    /// Documents buffered before this call but not yet committed are flushed first,
+    /// but the delete is applied only to segments that were already committed before
+    /// the flush, not to any segment produced by this flush.
+    /// </remarks>
     public void UpdateDocument(string field, string term, LeanDocument replacement)
     {
         ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
         lock (_writeLock)
         {
+            // Capture the count of already-committed segments before any flush.
+            // Deletions must not target the replacement segment that is about to be added.
+            int preFlushSegmentCount = _committedSegments.Count;
+
             FlushDwptPool();
             if (_bufferedDocCount > 0)
                 FlushSegment();
 
             _pendingDeletes.Add((field, term));
-            ApplyPendingDeletions(_committedSegments);
+            // Restrict deletions to the segments that existed before this call.
+            ApplyPendingDeletions(_committedSegments.GetRange(0, preFlushSegmentCount));
             AddDocumentCore(replacement);
         }
     }
@@ -662,10 +673,26 @@ public sealed partial class IndexWriter : IDisposable
         foreach (var segId in recovery.SegmentIds)
         {
             var segPath = Path.Combine(_directory.DirectoryPath, segId + ".seg");
-            if (File.Exists(segPath))
+            if (!File.Exists(segPath))
+                continue;
+
+            var seg = SegmentInfo.ReadFrom(segPath);
+
+            // LiveDocCount has an internal setter that System.Text.Json does not
+            // populate during reflection-based deserialisation. Always derive it
+            // from the live-docs file on startup so the in-memory value is correct.
+            var delPath = Path.Combine(_directory.DirectoryPath, segId + ".del");
+            if (File.Exists(delPath))
             {
-                _committedSegments.Add(SegmentInfo.ReadFrom(segPath));
+                var liveDocs = LiveDocs.Deserialise(delPath, seg.DocCount);
+                seg.LiveDocCount = liveDocs.LiveCount;
             }
+            else
+            {
+                seg.LiveDocCount = seg.DocCount;
+            }
+
+            _committedSegments.Add(seg);
         }
     }
 

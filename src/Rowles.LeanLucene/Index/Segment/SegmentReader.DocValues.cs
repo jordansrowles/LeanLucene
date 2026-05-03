@@ -1,4 +1,5 @@
-﻿using Rowles.LeanLucene.Codecs.Hnsw;
+﻿using Rowles.LeanLucene.Codecs.DocValues;
+using Rowles.LeanLucene.Codecs.Hnsw;
 using Rowles.LeanLucene.Codecs.Vectors;
 
 namespace Rowles.LeanLucene.Index.Segment;
@@ -20,18 +21,36 @@ public sealed partial class SegmentReader
         })!;
     }
 
-    /// <summary>Lazy-loads numeric doc values (.dvn) for per-document numeric retrieval.</summary>
+    /// <summary>Lazy-loads numeric doc values (.dvn) and their presence bitmaps.</summary>
     private Dictionary<string, double[]> EnsureNumericDocValues()
     {
-        return LazyInitializer.EnsureInitialized(ref _numericDocValues, ref _lazyInitLock,
-            () => NumericDocValuesReader.Read(_basePath + ".dvn"))!;
+        if (_numericDocValues is not null) return _numericDocValues;
+
+        var lockObj = LazyInitializer.EnsureInitialized(ref _lazyInitLock)!;
+        lock (lockObj)
+        {
+            if (_numericDocValues is not null) return _numericDocValues;
+            var (vals, pres) = NumericDocValuesReader.Read(_basePath + ".dvn");
+            _numericDocValuesPresence = pres;
+            _numericDocValues = vals;
+        }
+        return _numericDocValues;
     }
 
-    /// <summary>Lazy-loads sorted doc values (.dvs) for per-document string retrieval.</summary>
+    /// <summary>Lazy-loads sorted doc values (.dvs) and their presence bitmaps.</summary>
     private Dictionary<string, string[]> EnsureSortedDocValues()
     {
-        return LazyInitializer.EnsureInitialized(ref _sortedDocValues, ref _lazyInitLock,
-            () => SortedDocValuesReader.Read(_basePath + ".dvs"))!;
+        if (_sortedDocValues is not null) return _sortedDocValues;
+
+        var lockObj = LazyInitializer.EnsureInitialized(ref _lazyInitLock)!;
+        lock (lockObj)
+        {
+            if (_sortedDocValues is not null) return _sortedDocValues;
+            var (vals, pres) = SortedDocValuesReader.Read(_basePath + ".dvs");
+            _sortedDocValuesPresence = pres;
+            _sortedDocValues = vals;
+        }
+        return _sortedDocValues;
     }
 
     /// <summary>
@@ -48,6 +67,16 @@ public sealed partial class SegmentReader
         var numericDocValues = EnsureNumericDocValues();
         if (numericDocValues.TryGetValue(field, out var dvArr) && (uint)docId < (uint)dvArr.Length)
         {
+            // Use the presence bitmap (v2 files) to distinguish truly absent docs from
+            // docs that have an explicit zero value.
+            if (_numericDocValuesPresence is not null &&
+                _numericDocValuesPresence.TryGetValue(field, out var presenceBitmap) &&
+                presenceBitmap is not null &&
+                !presenceBitmap.Contains(docId))
+            {
+                return false;
+            }
+
             value = dvArr[docId];
             return true;
         }
@@ -64,6 +93,16 @@ public sealed partial class SegmentReader
         var sortedDocValues = EnsureSortedDocValues();
         if (sortedDocValues.TryGetValue(field, out var arr) && (uint)docId < (uint)arr.Length)
         {
+            // Use the presence bitmap (v2 files) to distinguish absent docs from those
+            // with an explicitly empty string value.
+            if (_sortedDocValuesPresence is not null &&
+                _sortedDocValuesPresence.TryGetValue(field, out var presenceBitmap) &&
+                presenceBitmap is not null &&
+                !presenceBitmap.Contains(docId))
+            {
+                return false;
+            }
+
             value = arr[docId];
             return true;
         }

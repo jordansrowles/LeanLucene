@@ -255,6 +255,9 @@ public sealed partial class IndexWriter
         {
             var dvn = new Dictionary<string, double[]>(_numericDocValues.Count, StringComparer.Ordinal);
             var dvnReturnList = new List<double[]>(_numericDocValues.Count);
+            // Build per-field presence sets from the sparse numeric index so the codec can
+            // distinguish genuinely absent docs from those with a sentinel zero value.
+            var dvnPresence = new Dictionary<string, IReadOnlySet<int>>(_numericIndex.Count, StringComparer.Ordinal);
             foreach (var (field, list) in _numericDocValues)
             {
                 var arr = ArrayPool<double>.Shared.Rent(_bufferedDocCount);
@@ -263,8 +266,10 @@ public sealed partial class IndexWriter
                     arr[i] = list[i];
                 dvn[field] = arr;
                 dvnReturnList.Add(arr);
+                if (_numericIndex.TryGetValue(field, out var sparseMap))
+                    dvnPresence[field] = sparseMap.Keys.ToHashSet();
             }
-            NumericDocValuesWriter.Write(basePath + ".dvn", dvn, _bufferedDocCount);
+            NumericDocValuesWriter.Write(basePath + ".dvn", dvn, _bufferedDocCount, dvnPresence);
             foreach (var arr in dvnReturnList) ArrayPool<double>.Shared.Return(arr, clearArray: false);
         }
 

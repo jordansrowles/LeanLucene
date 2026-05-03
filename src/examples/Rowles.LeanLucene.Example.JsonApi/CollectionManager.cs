@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using Rowles.LeanLucene.Index.Indexer;
 using Rowles.LeanLucene.Search.Searcher;
 using Rowles.LeanLucene.Store;
@@ -22,7 +23,7 @@ public sealed class CollectionManager : IDisposable
         {
             SearcherManager.Dispose();
             Writer.Dispose();
-            // MMapDirectory is not IDisposable; handles its own cleanup
+            Dir.Dispose();
         }
     }
 
@@ -31,6 +32,9 @@ public sealed class CollectionManager : IDisposable
     private readonly Dictionary<string, CollectionState> _collections = new(StringComparer.Ordinal);
     private readonly Dictionary<string, Exception> _corruptCollections = new(StringComparer.Ordinal);
     private readonly Lock _lock = new();
+    // Per-collection semaphores ensure that slow IndexWriter construction for a NEW collection
+    // does not block reads and writes to existing, already-open collections.
+    private readonly ConcurrentDictionary<string, SemaphoreSlim> _creationLocks = new(StringComparer.Ordinal);
 
     public CollectionManager(string rootPath, ILogger<CollectionManager>? logger = null)
     {
@@ -50,7 +54,7 @@ public sealed class CollectionManager : IDisposable
                 continue;
             }
 
-            try { OpenOrCreate(name); }
+            try { EnsureOpen(name); }
             catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException)
             {
                 _corruptCollections[name] = ex;
@@ -86,12 +90,21 @@ public sealed class CollectionManager : IDisposable
 
     public IndexWriter GetWriter(string name)
     {
-        lock (_lock) { return OpenOrCreate(name).Writer; }
+        lock (_lock)
+        {
+            if (_collections.TryGetValue(name, out var existing)) return existing.Writer;
+        }
+        return EnsureOpen(name).Writer;
     }
 
     public SearcherLease AcquireSearcher(string name)
     {
-        lock (_lock) { return OpenOrCreate(name).SearcherManager.AcquireLease(); }
+        lock (_lock)
+        {
+            if (_collections.TryGetValue(name, out var existing))
+                return existing.SearcherManager.AcquireLease();
+        }
+        return EnsureOpen(name).SearcherManager.AcquireLease();
     }
 
     public bool DropCollection(string name)
@@ -118,25 +131,59 @@ public sealed class CollectionManager : IDisposable
     public void CommitAndRefresh(string name)
     {
         CollectionState state;
-        lock (_lock) { state = OpenOrCreate(name); }
+        lock (_lock)
+        {
+            if (!_collections.TryGetValue(name, out state!))
+                state = EnsureOpen(name);
+        }
         state.Writer.Commit();
         state.SearcherManager.MaybeRefresh();
     }
 
-    private CollectionState OpenOrCreate(string name)
+    /// <summary>
+    /// Returns an existing <see cref="CollectionState"/>, or creates one if it does not yet exist.
+    /// Construction happens outside the global lock to prevent blocking other collections; a
+    /// per-collection semaphore serialises concurrent creation of the same new collection.
+    /// </summary>
+    private CollectionState EnsureOpen(string name)
     {
         ValidateCollectionName(name);
-        if (_collections.TryGetValue(name, out var existing))
-            return existing;
 
-        string path = CollectionPath(name);
-        Directory.CreateDirectory(path);
-        var dir = new MMapDirectory(path);
-        var writer = new IndexWriter(dir, new IndexWriterConfig());
-        var searcherManager = new SearcherManager(dir);
-        var state = new CollectionState(writer, dir, searcherManager);
-        _collections[name] = state;
-        return state;
+        // Fast path: collection already exists.
+        lock (_lock)
+        {
+            if (_collections.TryGetValue(name, out var existing)) return existing;
+        }
+
+        // Slow path: creation may involve segment recovery. Use a per-collection semaphore
+        // so parallel creates for the SAME name are serialised without blocking other names.
+        var sem = _creationLocks.GetOrAdd(name, static _ => new SemaphoreSlim(1, 1));
+        sem.Wait();
+        try
+        {
+            // Re-check after acquiring the semaphore; another thread may have created it.
+            lock (_lock)
+            {
+                if (_collections.TryGetValue(name, out var existing)) return existing;
+            }
+
+            string path = CollectionPath(name);
+            Directory.CreateDirectory(path);
+            var dir = new MMapDirectory(path);
+            var writer = new IndexWriter(dir, new IndexWriterConfig());
+            var searcherManager = new SearcherManager(dir);
+            var state = new CollectionState(writer, dir, searcherManager);
+
+            lock (_lock)
+            {
+                _collections[name] = state;
+            }
+            return state;
+        }
+        finally
+        {
+            sem.Release();
+        }
     }
 
     private string CollectionPath(string name)

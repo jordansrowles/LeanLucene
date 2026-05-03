@@ -33,7 +33,9 @@ public sealed partial class SegmentReader : IDisposable
     // Lazy-loaded Stage 2 features (thread-safe via LazyInitializer)
     private Dictionary<string, Dictionary<int, double>>? _numericIndex;
     private Dictionary<string, double[]>? _numericDocValues;
+    private Dictionary<string, Util.RoaringBitmap?>? _numericDocValuesPresence;
     private Dictionary<string, string[]>? _sortedDocValues;
+    private Dictionary<string, Util.RoaringBitmap?>? _sortedDocValuesPresence;
     private TermVectorsReader? _termVectorsReader;
     private Codecs.Bkd.BKDReader? _bkdReader;
     private bool _bkdReaderLoaded;
@@ -75,7 +77,9 @@ public sealed partial class SegmentReader : IDisposable
         if (File.Exists(fdtPath) && File.Exists(fdxPath))
             _storedReader = StoredFieldsReader.Open(fdtPath, fdxPath);
 
-        var delPath = _basePath + ".del";
+        var delPath = info.DelGeneration.HasValue
+            ? _basePath + $"_gen_{info.DelGeneration.Value}.del"
+            : _basePath + ".del";
         if (File.Exists(delPath))
             _liveDocs = LiveDocs.Deserialise(delPath, info.DocCount);
 
