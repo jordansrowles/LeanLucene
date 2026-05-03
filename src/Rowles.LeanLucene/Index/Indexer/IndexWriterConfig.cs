@@ -84,8 +84,10 @@ public sealed class IndexWriterConfig
     public int AnalyserInternCacheSize { get; set; } = 4096;
 
     /// <summary>
-    /// Custom stop words for the default StandardAnalyser. When null, the built-in English
-    /// stop word list is used. Set to an empty list to disable stop word removal.
+    /// Custom stop words for the default StandardAnalyser. When <see langword="null"/>,
+    /// <see cref="Analysis.StopWords.English"/> (the classic 33-word Lucene-compatible list) is used.
+    /// Set to <see cref="Analysis.StopWords.EnglishExtended"/> for more aggressive filtering,
+    /// or pass an empty list to disable stop word removal entirely.
     /// </summary>
     public IReadOnlyList<string>? StopWords { get; set; }
 

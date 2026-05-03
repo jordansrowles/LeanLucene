@@ -60,7 +60,7 @@ public sealed class AnalysisTests
     public void StandardAnalyser_EndToEnd_LowercasesTokenisesFilters()
     {
         var analyser = new StandardAnalyser();
-        var tokens = analyser.Analyse("Running quickly through THE forest".AsSpan());
+        var tokens = analyser.Analyse("Running quickly in THE forest".AsSpan());
 
         var expected = new[] { "running", "quickly", "forest" };
         Assert.Equal(expected.Length, tokens.Count);

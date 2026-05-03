@@ -21,12 +21,21 @@ public class StandardAnalyserTests
     [Fact]
     public void Analyse_MixedCaseWithStopWords_ReturnsLowercasedNonStopWords()
     {
-        var result = _analyser.Analyse("Running quickly through THE forest");
+        var result = _analyser.Analyse("Running quickly in THE forest");
 
         Assert.Equal(3, result.Count);
         Assert.Equal("running", result[0].Text);
         Assert.Equal("quickly", result[1].Text);
         Assert.Equal("forest", result[2].Text);
+    }
+
+    [Fact]
+    public void Analyse_After_ReturnsToken()
+    {
+        var result = _analyser.Analyse("after");
+
+        Assert.Single(result);
+        Assert.Equal("after", result[0].Text);
     }
 
     [Fact]

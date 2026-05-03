@@ -267,6 +267,36 @@ public sealed class BooleanQueryStreamingTests : IClassFixture<TestDirectoryFixt
     }
 
     [Fact]
+    public void Must_NestedShouldGroupAndMustTerm_ReturnsMatchingDoc()
+    {
+        var dir = new MMapDirectory(SubDir("bool_stream_nested_should_must"));
+        using var writer = new IndexWriter(dir, new IndexWriterConfig());
+
+        var doc = new LeanDocument();
+        doc.Add(new TextField("title", "look after", stored: false));
+        doc.Add(new StoredField("id", "1"));
+        writer.AddDocument(doc);
+        writer.Commit();
+
+        using var searcher = new IndexSearcher(dir);
+        var query = new BooleanQuery();
+
+        var alternatives = new BooleanQuery();
+        alternatives.Add(new TermQuery("title", "look"), Occur.Should);
+        alternatives.Add(new TermQuery("title", "looks"), Occur.Should);
+        alternatives.Add(new TermQuery("title", "looked"), Occur.Should);
+        query.Add(alternatives, Occur.Must);
+
+        query.Add(new TermQuery("title", "after"), Occur.Must);
+
+        var results = searcher.Search(query, 10);
+
+        Assert.Equal(1, results.TotalHits);
+        var stored = searcher.GetStoredFields(results.ScoreDocs[0].DocId);
+        Assert.Equal("1", stored["id"][0]);
+    }
+
+    [Fact]
     public void DeletedDocs_ExcludedFromStreamingResults()
     {
         var dir = new MMapDirectory(SubDir("bool_stream_deleted"));

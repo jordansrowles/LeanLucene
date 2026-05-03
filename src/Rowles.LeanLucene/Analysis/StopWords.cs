@@ -5,8 +5,20 @@
 /// </summary>
 public static class StopWords
 {
-    /// <summary>Gets the built-in English stop word list.</summary>
+    /// <summary>
+    /// Gets the classic 33-word English stop word list, equivalent to Lucene's
+    /// <c>StopAnalyzer.ENGLISH_STOP_WORDS_SET</c>. This is the default used by
+    /// <see cref="Analysis.Analysers.StandardAnalyser"/>.
+    /// </summary>
     public static readonly IReadOnlyList<string> English = StopWordFilter.DefaultStopWords;
+
+    /// <summary>
+    /// Gets the extended English stop word list (~95 words) which covers prepositions,
+    /// pronouns, modals, adverbs, and negation fragments in addition to the classic set.
+    /// Pass this to <c>IndexWriterConfig.StopWords</c> to opt in to more
+    /// aggressive stop word removal.
+    /// </summary>
+    public static readonly IReadOnlyList<string> EnglishExtended = StopWordFilter.ExtendedStopWords;
 
     /// <summary>Gets the built-in French stop word list.</summary>
     public static readonly IReadOnlyList<string> French =

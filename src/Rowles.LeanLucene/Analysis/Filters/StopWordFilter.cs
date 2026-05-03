@@ -8,8 +8,34 @@ namespace Rowles.LeanLucene.Analysis.Filters;
 /// </summary>
 public sealed class StopWordFilter : ITokenFilter
 {
-    /// <summary>Built-in English stop word list.</summary>
+    /// <summary>
+    /// The classic 33-word English stop word list used by Lucene's <c>StandardAnalyzer</c>
+    /// (equivalent to <c>StopAnalyzer.ENGLISH_STOP_WORDS_SET</c> in Lucene 4.x).
+    /// This is the default list used by <c>StandardAnalyser</c> and
+    /// aligns with Lucene.NET behaviour for maximum compatibility.
+    /// </summary>
     public static readonly IReadOnlyList<string> DefaultStopWords =
+    [
+        "a", "an", "and", "are", "as", "at",
+        "be", "but", "by",
+        "for",
+        "if", "in", "into", "is", "it",
+        "no", "not",
+        "of", "on", "or",
+        "such",
+        "that", "the", "their", "then", "there", "these", "they", "this", "to",
+        "was", "will", "with"
+    ];
+
+    /// <summary>
+    /// An extended English stop word list that removes a broader range of function words,
+    /// prepositions, pronouns, modal verbs, and adverbs. This list is more aggressive than
+    /// <see cref="DefaultStopWords"/> and will suppress indexing of terms such as
+    /// <c>after</c>, <c>before</c>, <c>could</c>, <c>how</c>, <c>when</c>, etc.
+    /// Use only when reduced index size matters more than full-text compatibility.
+    /// Pass this to <c>IndexWriterConfig.StopWords</c> to opt in.
+    /// </summary>
+    public static readonly IReadOnlyList<string> ExtendedStopWords =
     [
         // Articles & determiners
         "a", "an", "another", "any", "each", "either",
