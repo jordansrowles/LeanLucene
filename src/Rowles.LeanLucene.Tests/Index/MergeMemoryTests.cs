@@ -75,19 +75,18 @@ public sealed class MergeMemoryTests : IClassFixture<TestDirectoryFixture>
         GC.Collect();
         GC.WaitForPendingFinalizers();
         GC.Collect();
-        long allocBefore = GC.GetTotalAllocatedBytes(precise: true);
+        long allocBefore = GC.GetAllocatedBytesForCurrentThread();
 
         merger.MaybeMerge(sourceSegments, ref nextOrdinal);
 
-        long allocAfter = GC.GetTotalAllocatedBytes(precise: true);
+        long allocAfter = GC.GetAllocatedBytesForCurrentThread();
         long delta = allocAfter - allocBefore;
         long totalDocs = (long)segmentCount * docsPerSegment;
         long perDoc = delta / totalDocs;
 
         // Streaming merge: cumulative per-doc allocation stays small because working
-        // buffers (block decoders, ArrayPool rentals) are reused. The old buffer-
-        // everything path retained the full term/postings dictionary and per-doc
-        // payload lists in RAM, so per-doc allocation scaled with total corpus size.
+        // buffers (block decoders, ArrayPool rentals) are reused. Use the current
+        // thread counter so parallel test allocations do not contaminate the guard.
         Assert.True(perDoc < 32_000,
             $"Merge allocated {delta:N0} bytes ({perDoc:N0}/doc) over {totalDocs} docs and {totalSourceBytes:N0} source bytes. Streaming regression?");
     }
