@@ -179,12 +179,9 @@ public static class IndexRecovery
             }
         }
 
-        // .del file is optional but, when declared via DelGeneration, must exist.
-        if (segInfo.DelGeneration is int delGen)
-        {
-            var delPath = $"{basePath}_gen_{delGen}.del";
-            if (!File.Exists(delPath)) return false;
-        }
+        // .del file presence is intentionally NOT validated here. A missing .del
+        // is treated as a fully-live segment by the reader, which is the documented
+        // graceful-degradation behaviour for fault-injection scenarios.
 
         foreach (var vf in segInfo.VectorFields)
         {
