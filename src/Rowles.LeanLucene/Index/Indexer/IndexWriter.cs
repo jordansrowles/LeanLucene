@@ -678,10 +678,10 @@ public sealed partial class IndexWriter : IDisposable
 
             var seg = SegmentInfo.ReadFrom(segPath);
 
-            // LiveDocCount has an internal setter that System.Text.Json does not
-            // populate during reflection-based deserialisation. Always derive it
-            // from the live-docs file on startup so the in-memory value is correct.
-            var delPath = Path.Combine(_directory.DirectoryPath, segId + ".del");
+            var basePath = Path.Combine(_directory.DirectoryPath, segId);
+            var delPath = seg.DelGeneration.HasValue
+                ? basePath + $"_gen_{seg.DelGeneration.Value}.del"
+                : basePath + ".del";
             if (File.Exists(delPath))
             {
                 var liveDocs = LiveDocs.Deserialise(delPath, seg.DocCount);

@@ -91,6 +91,31 @@ public sealed class FaultInjectionTests : IDisposable
         Assert.Equal(2, searcher.Stats.LiveDocCount);
     }
 
+    [Fact]
+    public void WriterReopen_AfterVersionedDeleteCommit_PreservesLiveDocCount()
+    {
+        string path = SubDir("del-writer-reopen-live-count");
+        using (var writer = new IndexWriter(new MMapDirectory(path), new IndexWriterConfig()))
+        {
+            writer.AddDocument(MakeDoc("alpha"));
+            writer.AddDocument(MakeDoc("beta"));
+            writer.AddDocument(MakeDoc("gamma"));
+            writer.Commit();
+
+            writer.DeleteDocuments(new TermQuery("body", "beta"));
+            writer.Commit();
+        }
+
+        using (var writer = new IndexWriter(new MMapDirectory(path), new IndexWriterConfig()))
+        {
+            writer.Commit();
+        }
+
+        using var searcher = new IndexSearcher(new MMapDirectory(path));
+        Assert.Equal(2, searcher.Stats.LiveDocCount);
+        Assert.Equal(0, searcher.Search(new TermQuery("body", "beta"), 10).TotalHits);
+    }
+
     // ---- crash window: .del present but .seg referencing stale del generation ----
 
     /// <summary>
