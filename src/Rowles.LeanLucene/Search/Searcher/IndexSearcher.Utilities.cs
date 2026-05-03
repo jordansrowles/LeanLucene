@@ -304,9 +304,9 @@ public sealed partial class IndexSearcher
 
     private TopDocs SearchAllMatches(Query query, int minimumCapacity)
     {
-        if (_totalDocCount == 0)
+        if (_totalDocCount == 0 || minimumCapacity <= 0)
             return TopDocs.Empty;
-        int capacity = Math.Max(_totalDocCount, minimumCapacity);
+        int capacity = Math.Min(_totalDocCount, minimumCapacity);
         return SearchCore(query, capacity);
     }
 
