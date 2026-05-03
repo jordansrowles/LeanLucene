@@ -280,8 +280,8 @@ public sealed partial class IndexSearcher
     private void ExecuteConstantScoreQuery(ConstantScoreQuery query, SegmentReader reader,
         Dictionary<(string Field, string Term), int> globalDFs, ref TopNCollector collector)
     {
-        // Execute the inner query into a temporary collector, then replace scores
-        var innerCollector = new TopNCollector(10000);
+        // Execute the inner query into a temporary collector, then replace scores.
+        var innerCollector = new TopNCollector(Math.Max(reader.MaxDoc, 1));
         ExecuteQuery(query.Inner, reader, globalDFs, ref innerCollector);
 
         float constantScore = query.ConstantScore;
@@ -301,7 +301,7 @@ public sealed partial class IndexSearcher
 
         foreach (var disjunct in query.Disjuncts)
         {
-            var subCollector = new TopNCollector(10000);
+            var subCollector = new TopNCollector(Math.Max(reader.MaxDoc, 1));
             ExecuteQuery(disjunct, reader, globalDFs, ref subCollector);
 
             foreach (var sd in subCollector.ToTopDocs().ScoreDocs)
@@ -504,8 +504,8 @@ public sealed partial class IndexSearcher
     private void ExecuteFunctionScoreQuery(FunctionScoreQuery query, SegmentReader reader,
         Dictionary<(string Field, string Term), int> globalDFs, ref TopNCollector collector)
     {
-        // Execute inner query into temporary collector
-        var innerCollector = new TopNCollector(10000);
+        // Execute inner query into temporary collector.
+        var innerCollector = new TopNCollector(Math.Max(reader.MaxDoc, 1));
         ExecuteQuery(query.Inner, reader, globalDFs, ref innerCollector);
         var innerDocs = innerCollector.ToTopDocs();
 

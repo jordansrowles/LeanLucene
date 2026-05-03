@@ -34,6 +34,8 @@ public sealed class QueryParser
         var tokens = Tokenize(queryString);
         int pos = 0;
         var query = ParseExpression(tokens, ref pos);
+        if (pos < tokens.Count)
+            throw new QueryParseException($"Unexpected token '{tokens[pos].Value}' at position {pos}.");
         return query;
     }
 
@@ -58,7 +60,8 @@ public sealed class QueryParser
                 pos++;
             }
 
-            if (pos >= tokens.Count) break;
+            if (pos >= tokens.Count)
+                throw new QueryParseException("A required or prohibited operator must be followed by a query clause.");
 
             var subQuery = ParseClause(tokens, ref pos);
             if (subQuery is not null)
@@ -85,6 +88,8 @@ public sealed class QueryParser
             var inner = ParseExpression(tokens, ref pos);
             if (pos < tokens.Count && tokens[pos].Type == QTokenType.RParen)
                 pos++; // consume ')'
+            else
+                throw new QueryParseException("Unmatched opening parenthesis.");
             return ApplyBoost(inner, tokens, ref pos);
         }
 
@@ -130,12 +135,12 @@ public sealed class QueryParser
                     }
                     else
                     {
-                        return null;
+                        throw new QueryParseException($"Field '{field}' must be followed by a term or phrase.");
                     }
                 }
                 else
                 {
-                    return null;
+                    throw new QueryParseException($"Field '{field}' must be followed by a term or phrase.");
                 }
             }
 
@@ -176,8 +181,7 @@ public sealed class QueryParser
             return ApplyBoost(tq, tokens, ref pos);
         }
 
-        pos++; // skip unrecognised
-        return null;
+        throw new QueryParseException($"Unexpected token '{tokens[pos].Value}' at position {pos}.");
     }
 
     private PhraseQuery BuildPhraseQuery(string field, string phraseText)
@@ -251,8 +255,10 @@ public sealed class QueryParser
                 int start = i;
                 while (i < input.Length && input[i] != '"')
                     i++;
+                if (i >= input.Length)
+                    throw new QueryParseException("Unmatched quote in query string.");
                 tokens.Add(new QToken(QTokenType.Phrase, input[start..i]));
-                if (i < input.Length) i++; // skip closing quote
+                i++; // skip closing quote
                 continue;
             }
 
@@ -275,4 +281,14 @@ public sealed class QueryParser
     private enum QTokenType { Term, Phrase, Plus, Minus, LParen, RParen, Colon, Tilde, Caret }
 
     private readonly record struct QToken(QTokenType Type, string Value);
+}
+
+/// <summary>Exception thrown when a query string cannot be parsed.</summary>
+public sealed class QueryParseException : FormatException
+{
+    /// <summary>Initialises a new <see cref="QueryParseException"/> with the supplied message.</summary>
+    /// <param name="message">Description of the parse error.</param>
+    public QueryParseException(string message) : base(message)
+    {
+    }
 }

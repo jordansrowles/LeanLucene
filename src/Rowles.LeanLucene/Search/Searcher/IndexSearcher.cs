@@ -502,7 +502,8 @@ public sealed partial class IndexSearcher : IDisposable
                 using var pe = reader.GetPostingsEnum(qt);
                 while (pe.MoveNext())
                 {
-                    int parentLocal = pbs.NextParent(pe.DocId);
+                    if (pbs.IsParent(pe.DocId)) continue;
+                    int parentLocal = pbs.NextParent(pe.DocId + 1);
                     if (parentLocal >= 0 && parentLocal != lastParent)
                     {
                         lastParent = parentLocal;
@@ -520,7 +521,8 @@ public sealed partial class IndexSearcher : IDisposable
                 for (int docId = 0; docId < reader.MaxDoc; docId++)
                 {
                     if (!childBits[docId]) continue;
-                    int parentLocal = pbs.NextParent(docId);
+                    if (pbs.IsParent(docId)) continue;
+                    int parentLocal = pbs.NextParent(docId + 1);
                     if (parentLocal >= 0 && parentLocal != lastParent)
                     {
                         lastParent = parentLocal;

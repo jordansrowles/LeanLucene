@@ -92,18 +92,30 @@ internal static class DirectoryFsync
         if (string.IsNullOrEmpty(filePath)) return;
         if (strict)
         {
-            using var fs = new FileStream(filePath, FileMode.Open, FileAccess.Write, FileShare.ReadWrite);
-            fs.Flush(flushToDisk: true);
+            SyncFileCore(filePath);
             return;
         }
         try
         {
-            using var fs = new FileStream(filePath, FileMode.Open, FileAccess.Write, FileShare.ReadWrite);
-            fs.Flush(flushToDisk: true);
+            SyncFileCore(filePath);
         }
         catch (FileNotFoundException) { }
         catch (DirectoryNotFoundException) { }
         catch (UnauthorizedAccessException) { }
         catch (IOException) { }
+    }
+
+    private static void SyncFileCore(string filePath)
+    {
+        try
+        {
+            using var fs = new FileStream(filePath, FileMode.Open, FileAccess.Write, FileShare.ReadWrite | FileShare.Delete);
+            fs.Flush(flushToDisk: true);
+        }
+        catch (IOException) when (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+        {
+            using var fs = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+            fs.Flush(flushToDisk: true);
+        }
     }
 }

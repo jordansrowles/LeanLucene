@@ -198,11 +198,14 @@ public sealed partial class IndexSearcher
         Query query, int topN, params string[] facetFields)
     {
         var results = Search(query, topN);
+        var matches = SearchAllMatches(query, results.TotalHits);
         var facetsCollector = new FacetsCollector();
+        var seenDocs = new HashSet<int>();
 
-        foreach (var sd in results.ScoreDocs)
+        foreach (var sd in matches.ScoreDocs)
         {
             int globalDocId = sd.DocId;
+            if (!seenDocs.Add(globalDocId)) continue;
             int readerIndex = ResolveReaderIndex(globalDocId);
             var reader = _readers[readerIndex];
             int localDocId = globalDocId - _docBases[readerIndex];
@@ -240,9 +243,11 @@ public sealed partial class IndexSearcher
         if (aggregations.Length == 0 || results.TotalHits == 0)
             return (results, []);
 
-        var matchingDocIds = new int[results.ScoreDocs.Length];
-        for (int i = 0; i < results.ScoreDocs.Length; i++)
-            matchingDocIds[i] = results.ScoreDocs[i].DocId;
+        var matches = SearchAllMatches(query, results.TotalHits);
+        var seenDocs = new HashSet<int>();
+        foreach (var scoreDoc in matches.ScoreDocs)
+            seenDocs.Add(scoreDoc.DocId);
+        var matchingDocIds = seenDocs.ToArray();
 
         var aggs = NumericAggregator.Aggregate(
             matchingDocIds, aggregations, _readers, _docBases, _totalDocCount);
@@ -258,8 +263,8 @@ public sealed partial class IndexSearcher
     /// </summary>
     public TopDocs SearchWithCollapse(Query query, int topN, CollapseField collapse)
     {
-        // Over-fetch to have enough candidates after collapsing
-        var allResults = Search(query, topN * 10);
+        var topResults = Search(query, topN);
+        var allResults = SearchAllMatches(query, topResults.TotalHits);
         if (allResults.TotalHits == 0)
             return allResults;
 
@@ -295,6 +300,14 @@ public sealed partial class IndexSearcher
             .ToArray();
 
         return new TopDocs(bestPerGroup.Count, collapsed);
+    }
+
+    private TopDocs SearchAllMatches(Query query, int minimumCapacity)
+    {
+        if (_totalDocCount == 0)
+            return TopDocs.Empty;
+        int capacity = Math.Max(_totalDocCount, minimumCapacity);
+        return SearchCore(query, capacity);
     }
 
     private int ResolveReaderIndex(int globalDocId)

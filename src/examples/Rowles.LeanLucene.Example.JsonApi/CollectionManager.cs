@@ -1,6 +1,7 @@
 using Rowles.LeanLucene.Index.Indexer;
 using Rowles.LeanLucene.Search.Searcher;
 using Rowles.LeanLucene.Store;
+using Microsoft.Extensions.Logging;
 
 namespace Rowles.LeanLucene.Example.JsonApi;
 
@@ -11,49 +12,59 @@ namespace Rowles.LeanLucene.Example.JsonApi;
 /// </summary>
 public sealed class CollectionManager : IDisposable
 {
-    private sealed class CollectionState(IndexWriter writer, MMapDirectory dir) : IDisposable
+    private sealed class CollectionState(IndexWriter writer, MMapDirectory dir, SearcherManager searcherManager) : IDisposable
     {
         public readonly IndexWriter Writer = writer;
         public readonly MMapDirectory Dir = dir;
-        private IndexSearcher? _searcher;
-        private volatile bool _needsRefresh = true;
-
-        public IndexSearcher GetOrRefreshSearcher()
-        {
-            if (_needsRefresh || _searcher is null)
-            {
-                _searcher?.Dispose();
-                _searcher = new IndexSearcher(Dir);
-                _needsRefresh = false;
-            }
-            return _searcher;
-        }
-
-        public void InvalidateSearcher() => _needsRefresh = true;
+        public readonly SearcherManager SearcherManager = searcherManager;
 
         public void Dispose()
         {
-            _searcher?.Dispose();
+            SearcherManager.Dispose();
             Writer.Dispose();
             // MMapDirectory is not IDisposable; handles its own cleanup
         }
     }
 
     private readonly string _rootPath;
+    private readonly ILogger<CollectionManager>? _logger;
     private readonly Dictionary<string, CollectionState> _collections = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, Exception> _corruptCollections = new(StringComparer.Ordinal);
     private readonly Lock _lock = new();
 
-    public CollectionManager(string rootPath)
+    public CollectionManager(string rootPath, ILogger<CollectionManager>? logger = null)
     {
-        _rootPath = rootPath;
+        _rootPath = Path.GetFullPath(rootPath);
+        _logger = logger;
         Directory.CreateDirectory(rootPath);
 
         // Re-open any previously persisted collections
         foreach (var dir in Directory.EnumerateDirectories(rootPath))
         {
             string name = Path.GetFileName(dir);
+            if (!IsValidCollectionName(name))
+            {
+                var ex = new InvalidDataException($"Collection directory '{dir}' has an invalid name.");
+                _corruptCollections[name] = ex;
+                _logger?.LogWarning(ex, "Skipping invalid collection directory {CollectionPath}", dir);
+                continue;
+            }
+
             try { OpenOrCreate(name); }
-            catch { /* skip corrupt collection on startup */ }
+            catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException)
+            {
+                _corruptCollections[name] = ex;
+                _logger?.LogWarning(ex, "Skipping corrupt collection {CollectionName} at {CollectionPath}", name, dir);
+            }
+        }
+    }
+
+    public IReadOnlyDictionary<string, Exception> CorruptCollections
+    {
+        get
+        {
+            lock (_lock)
+                return new Dictionary<string, Exception>(_corruptCollections, StringComparer.Ordinal);
         }
     }
 
@@ -63,7 +74,11 @@ public sealed class CollectionManager : IDisposable
         lock (_lock)
         {
             result = _collections
-                .Select(kv => (kv.Key, kv.Value.GetOrRefreshSearcher().Stats.LiveDocCount))
+                .Select(kv =>
+                {
+                    using var lease = kv.Value.SearcherManager.AcquireLease();
+                    return (kv.Key, lease.Searcher.Stats.LiveDocCount);
+                })
                 .ToList();
         }
         return result;
@@ -74,9 +89,9 @@ public sealed class CollectionManager : IDisposable
         lock (_lock) { return OpenOrCreate(name).Writer; }
     }
 
-    public IndexSearcher GetSearcher(string name)
+    public SearcherLease AcquireSearcher(string name)
     {
-        lock (_lock) { return OpenOrCreate(name).GetOrRefreshSearcher(); }
+        lock (_lock) { return OpenOrCreate(name).SearcherManager.AcquireLease(); }
     }
 
     public bool DropCollection(string name)
@@ -90,7 +105,7 @@ public sealed class CollectionManager : IDisposable
             _collections.Remove(name);
             string colPath = CollectionPath(name);
             if (Directory.Exists(colPath))
-                Directory.Delete(colPath, recursive: true);
+                DeleteDirectorySafely(colPath);
             return true;
         }
     }
@@ -105,11 +120,12 @@ public sealed class CollectionManager : IDisposable
         CollectionState state;
         lock (_lock) { state = OpenOrCreate(name); }
         state.Writer.Commit();
-        state.InvalidateSearcher();
+        state.SearcherManager.MaybeRefresh();
     }
 
     private CollectionState OpenOrCreate(string name)
     {
+        ValidateCollectionName(name);
         if (_collections.TryGetValue(name, out var existing))
             return existing;
 
@@ -117,12 +133,70 @@ public sealed class CollectionManager : IDisposable
         Directory.CreateDirectory(path);
         var dir = new MMapDirectory(path);
         var writer = new IndexWriter(dir, new IndexWriterConfig());
-        var state = new CollectionState(writer, dir);
+        var searcherManager = new SearcherManager(dir);
+        var state = new CollectionState(writer, dir, searcherManager);
         _collections[name] = state;
         return state;
     }
 
-    private string CollectionPath(string name) => Path.Combine(_rootPath, name);
+    private string CollectionPath(string name)
+    {
+        ValidateCollectionName(name);
+        string path = Path.GetFullPath(Path.Combine(_rootPath, name));
+        string root = _rootPath.EndsWith(Path.DirectorySeparatorChar)
+            ? _rootPath
+            : _rootPath + Path.DirectorySeparatorChar;
+        if (!path.StartsWith(root, StringComparison.Ordinal))
+            throw new ArgumentException("Collection name escapes the configured data directory.", nameof(name));
+        return path;
+    }
+
+    public static bool IsValidCollectionName(string name)
+    {
+        if (string.IsNullOrWhiteSpace(name)) return false;
+        if (name is "." or "..") return false;
+        foreach (char c in name)
+        {
+            if (char.IsAsciiLetterOrDigit(c) || c is '_' or '-')
+                continue;
+            return false;
+        }
+        return true;
+    }
+
+    private static void ValidateCollectionName(string name)
+    {
+        if (!IsValidCollectionName(name))
+            throw new ArgumentException("Collection names may contain only ASCII letters, digits, underscores, and hyphens.", nameof(name));
+    }
+
+    private static void DeleteDirectorySafely(string path)
+    {
+        var attrs = File.GetAttributes(path);
+        if ((attrs & FileAttributes.ReparsePoint) != 0)
+            throw new IOException($"Refusing to delete reparse point '{path}'.");
+
+        foreach (var entry in Directory.EnumerateFileSystemEntries(path))
+        {
+            var entryAttrs = File.GetAttributes(entry);
+            if ((entryAttrs & FileAttributes.ReparsePoint) != 0)
+                throw new IOException($"Refusing to delete reparse point '{entry}'.");
+
+            if ((entryAttrs & FileAttributes.Directory) != 0)
+            {
+                DeleteDirectorySafely(entry);
+            }
+            else
+            {
+                if ((entryAttrs & FileAttributes.ReadOnly) != 0)
+                    File.SetAttributes(entry, entryAttrs & ~FileAttributes.ReadOnly);
+                File.Delete(entry);
+            }
+        }
+
+        File.SetAttributes(path, attrs & ~FileAttributes.ReadOnly);
+        Directory.Delete(path);
+    }
 
     public void Dispose()
     {
