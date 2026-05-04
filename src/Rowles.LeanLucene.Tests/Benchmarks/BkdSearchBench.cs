@@ -26,7 +26,10 @@ public sealed class BkdSearchBench : IClassFixture<TestDirectoryFixture>
         _output = output;
     }
 
-    [Fact(Skip = "benchmark")]
+    /// <summary>
+    /// Verifies the Numeric Range: Versus Linear Scan scenario.
+    /// </summary>
+    [Fact(DisplayName = "Numeric Range: Versus Linear Scan", Skip = "benchmark")]
     public void NumericRange_Versus_LinearScan()
     {
         const int docCount = 1_000_000;

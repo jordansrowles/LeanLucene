@@ -45,7 +45,10 @@ public sealed class Stage2IndexTests : IClassFixture<TestDirectoryFixture>
 
     // ── S2-2: Index Deletion Policy ─────────────────────────────────────────
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Keep Latest Commit Policy: Prunes Old Commit Files scenario.
+    /// </summary>
+    [Fact(DisplayName = "Keep Latest Commit Policy: Prunes Old Commit Files")]
     public void KeepLatestCommitPolicy_PrunesOldCommitFiles()
     {
         var dir = new MMapDirectory(SubDir("del_policy_latest"));
@@ -67,7 +70,10 @@ public sealed class Stage2IndexTests : IClassFixture<TestDirectoryFixture>
         Assert.Single(commitFiles);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Keep Last N Commits Policy: Keeps Specified Count scenario.
+    /// </summary>
+    [Fact(DisplayName = "Keep Last N Commits Policy: Keeps Specified Count")]
     public void KeepLastNCommitsPolicy_KeepsSpecifiedCount()
     {
         var dir = new MMapDirectory(SubDir("del_policy_n"));
@@ -90,7 +96,10 @@ public sealed class Stage2IndexTests : IClassFixture<TestDirectoryFixture>
 
     // ── S2-1: Background Merge ──────────────────────────────────────────────
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Background Merge: Commit Returns Immediately Merge Runs In Background scenario.
+    /// </summary>
+    [Fact(DisplayName = "Background Merge: Commit Returns Immediately Merge Runs In Background")]
     public void BackgroundMerge_CommitReturnsImmediately_MergeRunsInBackground()
     {
         var dir = new MMapDirectory(SubDir("bg_merge"));
@@ -118,7 +127,10 @@ public sealed class Stage2IndexTests : IClassFixture<TestDirectoryFixture>
 
     // ── S2-7: BKD Tree ──────────────────────────────────────────────────────
 
-    [Fact]
+    /// <summary>
+    /// Verifies the BKD Tree: Write And Read Range Query scenario.
+    /// </summary>
+    [Fact(DisplayName = "BKD Tree: Write And Read Range Query")]
     public void BKDTree_WriteAndRead_RangeQuery()
     {
         var path = Path.Combine(SubDir("bkd_rw"), "test.bkd");
@@ -135,7 +147,10 @@ public sealed class Stage2IndexTests : IClassFixture<TestDirectoryFixture>
         Assert.Contains(results, r => r.DocId == 2);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the BKD Tree: Empty Range Returns No Results scenario.
+    /// </summary>
+    [Fact(DisplayName = "BKD Tree: Empty Range Returns No Results")]
     public void BKDTree_EmptyRange_ReturnsNoResults()
     {
         var path = Path.Combine(SubDir("bkd_empty"), "test.bkd");
@@ -150,7 +165,10 @@ public sealed class Stage2IndexTests : IClassFixture<TestDirectoryFixture>
         Assert.Empty(results);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the BKD Tree: Missing Field Returns Empty scenario.
+    /// </summary>
+    [Fact(DisplayName = "BKD Tree: Missing Field Returns Empty")]
     public void BKDTree_MissingField_ReturnsEmpty()
     {
         var path = Path.Combine(SubDir("bkd_missing"), "test.bkd");
@@ -167,7 +185,10 @@ public sealed class Stage2IndexTests : IClassFixture<TestDirectoryFixture>
 
     // ── S2-8: Term Vectors ──────────────────────────────────────────────────
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Term Vectors: Write And Read Round Trips scenario.
+    /// </summary>
+    [Fact(DisplayName = "Term Vectors: Write And Read Round Trips")]
     public void TermVectors_WriteAndRead_RoundTrips()
     {
         var sub = SubDir("tv_rw");
@@ -199,7 +220,10 @@ public sealed class Stage2IndexTests : IClassFixture<TestDirectoryFixture>
         Assert.Equal("foo", tv1["body"][0].Term);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Term Vectors: Get Term Vector By Field Returns Correct Field scenario.
+    /// </summary>
+    [Fact(DisplayName = "Term Vectors: Get Term Vector By Field Returns Correct Field")]
     public void TermVectors_GetTermVectorByField_ReturnsCorrectField()
     {
         var sub = SubDir("tv_field");
@@ -228,7 +252,10 @@ public sealed class Stage2IndexTests : IClassFixture<TestDirectoryFixture>
         Assert.Equal("content", bodyTV![0].Term);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Term Vectors: Integration With Index Writer scenario.
+    /// </summary>
+    [Fact(DisplayName = "Term Vectors: Integration With Index Writer")]
     public void TermVectors_IntegrationWithIndexWriter()
     {
         var dir = new MMapDirectory(SubDir("tv_integration"));
@@ -249,7 +276,10 @@ public sealed class Stage2IndexTests : IClassFixture<TestDirectoryFixture>
 
     // Compound files were removed because the old implementation packed files
     // and then extracted them back to disc on read, doubling storage.
-    [Fact]
+    /// <summary>
+    /// Verifies the Compound File Feature: Is Removed scenario.
+    /// </summary>
+    [Fact(DisplayName = "Compound File Feature: Is Removed")]
     public void CompoundFileFeature_IsRemoved()
     {
         var dir = new MMapDirectory(SubDir("cfs_removed"));
@@ -269,7 +299,10 @@ public sealed class Stage2IndexTests : IClassFixture<TestDirectoryFixture>
 
     // ── S2-9: Payload Support (data model) ──────────────────────────────────
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Posting Accumulator: Add With Payload Stores Payloads scenario.
+    /// </summary>
+    [Fact(DisplayName = "Posting Accumulator: Add With Payload Stores Payloads")]
     public void PostingAccumulator_AddWithPayload_StoresPayloads()
     {
         var acc = new PostingAccumulator();
@@ -283,7 +316,10 @@ public sealed class Stage2IndexTests : IClassFixture<TestDirectoryFixture>
         Assert.Null(acc.GetPayload(1, 0));
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Posting Accumulator: Without Payloads Has Payloads Is False scenario.
+    /// </summary>
+    [Fact(DisplayName = "Posting Accumulator: Without Payloads Has Payloads Is False")]
     public void PostingAccumulator_WithoutPayloads_HasPayloadsIsFalse()
     {
         var acc = new PostingAccumulator();
@@ -294,7 +330,10 @@ public sealed class Stage2IndexTests : IClassFixture<TestDirectoryFixture>
         Assert.Null(acc.GetPayload(0, 0));
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Postings Enum: Get Payload Returns Empty For Now scenario.
+    /// </summary>
+    [Fact(DisplayName = "Postings Enum: Get Payload Returns Empty For Now")]
     public void PostingsEnum_GetPayload_ReturnsEmptyForNow()
     {
         // PostingsEnum.GetPayload is a stub until the binary format is extended
@@ -313,14 +352,20 @@ public sealed class Stage2IndexTests : IClassFixture<TestDirectoryFixture>
 
     // ── S2-3: Pluggable Similarity via Config ───────────────────────────────
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Index Writer Config: Default Similarity Is BM25 scenario.
+    /// </summary>
+    [Fact(DisplayName = "Index Writer Config: Default Similarity Is BM25")]
     public void IndexWriterConfig_DefaultSimilarity_IsBm25()
     {
         var config = new IndexWriterConfig();
         Assert.IsType<Bm25Similarity>(config.Similarity);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Index Writer Config: Custom Similarity Is Retained scenario.
+    /// </summary>
+    [Fact(DisplayName = "Index Writer Config: Custom Similarity Is Retained")]
     public void IndexWriterConfig_CustomSimilarity_IsRetained()
     {
         var config = new IndexWriterConfig { Similarity = TfIdfSimilarity.Instance };

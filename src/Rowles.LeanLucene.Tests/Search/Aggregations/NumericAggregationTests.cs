@@ -4,6 +4,9 @@ using Rowles.LeanLucene.Store;
 
 namespace Rowles.LeanLucene.Tests.Search.Aggregations;
 
+/// <summary>
+/// Contains unit tests for Numeric Aggregation.
+/// </summary>
 public class NumericAggregationTests : IDisposable
 {
     private readonly string _dir;
@@ -36,7 +39,10 @@ public class NumericAggregationTests : IDisposable
         writer.Commit();
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Stats: Computes Correctly scenario.
+    /// </summary>
+    [Fact(DisplayName = "Stats: Computes Correctly")]
     public void Stats_ComputesCorrectly()
     {
         IndexProducts();
@@ -59,7 +65,10 @@ public class NumericAggregationTests : IDisposable
         Assert.True(stats.Avg > 0);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Stats: Multiple Aggregations scenario.
+    /// </summary>
+    [Fact(DisplayName = "Stats: Multiple Aggregations")]
     public void Stats_MultipleAggregations()
     {
         IndexProducts();
@@ -75,7 +84,10 @@ public class NumericAggregationTests : IDisposable
         Assert.Equal("rating_stats", aggs[1].Name);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Histogram: Creates Buckets scenario.
+    /// </summary>
+    [Fact(DisplayName = "Histogram: Creates Buckets")]
     public void Histogram_CreatesBuckets()
     {
         IndexProducts();
@@ -100,7 +112,10 @@ public class NumericAggregationTests : IDisposable
         Assert.Equal(hist.Count, bucketSum);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the No Aggregations: Returns Empty Array scenario.
+    /// </summary>
+    [Fact(DisplayName = "No Aggregations: Returns Empty Array")]
     public void NoAggregations_ReturnsEmptyArray()
     {
         IndexProducts();
@@ -113,7 +128,10 @@ public class NumericAggregationTests : IDisposable
         Assert.Empty(aggs);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the No Matches: Returns Empty Aggregations scenario.
+    /// </summary>
+    [Fact(DisplayName = "No Matches: Returns Empty Aggregations")]
     public void NoMatches_ReturnsEmptyAggregations()
     {
         IndexProducts();
@@ -127,7 +145,10 @@ public class NumericAggregationTests : IDisposable
         Assert.Empty(aggs);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Missing Field: Returns Zero Counts scenario.
+    /// </summary>
+    [Fact(DisplayName = "Missing Field: Returns Zero Counts")]
     public void MissingField_ReturnsZeroCounts()
     {
         IndexProducts();
@@ -141,7 +162,10 @@ public class NumericAggregationTests : IDisposable
         Assert.Equal(0, aggs[0].Count);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Rating Stats: Avg Is Correct scenario.
+    /// </summary>
+    [Fact(DisplayName = "Rating Stats: Avg Is Correct")]
     public void RatingStats_AvgIsCorrect()
     {
         IndexProducts();

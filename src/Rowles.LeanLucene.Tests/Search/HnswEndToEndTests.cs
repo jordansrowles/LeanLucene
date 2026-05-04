@@ -17,6 +17,9 @@ using Rowles.LeanLucene.Tests.Fixtures;
 
 namespace Rowles.LeanLucene.Tests.Search;
 
+/// <summary>
+/// Contains unit tests for HNSW End-to-end.
+/// </summary>
 [Trait("Category", "Phase2")]
 public sealed class HnswEndToEndTests : IClassFixture<TestDirectoryFixture>
 {
@@ -48,7 +51,10 @@ public sealed class HnswEndToEndTests : IClassFixture<TestDirectoryFixture>
         return vectors;
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the HNSW Search: Recall Against Flat Baseline scenario.
+    /// </summary>
+    [Fact(DisplayName = "HNSW Search: Recall Against Flat Baseline")]
     public void HnswSearch_RecallAgainstFlatBaseline()
     {
         var dir = new MMapDirectory(SubDir("hnsw_e2e_recall"));
@@ -96,7 +102,10 @@ public sealed class HnswEndToEndTests : IClassFixture<TestDirectoryFixture>
         Assert.True(recall >= 0.8, $"Recall {recall:F2} below 0.80 threshold.");
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Multiple Vector Fields: Per Doc Queried Independently scenario.
+    /// </summary>
+    [Fact(DisplayName = "Multiple Vector Fields: Per Doc Queried Independently")]
     public void MultipleVectorFields_PerDoc_QueriedIndependently()
     {
         var dir = new MMapDirectory(SubDir("hnsw_multi_field"));
@@ -136,7 +145,10 @@ public sealed class HnswEndToEndTests : IClassFixture<TestDirectoryFixture>
         Assert.Equal(1, resB.ScoreDocs[0].DocId);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the HNSW Disabled: Falls Back To Flat Scan scenario.
+    /// </summary>
+    [Fact(DisplayName = "HNSW Disabled: Falls Back To Flat Scan")]
     public void HnswDisabled_FallsBackToFlatScan()
     {
         var dir = new MMapDirectory(SubDir("hnsw_disabled"));

@@ -53,7 +53,10 @@ public sealed class FormatCompatibilityTests : IDisposable
         }
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Write Header: Then Validate Header Round Trips scenario.
+    /// </summary>
+    [Fact(DisplayName = "Write Header: Then Validate Header Round Trips")]
     public void WriteHeader_ThenValidateHeader_RoundTrips()
     {
         // Arrange
@@ -79,7 +82,10 @@ public sealed class FormatCompatibilityTests : IDisposable
         }
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Validate Header: Wrong Magic Throws Invalid Data Exception scenario.
+    /// </summary>
+    [Fact(DisplayName = "Validate Header: Wrong Magic Throws Invalid Data Exception")]
     public void ValidateHeader_WrongMagic_ThrowsInvalidDataException()
     {
         // Arrange
@@ -107,7 +113,10 @@ public sealed class FormatCompatibilityTests : IDisposable
         Assert.Contains("0xDEADBEEF", exception.Message); // Actual magic
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Validate Header: Version Too New Throws Invalid Data Exception scenario.
+    /// </summary>
+    [Fact(DisplayName = "Validate Header: Version Too New Throws Invalid Data Exception")]
     public void ValidateHeader_VersionTooNew_ThrowsInvalidDataException()
     {
         // Arrange
@@ -134,7 +143,10 @@ public sealed class FormatCompatibilityTests : IDisposable
         Assert.Contains("Please upgrade LeanLucene", exception.Message);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Validate Header: Older Version Succeeds scenario.
+    /// </summary>
+    [Fact(DisplayName = "Validate Header: Older Version Succeeds")]
     public void ValidateHeader_OlderVersion_Succeeds()
     {
         // Arrange
@@ -160,7 +172,10 @@ public sealed class FormatCompatibilityTests : IDisposable
         Assert.Equal(CodecConstants.HeaderSize, readFs.Position);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Write And Read Index: Includes Headers scenario.
+    /// </summary>
+    [Fact(DisplayName = "Write And Read Index: Includes Headers")]
     public void WriteAndReadIndex_IncludesHeaders()
     {
         // Arrange - Create a simple index with one document
@@ -223,7 +238,10 @@ public sealed class FormatCompatibilityTests : IDisposable
         }
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Magic Number: Is Correct Ascii Representation scenario.
+    /// </summary>
+    [Fact(DisplayName = "Magic Number: Is Correct Ascii Representation")]
     public void MagicNumber_IsCorrectAsciiRepresentation()
     {
         // Arrange - Magic number should be "LLN1" in ASCII
@@ -238,7 +256,10 @@ public sealed class FormatCompatibilityTests : IDisposable
         Assert.Equal(0x4C4C4E31, magic); // Hex representation
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Header Size: Matches Expected Layout scenario.
+    /// </summary>
+    [Fact(DisplayName = "Header Size: Matches Expected Layout")]
     public void HeaderSize_MatchesExpectedLayout()
     {
         // Arrange & Assert - Header is 4 bytes (magic) + 1 byte (version)
@@ -246,7 +267,10 @@ public sealed class FormatCompatibilityTests : IDisposable
         Assert.Equal(sizeof(int) + sizeof(byte), CodecConstants.HeaderSize);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the All Codec Versions: Are Defined And Positive scenario.
+    /// </summary>
+    [Fact(DisplayName = "All Codec Versions: Are Defined And Positive")]
     public void AllCodecVersions_AreDefinedAndPositive()
     {
         // Arrange & Assert - Verify all per-codec version constants exist and are valid
@@ -261,7 +285,10 @@ public sealed class FormatCompatibilityTests : IDisposable
         Assert.True(CodecConstants.BKDVersion > 0);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Write Header: With Index Output Writes Correct Bytes scenario.
+    /// </summary>
+    [Fact(DisplayName = "Write Header: With Index Output Writes Correct Bytes")]
     public void WriteHeader_WithIndexOutput_WritesCorrectBytes()
     {
         // Arrange
@@ -288,7 +315,10 @@ public sealed class FormatCompatibilityTests : IDisposable
         Assert.Equal(expectedVersion, bytes[4]);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Validate Header: With Index Input Validates Correctly scenario.
+    /// </summary>
+    [Fact(DisplayName = "Validate Header: With Index Input Validates Correctly")]
     public void ValidateHeader_WithIndexInput_ValidatesCorrectly()
     {
         // Arrange
@@ -312,7 +342,10 @@ public sealed class FormatCompatibilityTests : IDisposable
         Assert.Equal(CodecConstants.HeaderSize, input.Position);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Validate Header: With Index Input Wrong Magic Throws scenario.
+    /// </summary>
+    [Fact(DisplayName = "Validate Header: With Index Input Wrong Magic Throws")]
     public void ValidateHeader_WithIndexInput_WrongMagic_Throws()
     {
         // Arrange
@@ -335,7 +368,10 @@ public sealed class FormatCompatibilityTests : IDisposable
         Assert.Contains("Invalid TestFile file", exception.Message);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Validate Header: With Index Input Version Too New Throws scenario.
+    /// </summary>
+    [Fact(DisplayName = "Validate Header: With Index Input Version Too New Throws")]
     public void ValidateHeader_WithIndexInput_VersionTooNew_Throws()
     {
         // Arrange

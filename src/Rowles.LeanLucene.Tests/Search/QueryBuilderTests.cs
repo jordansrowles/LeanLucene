@@ -6,9 +6,15 @@ using Rowles.LeanLucene.Search.Queries;
 
 namespace Rowles.LeanLucene.Tests.Search;
 
+/// <summary>
+/// Contains unit tests for Query Builder.
+/// </summary>
 public sealed class QueryBuilderTests
 {
-    [Fact]
+    /// <summary>
+    /// Verifies the Term: Creates Term Query scenario.
+    /// </summary>
+    [Fact(DisplayName = "Term: Creates Term Query")]
     public void Term_CreatesTermQuery()
     {
         var q = QueryBuilder.Term("body", "hello");
@@ -16,7 +22,10 @@ public sealed class QueryBuilderTests
         Assert.Equal("hello", q.Term);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Phrase: Creates Phrase Query scenario.
+    /// </summary>
+    [Fact(DisplayName = "Phrase: Creates Phrase Query")]
     public void Phrase_CreatesPhraseQuery()
     {
         var q = QueryBuilder.Phrase("body", "quick", "fox");
@@ -24,7 +33,10 @@ public sealed class QueryBuilderTests
         Assert.Equal(new[] { "quick", "fox" }, q.Terms);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Bool: Builder Creates Valid Boolean Query scenario.
+    /// </summary>
+    [Fact(DisplayName = "Bool: Builder Creates Valid Boolean Query")]
     public void Bool_Builder_CreatesValidBooleanQuery()
     {
         var q = QueryBuilder.Bool(b => b
@@ -38,7 +50,10 @@ public sealed class QueryBuilderTests
         Assert.Equal(Occur.MustNot, q.Clauses[2].Occur);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the With Boost: Sets Boost And Returns Same Query scenario.
+    /// </summary>
+    [Fact(DisplayName = "With Boost: Sets Boost And Returns Same Query")]
     public void WithBoost_SetsBoostAndReturnsSameQuery()
     {
         var q = QueryBuilder.Term("body", "hello").WithBoost(2.5f);
@@ -46,7 +61,10 @@ public sealed class QueryBuilderTests
         Assert.IsType<TermQuery>(q);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the And: Combines Queries With Must scenario.
+    /// </summary>
+    [Fact(DisplayName = "And: Combines Queries With Must")]
     public void And_CombinesQueriesWithMust()
     {
         var left = QueryBuilder.Term("body", "hello");
@@ -57,7 +75,10 @@ public sealed class QueryBuilderTests
         Assert.All(combined.Clauses, c => Assert.Equal(Occur.Must, c.Occur));
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Or: Combines Queries With Should scenario.
+    /// </summary>
+    [Fact(DisplayName = "Or: Combines Queries With Should")]
     public void Or_CombinesQueriesWithShould()
     {
         var left = QueryBuilder.Term("body", "hello");
@@ -68,7 +89,10 @@ public sealed class QueryBuilderTests
         Assert.All(combined.Clauses, c => Assert.Equal(Occur.Should, c.Occur));
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Not: Creates Must And Must Not Clauses scenario.
+    /// </summary>
+    [Fact(DisplayName = "Not: Creates Must And Must Not Clauses")]
     public void Not_CreatesMustAndMustNotClauses()
     {
         var main = QueryBuilder.Term("body", "hello");
@@ -80,7 +104,10 @@ public sealed class QueryBuilderTests
         Assert.Equal(Occur.MustNot, combined.Clauses[1].Occur);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Dis Max: Combines Disjuncts scenario.
+    /// </summary>
+    [Fact(DisplayName = "Dis Max: Combines Disjuncts")]
     public void DisMax_CombinesDisjuncts()
     {
         var q = QueryBuilder.DisMax(0.1f,
@@ -91,7 +118,10 @@ public sealed class QueryBuilderTests
         Assert.Equal(0.1f, q.TieBreakerMultiplier);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Range: Creates Range Query scenario.
+    /// </summary>
+    [Fact(DisplayName = "Range: Creates Range Query")]
     public void Range_CreatesRangeQuery()
     {
         var q = QueryBuilder.Range("price", 10, 100);

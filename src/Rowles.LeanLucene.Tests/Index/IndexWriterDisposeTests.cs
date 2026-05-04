@@ -32,7 +32,7 @@ public sealed class IndexWriterDisposeTests : IClassFixture<TestDirectoryFixture
     /// calls Dispose after 100 ms. No ObjectDisposedException must escape to any producer,
     /// and the writer must be cleanly disposed afterwards.
     /// </summary>
-    [Fact]
+    [Fact(DisplayName = "Dispose: During Concurrent Add Document Lock Free No Object Disposed Race")]
     public async Task Dispose_DuringConcurrentAddDocumentLockFree_NoObjectDisposedRace()
     {
         var dir = SubDir("h12_race");
@@ -89,7 +89,10 @@ public sealed class IndexWriterDisposeTests : IClassFixture<TestDirectoryFixture
         Assert.Empty(unexpectedExceptions);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Dispose: Is Idempotent Never Throws scenario.
+    /// </summary>
+    [Fact(DisplayName = "Dispose: Is Idempotent Never Throws")]
     public void Dispose_IsIdempotent_NeverThrows()
     {
         var dir = SubDir("h12_idempotent");
@@ -99,7 +102,10 @@ public sealed class IndexWriterDisposeTests : IClassFixture<TestDirectoryFixture
         writer.Dispose();
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Add Document Lock Free: After Dispose Throws Object Disposed Exception scenario.
+    /// </summary>
+    [Fact(DisplayName = "Add Document Lock Free: After Dispose Throws Object Disposed Exception")]
     public void AddDocumentLockFree_AfterDispose_ThrowsObjectDisposedException()
     {
         var dir = SubDir("h12_after_dispose");
@@ -113,7 +119,10 @@ public sealed class IndexWriterDisposeTests : IClassFixture<TestDirectoryFixture
         Assert.Throws<ObjectDisposedException>(() => writer.AddDocumentLockFree(doc));
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Commit: After Dispose Throws Object Disposed Exception scenario.
+    /// </summary>
+    [Fact(DisplayName = "Commit: After Dispose Throws Object Disposed Exception")]
     public void Commit_AfterDispose_ThrowsObjectDisposedException()
     {
         var dir = SubDir("commit_after_dispose");
@@ -123,7 +132,10 @@ public sealed class IndexWriterDisposeTests : IClassFixture<TestDirectoryFixture
         Assert.Throws<ObjectDisposedException>(() => writer.Commit());
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Delete Documents: After Dispose Throws Object Disposed Exception scenario.
+    /// </summary>
+    [Fact(DisplayName = "Delete Documents: After Dispose Throws Object Disposed Exception")]
     public void DeleteDocuments_AfterDispose_ThrowsObjectDisposedException()
     {
         var dir = SubDir("delete_after_dispose");

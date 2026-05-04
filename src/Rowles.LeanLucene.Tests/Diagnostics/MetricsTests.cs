@@ -5,6 +5,9 @@ using Rowles.LeanLucene.Store;
 
 namespace Rowles.LeanLucene.Tests.Diagnostics;
 
+/// <summary>
+/// Contains unit tests for Metrics.
+/// </summary>
 public class MetricsTests : IDisposable
 {
     private readonly string _dir;
@@ -21,7 +24,10 @@ public class MetricsTests : IDisposable
         catch { }
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Default Metrics Collector: Records Search Latency scenario.
+    /// </summary>
+    [Fact(DisplayName = "Default Metrics Collector: Records Search Latency")]
     public void DefaultMetricsCollector_RecordsSearchLatency()
     {
         var metrics = new DefaultMetricsCollector();
@@ -35,7 +41,10 @@ public class MetricsTests : IDisposable
         Assert.Equal(20.0, snap.SearchAvgMs, 1);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Default Metrics Collector: Records Cache Hit Miss scenario.
+    /// </summary>
+    [Fact(DisplayName = "Default Metrics Collector: Records Cache Hit Miss")]
     public void DefaultMetricsCollector_RecordsCacheHitMiss()
     {
         var metrics = new DefaultMetricsCollector();
@@ -49,7 +58,10 @@ public class MetricsTests : IDisposable
         Assert.True(snap.CacheHitRate > 0.6);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Default Metrics Collector: Records Writer Ops scenario.
+    /// </summary>
+    [Fact(DisplayName = "Default Metrics Collector: Records Writer Ops")]
     public void DefaultMetricsCollector_RecordsWriterOps()
     {
         var metrics = new DefaultMetricsCollector();
@@ -65,7 +77,10 @@ public class MetricsTests : IDisposable
         Assert.Equal(1, snap.CommitCount);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Latency Histogram: Distributes Samples scenario.
+    /// </summary>
+    [Fact(DisplayName = "Latency Histogram: Distributes Samples")]
     public void LatencyHistogram_DistributesSamples()
     {
         var metrics = new DefaultMetricsCollector();
@@ -81,7 +96,10 @@ public class MetricsTests : IDisposable
         Assert.True(snap.LatencyHistogram[7] >= 1); // ≥1000ms bucket
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Null Metrics Collector: Is No-op scenario.
+    /// </summary>
+    [Fact(DisplayName = "Null Metrics Collector: Is No-op")]
     public void NullMetricsCollector_IsNoOp()
     {
         var metrics = NullMetricsCollector.Instance;
@@ -92,7 +110,10 @@ public class MetricsTests : IDisposable
         Assert.Equal(0, snap.SearchCount);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Index Searcher: Records Metrics When Configured scenario.
+    /// </summary>
+    [Fact(DisplayName = "Index Searcher: Records Metrics When Configured")]
     public void IndexSearcher_RecordsMetrics_WhenConfigured()
     {
         var metrics = new DefaultMetricsCollector();
@@ -115,7 +136,10 @@ public class MetricsTests : IDisposable
         Assert.True(snap.SearchTotalMs >= 0);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Index Writer: Records Commit Metrics scenario.
+    /// </summary>
+    [Fact(DisplayName = "Index Writer: Records Commit Metrics")]
     public void IndexWriter_RecordsCommitMetrics()
     {
         var metrics = new DefaultMetricsCollector();

@@ -11,6 +11,9 @@ using Xunit.Abstractions;
 
 namespace Rowles.LeanLucene.Tests.Search;
 
+/// <summary>
+/// Contains unit tests for Highlighter.
+/// </summary>
 [Trait("Category", "Search")]
 [Trait("Category", "Highlighter")]
 public sealed class HighlighterTests : IClassFixture<TestDirectoryFixture>
@@ -24,7 +27,10 @@ public sealed class HighlighterTests : IClassFixture<TestDirectoryFixture>
         _output = output;
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Get Best Fragment: Matching Terms Highlights Correctly scenario.
+    /// </summary>
+    [Fact(DisplayName = "Get Best Fragment: Matching Terms Highlights Correctly")]
     public void GetBestFragment_MatchingTerms_HighlightsCorrectly()
     {
         // Arrange
@@ -40,7 +46,10 @@ public sealed class HighlighterTests : IClassFixture<TestDirectoryFixture>
         Assert.Contains("<b>performance</b>", fragment);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Get Best Fragment: No Matches Returns Truncated Text scenario.
+    /// </summary>
+    [Fact(DisplayName = "Get Best Fragment: No Matches Returns Truncated Text")]
     public void GetBestFragment_NoMatches_ReturnsTruncatedText()
     {
         // Arrange
@@ -55,7 +64,10 @@ public sealed class HighlighterTests : IClassFixture<TestDirectoryFixture>
         Assert.Equal("No matching terms here.", fragment);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Get Best Fragment: Empty Text Returns Empty scenario.
+    /// </summary>
+    [Fact(DisplayName = "Get Best Fragment: Empty Text Returns Empty")]
     public void GetBestFragment_EmptyText_ReturnsEmpty()
     {
         var highlighter = new Highlighter();
@@ -65,7 +77,10 @@ public sealed class HighlighterTests : IClassFixture<TestDirectoryFixture>
         Assert.Equal(string.Empty, fragment);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Get Best Fragment: Empty Terms Returns Truncated Text scenario.
+    /// </summary>
+    [Fact(DisplayName = "Get Best Fragment: Empty Terms Returns Truncated Text")]
     public void GetBestFragment_EmptyTerms_ReturnsTruncatedText()
     {
         var highlighter = new Highlighter();
@@ -75,7 +90,10 @@ public sealed class HighlighterTests : IClassFixture<TestDirectoryFixture>
         Assert.Equal("Some text content.", fragment);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Get Best Fragment: Custom Tags Uses Provided Tags scenario.
+    /// </summary>
+    [Fact(DisplayName = "Get Best Fragment: Custom Tags Uses Provided Tags")]
     public void GetBestFragment_CustomTags_UsesProvidedTags()
     {
         // Arrange
@@ -91,7 +109,10 @@ public sealed class HighlighterTests : IClassFixture<TestDirectoryFixture>
         Assert.DoesNotContain("<b>", fragment);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Extract Terms: Term Query Extracts Correctly scenario.
+    /// </summary>
+    [Fact(DisplayName = "Extract Terms: Term Query Extracts Correctly")]
     public void ExtractTerms_TermQuery_ExtractsCorrectly()
     {
         var query = new TermQuery("body", "search");
@@ -101,7 +122,10 @@ public sealed class HighlighterTests : IClassFixture<TestDirectoryFixture>
         Assert.Contains("search", terms);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Extract Terms: Boolean Query Extracts All Non Must Not Terms scenario.
+    /// </summary>
+    [Fact(DisplayName = "Extract Terms: Boolean Query Extracts All Non Must Not Terms")]
     public void ExtractTerms_BooleanQuery_ExtractsAllNonMustNotTerms()
     {
         var bq = new BooleanQuery();
@@ -117,7 +141,10 @@ public sealed class HighlighterTests : IClassFixture<TestDirectoryFixture>
         Assert.DoesNotContain("spam", terms);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Extract Terms: Phrase Query Extracts All Terms scenario.
+    /// </summary>
+    [Fact(DisplayName = "Extract Terms: Phrase Query Extracts All Terms")]
     public void ExtractTerms_PhraseQuery_ExtractsAllTerms()
     {
         var query = new PhraseQuery("body", "search", "engine");

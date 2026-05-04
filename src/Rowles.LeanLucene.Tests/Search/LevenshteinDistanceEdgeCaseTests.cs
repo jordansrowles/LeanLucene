@@ -20,7 +20,10 @@ public sealed class LevenshteinDistanceEdgeCaseTests
         _output = output;
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Both Strings Empty: Returns Zero scenario.
+    /// </summary>
+    [Fact(DisplayName = "Both Strings Empty: Returns Zero")]
     public void BothStringsEmpty_ReturnsZero()
     {
         int dist = LevenshteinDistance.Compute("", "");
@@ -28,7 +31,10 @@ public sealed class LevenshteinDistanceEdgeCaseTests
         Assert.Equal(0, dist);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Large Strings: Exercises Heap Fallback Path scenario.
+    /// </summary>
+    [Fact(DisplayName = "Large Strings: Exercises Heap Fallback Path")]
     public void LargeStrings_ExercisesHeapFallbackPath()
     {
         // Strings longer than 256 chars exercise the `new int[]` fallback past stackalloc
@@ -41,7 +47,10 @@ public sealed class LevenshteinDistanceEdgeCaseTests
         Assert.Equal(1, dist);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the All Different Characters: Returns Max Length scenario.
+    /// </summary>
+    [Fact(DisplayName = "All Different Characters: Returns Max Length")]
     public void AllDifferentCharacters_ReturnsMaxLength()
     {
         // "abc" vs "xyz" — all 3 chars different, distance = 3
@@ -50,7 +59,10 @@ public sealed class LevenshteinDistanceEdgeCaseTests
         Assert.Equal(3, dist);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the All Different: Larger Strings Returns Longer Length scenario.
+    /// </summary>
+    [Fact(DisplayName = "All Different: Larger Strings Returns Longer Length")]
     public void AllDifferent_LargerStrings_ReturnsLongerLength()
     {
         var a = "abcde";
@@ -60,7 +72,10 @@ public sealed class LevenshteinDistanceEdgeCaseTests
         Assert.Equal(5, dist);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Different Lengths: All Different Returns Max Of Lengths scenario.
+    /// </summary>
+    [Fact(DisplayName = "Different Lengths: All Different Returns Max Of Lengths")]
     public void DifferentLengths_AllDifferent_ReturnsMaxOfLengths()
     {
         int dist = LevenshteinDistance.Compute("ab", "xyz");
@@ -69,7 +84,10 @@ public sealed class LevenshteinDistanceEdgeCaseTests
         Assert.Equal(3, dist);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Symmetric Property: Order Does Not Matter scenario.
+    /// </summary>
+    [Fact(DisplayName = "Symmetric Property: Order Does Not Matter")]
     public void SymmetricProperty_OrderDoesNotMatter()
     {
         int d1 = LevenshteinDistance.Compute("kitten", "sitting");
@@ -78,7 +96,10 @@ public sealed class LevenshteinDistanceEdgeCaseTests
         Assert.Equal(d1, d2);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Single Char Strings: One Substitution scenario.
+    /// </summary>
+    [Fact(DisplayName = "Single Char Strings: One Substitution")]
     public void SingleCharStrings_OneSubstitution()
     {
         int dist = LevenshteinDistance.Compute("a", "b");
@@ -86,7 +107,10 @@ public sealed class LevenshteinDistanceEdgeCaseTests
         Assert.Equal(1, dist);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Only Insertions: Returns Length Difference scenario.
+    /// </summary>
+    [Fact(DisplayName = "Only Insertions: Returns Length Difference")]
     public void OnlyInsertions_ReturnsLengthDifference()
     {
         int dist = LevenshteinDistance.Compute("abc", "abcdef");

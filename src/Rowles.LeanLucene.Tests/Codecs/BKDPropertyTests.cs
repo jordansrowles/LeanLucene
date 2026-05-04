@@ -16,7 +16,12 @@ public sealed class BKDPropertyTests
         return Path.Combine(dir, name + ".bkd");
     }
 
-    [Theory]
+    /// <summary>
+    /// Verifies the Range Query Matches Brute Force Scan For Random Data scenario.
+    /// </summary>
+    /// <param name="pointCount">The pointCount value for the test case.</param>
+    /// <param name="leafSize">The leafSize value for the test case.</param>
+    [Theory(DisplayName = "Range Query Matches Brute Force Scan For Random Data")]
     [InlineData(1, 16)]
     [InlineData(64, 16)]
     [InlineData(512, 16)]
@@ -64,7 +69,10 @@ public sealed class BKDPropertyTests
         }
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Open Range Under Min Returns All Points scenario.
+    /// </summary>
+    [Fact(DisplayName = "Open Range Under Min Returns All Points")]
     public void OpenRangeUnderMinReturnsAllPoints()
     {
         var points = Enumerable.Range(0, 200).Select(i => ((double)i, i)).ToList();
@@ -76,7 +84,10 @@ public sealed class BKDPropertyTests
         Assert.Equal(200, hits.Count);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Range Query On Unknown Field Returns Empty scenario.
+    /// </summary>
+    [Fact(DisplayName = "Range Query On Unknown Field Returns Empty")]
     public void RangeQueryOnUnknownFieldReturnsEmpty()
     {
         var points = new List<(double, int)> { (1.0, 0), (2.0, 1) };
@@ -87,7 +98,10 @@ public sealed class BKDPropertyTests
         Assert.Empty(reader.RangeQuery("missing", 0, 10));
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Duplicate Values Are Preserved scenario.
+    /// </summary>
+    [Fact(DisplayName = "Duplicate Values Are Preserved")]
     public void DuplicateValuesArePreserved()
     {
         var points = new List<(double, int)>();
@@ -105,7 +119,10 @@ public sealed class BKDPropertyTests
         Assert.Equal(Enumerable.Range(0, 1000).ToArray(), ids);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Negative And Positive Boundaries Are Handled scenario.
+    /// </summary>
+    [Fact(DisplayName = "Negative And Positive Boundaries Are Handled")]
     public void NegativeAndPositiveBoundariesAreHandled()
     {
         var points = new List<(double, int)>();

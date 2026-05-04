@@ -36,7 +36,10 @@ public sealed class LargeScaleStressTests : IClassFixture<TestDirectoryFixture>
 
     // ── Index 100K documents ───────────────────────────────────────────────
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Index 20 K Docs: All Searchable scenario.
+    /// </summary>
+    [Fact(DisplayName = "Index 20 K Docs: All Searchable")]
     public void Index20KDocs_AllSearchable()
     {
         // Arrange — 20K is enough to exercise multi-segment merge without taking minutes
@@ -81,7 +84,10 @@ public sealed class LargeScaleStressTests : IClassFixture<TestDirectoryFixture>
 
     // ── Merge after many small segments ────────────────────────────────────
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Merge After Many Small Segments: Preserves All Docs scenario.
+    /// </summary>
+    [Fact(DisplayName = "Merge After Many Small Segments: Preserves All Docs")]
     public void MergeAfterManySmallSegments_PreservesAllDocs()
     {
         // Arrange — small buffer forces multiple segments, exercising merge

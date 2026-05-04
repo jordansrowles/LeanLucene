@@ -14,6 +14,9 @@ using Xunit.Abstractions;
 
 namespace Rowles.LeanLucene.Tests.Search;
 
+/// <summary>
+/// Contains unit tests for Advanced Search.
+/// </summary>
 [Trait("Category", "Search")]
 [Trait("Category", "Advanced")]
 public sealed class AdvancedSearchTests : IClassFixture<TestDirectoryFixture>
@@ -36,7 +39,10 @@ public sealed class AdvancedSearchTests : IClassFixture<TestDirectoryFixture>
 
     // --- Prefix Query ---
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Prefix Query: Matches Terms With Prefix scenario.
+    /// </summary>
+    [Fact(DisplayName = "Prefix Query: Matches Terms With Prefix")]
     public void PrefixQuery_MatchesTermsWithPrefix()
     {
         var dir = new MMapDirectory(SubDir("prefix_match"));
@@ -56,7 +62,12 @@ public sealed class AdvancedSearchTests : IClassFixture<TestDirectoryFixture>
         Assert.Equal(3, results.TotalHits);
     }
 
-    [Theory]
+    /// <summary>
+    /// Verifies the Pattern Query: Multiple Matching Terms In Document Returns Document Once scenario.
+    /// </summary>
+    /// <param name="queryType">The queryType value for the test case.</param>
+    /// <param name="pattern">The pattern value for the test case.</param>
+    [Theory(DisplayName = "Pattern Query: Multiple Matching Terms In Document Returns Document Once")]
     [InlineData("prefix", "word")]
     [InlineData("wildcard", "word*")]
     [InlineData("wildcard", "*ord*")]
@@ -85,7 +96,10 @@ public sealed class AdvancedSearchTests : IClassFixture<TestDirectoryFixture>
         Assert.Equal("1", stored["id"][0]);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Prefix Query: No Match Returns Empty scenario.
+    /// </summary>
+    [Fact(DisplayName = "Prefix Query: No Match Returns Empty")]
     public void PrefixQuery_NoMatch_ReturnsEmpty()
     {
         var dir = new MMapDirectory(SubDir("prefix_nomatch"));
@@ -103,7 +117,10 @@ public sealed class AdvancedSearchTests : IClassFixture<TestDirectoryFixture>
 
     // --- Wildcard Query ---
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Wildcard Query: Question Mark Matches Single Char scenario.
+    /// </summary>
+    [Fact(DisplayName = "Wildcard Query: Question Mark Matches Single Char")]
     public void WildcardQuery_QuestionMark_MatchesSingleChar()
     {
         var dir = new MMapDirectory(SubDir("wildcard_single"));
@@ -123,7 +140,10 @@ public sealed class AdvancedSearchTests : IClassFixture<TestDirectoryFixture>
         Assert.Equal(3, results.TotalHits);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Wildcard Query: Asterisk Matches Multiple Chars scenario.
+    /// </summary>
+    [Fact(DisplayName = "Wildcard Query: Asterisk Matches Multiple Chars")]
     public void WildcardQuery_Asterisk_MatchesMultipleChars()
     {
         var dir = new MMapDirectory(SubDir("wildcard_multi"));
@@ -144,7 +164,10 @@ public sealed class AdvancedSearchTests : IClassFixture<TestDirectoryFixture>
 
     // --- Fuzzy Query ---
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Fuzzy Query: One Edit Distance Matches Typo scenario.
+    /// </summary>
+    [Fact(DisplayName = "Fuzzy Query: One Edit Distance Matches Typo")]
     public void FuzzyQuery_OneEditDistance_MatchesTypo()
     {
         var dir = new MMapDirectory(SubDir("fuzzy_1edit"));
@@ -164,7 +187,10 @@ public sealed class AdvancedSearchTests : IClassFixture<TestDirectoryFixture>
         Assert.True(results.TotalHits >= 2);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Fuzzy Query: Exact Match Includes Zero Distance scenario.
+    /// </summary>
+    [Fact(DisplayName = "Fuzzy Query: Exact Match Includes Zero Distance")]
     public void FuzzyQuery_ExactMatch_IncludesZeroDistance()
     {
         var dir = new MMapDirectory(SubDir("fuzzy_exact"));
@@ -180,7 +206,10 @@ public sealed class AdvancedSearchTests : IClassFixture<TestDirectoryFixture>
         Assert.Equal(1, results.TotalHits);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Fuzzy Query: Beyond Threshold No Match scenario.
+    /// </summary>
+    [Fact(DisplayName = "Fuzzy Query: Beyond Threshold No Match")]
     public void FuzzyQuery_BeyondThreshold_NoMatch()
     {
         var dir = new MMapDirectory(SubDir("fuzzy_beyond"));
@@ -198,25 +227,37 @@ public sealed class AdvancedSearchTests : IClassFixture<TestDirectoryFixture>
 
     // --- Levenshtein Distance ---
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Levenshtein Distance: Identical Strings Returns Zero scenario.
+    /// </summary>
+    [Fact(DisplayName = "Levenshtein Distance: Identical Strings Returns Zero")]
     public void LevenshteinDistance_IdenticalStrings_ReturnsZero()
     {
         Assert.Equal(0, LevenshteinDistance.Compute("hello", "hello"));
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Levenshtein Distance: One Insertion Returns One scenario.
+    /// </summary>
+    [Fact(DisplayName = "Levenshtein Distance: One Insertion Returns One")]
     public void LevenshteinDistance_OneInsertion_ReturnsOne()
     {
         Assert.Equal(1, LevenshteinDistance.Compute("cat", "cats"));
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Levenshtein Distance: One Substitution Returns One scenario.
+    /// </summary>
+    [Fact(DisplayName = "Levenshtein Distance: One Substitution Returns One")]
     public void LevenshteinDistance_OneSubstitution_ReturnsOne()
     {
         Assert.Equal(1, LevenshteinDistance.Compute("cat", "bat"));
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Levenshtein Distance: Empty Strings Returns Other Length scenario.
+    /// </summary>
+    [Fact(DisplayName = "Levenshtein Distance: Empty Strings Returns Other Length")]
     public void LevenshteinDistance_EmptyStrings_ReturnsOtherLength()
     {
         Assert.Equal(5, LevenshteinDistance.Compute("", "hello"));
@@ -226,7 +267,10 @@ public sealed class AdvancedSearchTests : IClassFixture<TestDirectoryFixture>
 
     // --- Proximity / Slop ---
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Phrase Query: With Slop Matches Non Adjacent Terms scenario.
+    /// </summary>
+    [Fact(DisplayName = "Phrase Query: With Slop Matches Non Adjacent Terms")]
     public void PhraseQuery_WithSlop_MatchesNonAdjacentTerms()
     {
         var dir = new MMapDirectory(SubDir("slop_match"));
@@ -243,7 +287,10 @@ public sealed class AdvancedSearchTests : IClassFixture<TestDirectoryFixture>
         Assert.Equal(1, results.TotalHits);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Phrase Query: Slop Too Small No Match scenario.
+    /// </summary>
+    [Fact(DisplayName = "Phrase Query: Slop Too Small No Match")]
     public void PhraseQuery_SlopTooSmall_NoMatch()
     {
         var dir = new MMapDirectory(SubDir("slop_nomatch"));
@@ -261,7 +308,10 @@ public sealed class AdvancedSearchTests : IClassFixture<TestDirectoryFixture>
         Assert.Equal(0, results.TotalHits);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Phrase Query: Exact Phrase Slop 0 Matches Adjacent Only scenario.
+    /// </summary>
+    [Fact(DisplayName = "Phrase Query: Exact Phrase Slop 0 Matches Adjacent Only")]
     public void PhraseQuery_ExactPhraseSlop0_MatchesAdjacentOnly()
     {
         var dir = new MMapDirectory(SubDir("slop_zero"));
@@ -285,7 +335,10 @@ public sealed class AdvancedSearchTests : IClassFixture<TestDirectoryFixture>
 
     // --- Field-Level Boosting ---
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Boosting: Higher Boost Produces Higher Score scenario.
+    /// </summary>
+    [Fact(DisplayName = "Boosting: Higher Boost Produces Higher Score")]
     public void Boosting_HigherBoost_ProducesHigherScore()
     {
         var dir = new MMapDirectory(SubDir("boost_score"));
@@ -318,7 +371,10 @@ public sealed class AdvancedSearchTests : IClassFixture<TestDirectoryFixture>
 
     // --- Update Documents ---
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Update Document: Replaces Existing scenario.
+    /// </summary>
+    [Fact(DisplayName = "Update Document: Replaces Existing")]
     public void UpdateDocument_ReplacesExisting()
     {
         var dirPath = SubDir("update_doc");
@@ -356,7 +412,10 @@ public sealed class AdvancedSearchTests : IClassFixture<TestDirectoryFixture>
 
     // --- Per-Field Analysers ---
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Per Field Analyser: Different Fields Use Different Analysis scenario.
+    /// </summary>
+    [Fact(DisplayName = "Per Field Analyser: Different Fields Use Different Analysis")]
     public void PerFieldAnalyser_DifferentFieldsUseDifferentAnalysis()
     {
         var dir = new MMapDirectory(SubDir("perfield_analyser"));
@@ -388,7 +447,10 @@ public sealed class AdvancedSearchTests : IClassFixture<TestDirectoryFixture>
 
     // --- Concurrent Indexing ---
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Concurrent Indexing: Parallel Adds All Docs Searchable scenario.
+    /// </summary>
+    [Fact(DisplayName = "Concurrent Indexing: Parallel Adds All Docs Searchable")]
     public void ConcurrentIndexing_ParallelAdds_AllDocsSearchable()
     {
         var dir = new MMapDirectory(SubDir("concurrent_add"));
@@ -415,7 +477,10 @@ public sealed class AdvancedSearchTests : IClassFixture<TestDirectoryFixture>
 
     // --- Query-Time Analysis ---
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Query Time Analysis: String Search Matches Case Insensitive scenario.
+    /// </summary>
+    [Fact(DisplayName = "Query Time Analysis: String Search Matches Case Insensitive")]
     public void QueryTimeAnalysis_StringSearch_MatchesCaseInsensitive()
     {
         var dir = new MMapDirectory(SubDir("queryanalysis"));
@@ -433,7 +498,10 @@ public sealed class AdvancedSearchTests : IClassFixture<TestDirectoryFixture>
 
     // --- PostingsEnum.Advance ---
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Postings Enum: Advance Skips To Target Doc ID scenario.
+    /// </summary>
+    [Fact(DisplayName = "Postings Enum: Advance Skips To Target Doc ID")]
     public void PostingsEnum_Advance_SkipsToTargetDocId()
     {
         var dir = new MMapDirectory(SubDir("advance_skip"));
@@ -455,7 +523,10 @@ public sealed class AdvancedSearchTests : IClassFixture<TestDirectoryFixture>
 
     // --- Stored Fields Compression ---
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Stored Fields Compression: Round-trip Preserves Data scenario.
+    /// </summary>
+    [Fact(DisplayName = "Stored Fields Compression: Round-trip Preserves Data")]
     public void StoredFieldsCompression_RoundTrip_PreservesData()
     {
         var dir = new MMapDirectory(SubDir("stored_compress"));
@@ -477,7 +548,13 @@ public sealed class AdvancedSearchTests : IClassFixture<TestDirectoryFixture>
 
     // --- Wildcard Pattern Matching Utility ---
 
-    [Theory]
+    /// <summary>
+    /// Verifies the Wildcard Query: Matches Correct Results scenario.
+    /// </summary>
+    /// <param name="text">The text value for the test case.</param>
+    /// <param name="pattern">The pattern value for the test case.</param>
+    /// <param name="expected">The expected value for the test case.</param>
+    [Theory(DisplayName = "Wildcard Query: Matches Correct Results")]
     [InlineData("test", "test", true)]
     [InlineData("test", "te?t", true)]
     [InlineData("test", "t*", true)]

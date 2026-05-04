@@ -9,6 +9,9 @@ using Xunit.Abstractions;
 
 namespace Rowles.LeanLucene.Tests.Index;
 
+/// <summary>
+/// Contains unit tests for Index Writer.
+/// </summary>
 [Trait("Category", "Index")]
 public sealed class IndexWriterTests : IClassFixture<TestDirectoryFixture>
 {
@@ -45,7 +48,10 @@ public sealed class IndexWriterTests : IClassFixture<TestDirectoryFixture>
         return path;
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Index Writer: Flush On Ram Threshold Produces Segment File scenario.
+    /// </summary>
+    [Fact(DisplayName = "Index Writer: Flush On Ram Threshold Produces Segment File")]
     public void IndexWriter_FlushOnRamThreshold_ProducesSegmentFile()
     {
         var dir = new MMapDirectory(SubDir("ram_flush"));
@@ -64,7 +70,10 @@ public sealed class IndexWriterTests : IClassFixture<TestDirectoryFixture>
         Assert.NotEmpty(segFiles);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Index Writer: Flush On Doc Count Ceiling Produces Segment File scenario.
+    /// </summary>
+    [Fact(DisplayName = "Index Writer: Flush On Doc Count Ceiling Produces Segment File")]
     public void IndexWriter_FlushOnDocCountCeiling_ProducesSegmentFile()
     {
         var dir = new MMapDirectory(SubDir("doc_flush"));
@@ -83,7 +92,10 @@ public sealed class IndexWriterTests : IClassFixture<TestDirectoryFixture>
         Assert.NotEmpty(segFiles);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Index Writer: Commit Writes Segments N File scenario.
+    /// </summary>
+    [Fact(DisplayName = "Index Writer: Commit Writes Segments N File")]
     public void IndexWriter_CommitWritesSegmentsNFile()
     {
         var dir = new MMapDirectory(SubDir("commit_test"));
@@ -98,7 +110,10 @@ public sealed class IndexWriterTests : IClassFixture<TestDirectoryFixture>
         Assert.NotEmpty(segNFiles);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Index Writer: Crash Before Commit Segment Not Visible scenario.
+    /// </summary>
+    [Fact(DisplayName = "Index Writer: Crash Before Commit Segment Not Visible")]
     public void IndexWriter_CrashBeforeCommit_SegmentNotVisible()
     {
         var subDir = SubDir("crash_test");
@@ -124,7 +139,10 @@ public sealed class IndexWriterTests : IClassFixture<TestDirectoryFixture>
         }
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Flush Triggers At Accurate Ram Threshold scenario.
+    /// </summary>
+    [Fact(DisplayName = "Flush Triggers At Accurate Ram Threshold")]
     public void FlushTriggersAtAccurateRamThreshold()
     {
         // With RamBufferSizeMB = 1 MB and accurate tracking via PostingAccumulator.EstimatedBytes,
@@ -146,7 +164,10 @@ public sealed class IndexWriterTests : IClassFixture<TestDirectoryFixture>
         Assert.NotEmpty(segFiles);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Ram Threshold: Forces Flush When Exceeded scenario.
+    /// </summary>
+    [Fact(DisplayName = "Ram Threshold: Forces Flush When Exceeded")]
     public void RamThreshold_ForcesFlush_WhenExceeded()
     {
         var dir = new MMapDirectory(SubDir("hard_ceiling"));
@@ -170,7 +191,10 @@ public sealed class IndexWriterTests : IClassFixture<TestDirectoryFixture>
         Assert.NotEmpty(segFiles);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the High Ram Pressure: Does Not Force Full GC scenario.
+    /// </summary>
+    [Fact(DisplayName = "High Ram Pressure: Does Not Force Full GC")]
     public void HighRamPressure_DoesNotForceFullGC()
     {
         var shouldFlush = typeof(IndexWriter).GetMethod("ShouldFlush", BindingFlags.Instance | BindingFlags.NonPublic);
@@ -243,7 +267,10 @@ public sealed class IndexWriterTests : IClassFixture<TestDirectoryFixture>
             _ => throw new InvalidOperationException($"Unsupported IL operand type: {operandType}")
         };
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Merge Backpressure: Pauses Indexing When Too Many Segments scenario.
+    /// </summary>
+    [Fact(DisplayName = "Merge Backpressure: Pauses Indexing When Too Many Segments")]
     public void MergeBackpressure_PausesIndexing_WhenTooManySegments()
     {
         var dir = new MMapDirectory(SubDir("merge_bp"));

@@ -13,6 +13,9 @@ using Xunit.Abstractions;
 
 namespace Rowles.LeanLucene.Tests.Performance;
 
+/// <summary>
+/// Contains unit tests for Flush Profile.
+/// </summary>
 public class FlushProfileTest(ITestOutputHelper output) : IDisposable
 {
     private readonly List<string> _paths = [];
@@ -60,7 +63,11 @@ public class FlushProfileTest(ITestOutputHelper output) : IDisposable
         return (addTime, commitTime, n);
     }
 
-    [Theory]
+    /// <summary>
+    /// Verifies the Flush Profile: Measure Add Vs Commit scenario.
+    /// </summary>
+    /// <param name="n">The n value for the test case.</param>
+    [Theory(DisplayName = "Flush Profile: Measure Add Vs Commit")]
     [InlineData(100)]
     [InlineData(1000)]
     [InlineData(5000)]

@@ -9,6 +9,9 @@ using Rowles.LeanLucene.Tests.Fixtures;
 
 namespace Rowles.LeanLucene.Tests.Index;
 
+/// <summary>
+/// Contains unit tests for Index Writer Backpressure.
+/// </summary>
 [Trait("Category", "Index")]
 public sealed class IndexWriterBackpressureTests : IClassFixture<TestDirectoryFixture>
 {
@@ -40,7 +43,10 @@ public sealed class IndexWriterBackpressureTests : IClassFixture<TestDirectoryFi
         return doc;
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Add Documents: Body Throws Mid Batch Restores All Backpressure Slots scenario.
+    /// </summary>
+    [Fact(DisplayName = "Add Documents: Body Throws Mid Batch Restores All Backpressure Slots")]
     public void AddDocuments_BodyThrowsMidBatch_RestoresAllBackpressureSlots()
     {
         var dir = new MMapDirectory(SubDir("c7_addocs_body_throws"));
@@ -70,7 +76,10 @@ public sealed class IndexWriterBackpressureTests : IClassFixture<TestDirectoryFi
         }
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Add Document Block: Body Throws Mid Batch Restores All Backpressure Slots scenario.
+    /// </summary>
+    [Fact(DisplayName = "Add Document Block: Body Throws Mid Batch Restores All Backpressure Slots")]
     public void AddDocumentBlock_BodyThrowsMidBatch_RestoresAllBackpressureSlots()
     {
         var dir = new MMapDirectory(SubDir("c7_block_body_throws"));
@@ -100,7 +109,10 @@ public sealed class IndexWriterBackpressureTests : IClassFixture<TestDirectoryFi
         }
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Add Documents: Repeated Failures No Slot Leak Keeps Indexing Responsive scenario.
+    /// </summary>
+    [Fact(DisplayName = "Add Documents: Repeated Failures No Slot Leak Keeps Indexing Responsive")]
     public void AddDocuments_RepeatedFailures_NoSlotLeak_KeepsIndexingResponsive()
     {
         // After many failed batches, indexing should remain responsive: if the

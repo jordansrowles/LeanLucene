@@ -9,6 +9,9 @@ using Rowles.LeanLucene.Store;
 
 namespace Rowles.LeanLucene.Tests.Index;
 
+/// <summary>
+/// Contains unit tests for Segment Reader Thread Safety.
+/// </summary>
 [Trait("Category", "ThreadSafety")]
 public sealed class SegmentReaderThreadSafetyTests : IDisposable
 {
@@ -22,7 +25,10 @@ public sealed class SegmentReaderThreadSafetyTests : IDisposable
             Directory.Delete(_dir, recursive: true);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Concurrent Term Lookup: Does Not Corrupt Cache scenario.
+    /// </summary>
+    [Fact(DisplayName = "Concurrent Term Lookup: Does Not Corrupt Cache")]
     public void ConcurrentTermLookup_DoesNotCorruptCache()
     {
         const int docCount = 150;
@@ -86,7 +92,10 @@ public sealed class SegmentReaderThreadSafetyTests : IDisposable
         Assert.Empty(errors);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Concurrent Postings Enum: Same Term Different Threads Return Consistent Doc IDs scenario.
+    /// </summary>
+    [Fact(DisplayName = "Concurrent Postings Enum: Same Term Different Threads Return Consistent Doc IDs")]
     public void ConcurrentPostingsEnum_SameTermDifferentThreads_ReturnConsistentDocIds()
     {
         const int docCount = 120;
@@ -132,7 +141,10 @@ public sealed class SegmentReaderThreadSafetyTests : IDisposable
         Assert.Empty(errors);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Term Offset Cache: High Cardinality Remains Bounded And Hits By Value scenario.
+    /// </summary>
+    [Fact(DisplayName = "Term Offset Cache: High Cardinality Remains Bounded And Hits By Value")]
     public void TermOffsetCache_HighCardinality_RemainsBoundedAndHitsByValue()
     {
         const int docCount = 1_500;

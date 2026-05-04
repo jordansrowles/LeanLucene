@@ -3,6 +3,9 @@ using Rowles.LeanLucene.Store;
 
 namespace Rowles.LeanLucene.Tests.Codecs;
 
+/// <summary>
+/// Contains unit tests for Numeric Doc Values.
+/// </summary>
 [Trait("Category", "Codecs")]
 public sealed class NumericDocValuesTests : IDisposable
 {
@@ -16,7 +19,10 @@ public sealed class NumericDocValuesTests : IDisposable
             Directory.Delete(_dir, recursive: true);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Roundtrip: Single Field Preserves Values scenario.
+    /// </summary>
+    [Fact(DisplayName = "Roundtrip: Single Field Preserves Values")]
     public void Roundtrip_SingleField_PreservesValues()
     {
         var path = Path.Combine(_dir, "test.dvn");
@@ -33,7 +39,10 @@ public sealed class NumericDocValuesTests : IDisposable
         Assert.Equal(fields["price"], result.Values["price"]);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Roundtrip: Multiple Fields Preserves All scenario.
+    /// </summary>
+    [Fact(DisplayName = "Roundtrip: Multiple Fields Preserves All")]
     public void Roundtrip_MultipleFields_PreservesAll()
     {
         var path = Path.Combine(_dir, "multi.dvn");
@@ -51,7 +60,10 @@ public sealed class NumericDocValuesTests : IDisposable
         Assert.Equal(fields["rating"], result.Values["rating"]);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Roundtrip: All Same Value Uses Zero Bits scenario.
+    /// </summary>
+    [Fact(DisplayName = "Roundtrip: All Same Value Uses Zero Bits")]
     public void Roundtrip_AllSameValue_UsesZeroBits()
     {
         var path = Path.Combine(_dir, "const.dvn");
@@ -66,14 +78,20 @@ public sealed class NumericDocValuesTests : IDisposable
         Assert.Equal(fields["score"], result.Values["score"]);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Read: Missing File Returns Empty scenario.
+    /// </summary>
+    [Fact(DisplayName = "Read: Missing File Returns Empty")]
     public void Read_MissingFile_ReturnsEmpty()
     {
         var result = NumericDocValuesReader.Read(Path.Combine(_dir, "nonexistent.dvn"));
         Assert.Empty(result.Values);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Roundtrip: Mixed Sign Bit Patterns Preserves Values scenario.
+    /// </summary>
+    [Fact(DisplayName = "Roundtrip: Mixed Sign Bit Patterns Preserves Values")]
     public void Roundtrip_MixedSignBitPatterns_PreservesValues()
     {
         // Negative and positive doubles produce bit patterns whose long subtraction
@@ -88,7 +106,10 @@ public sealed class NumericDocValuesTests : IDisposable
         Assert.Equal(values, result.Values["v"]);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Roundtrip: Negative Only Preserves Values scenario.
+    /// </summary>
+    [Fact(DisplayName = "Roundtrip: Negative Only Preserves Values")]
     public void Roundtrip_NegativeOnly_PreservesValues()
     {
         var path = Path.Combine(_dir, "neg.dvn");

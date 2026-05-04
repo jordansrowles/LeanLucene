@@ -12,10 +12,16 @@ using Rowles.LeanLucene.Search.Highlighting;
 
 namespace Rowles.LeanLucene.Tests.Codecs;
 
+/// <summary>
+/// Contains unit tests for HNSW Graph.
+/// </summary>
 [Trait("Category", "Hnsw")]
 public sealed class HnswGraphTests
 {
-    [Fact]
+    /// <summary>
+    /// Verifies the Empty Graph: Search Returns No Results scenario.
+    /// </summary>
+    [Fact(DisplayName = "Empty Graph: Search Returns No Results")]
     public void EmptyGraph_SearchReturnsNoResults()
     {
         var source = MakeSource(new Dictionary<int, float[]>(), dimension: 4);
@@ -27,7 +33,10 @@ public sealed class HnswGraphTests
         Assert.Empty(results);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Single Node: Becomes Entry Point scenario.
+    /// </summary>
+    [Fact(DisplayName = "Single Node: Becomes Entry Point")]
     public void SingleNode_BecomesEntryPoint()
     {
         var source = MakeSource(new Dictionary<int, float[]> { [42] = Normalise([1, 2, 3, 4]) }, dimension: 4);
@@ -41,7 +50,10 @@ public sealed class HnswGraphTests
         Assert.True(graph.MaxLevel >= 0);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Search: Finds Exact Nearest For Orthogonal Set scenario.
+    /// </summary>
+    [Fact(DisplayName = "Search: Finds Exact Nearest For Orthogonal Set")]
     public void Search_FindsExactNearestForOrthogonalSet()
     {
         var vectors = new Dictionary<int, float[]>
@@ -60,7 +72,10 @@ public sealed class HnswGraphTests
         Assert.Equal(0, results[0].DocId);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Search: Recall Exceeds Threshold On Random Vectors scenario.
+    /// </summary>
+    [Fact(DisplayName = "Search: Recall Exceeds Threshold On Random Vectors")]
     public void Search_RecallExceedsThresholdOnRandomVectors()
     {
         const int n = 500;
@@ -90,7 +105,10 @@ public sealed class HnswGraphTests
         Assert.True(recall >= 0.90, $"Recall@{topK} was {recall:F3}, expected >= 0.90");
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Build: With Same Seed Produces Identical Graphs scenario.
+    /// </summary>
+    [Fact(DisplayName = "Build: With Same Seed Produces Identical Graphs")]
     public void Build_WithSameSeed_ProducesIdenticalGraphs()
     {
         const int n = 100;
@@ -121,7 +139,10 @@ public sealed class HnswGraphTests
         }
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Insert: After Freeze Throws scenario.
+    /// </summary>
+    [Fact(DisplayName = "Insert: After Freeze Throws")]
     public void Insert_AfterFreeze_Throws()
     {
         var source = MakeSource(new Dictionary<int, float[]> { [0] = Normalise([1, 0, 0, 0]) }, 4);
@@ -132,7 +153,10 @@ public sealed class HnswGraphTests
         Assert.Throws<InvalidOperationException>(() => graph.Insert(0));
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Graph Invariant: All Nodes Reachable From Entry Point scenario.
+    /// </summary>
+    [Fact(DisplayName = "Graph Invariant: All Nodes Reachable From Entry Point")]
     public void GraphInvariant_AllNodesReachableFromEntryPoint()
     {
         const int n = 50;

@@ -7,13 +7,19 @@ using Rowles.LeanLucene.Search.Highlighting;
 
 namespace Rowles.LeanLucene.Tests.Search;
 
+/// <summary>
+/// Contains unit tests for Query Parser.
+/// </summary>
 [Trait("Category", "Search")]
 [Trait("Category", "QueryParser")]
 public sealed class QueryParserTests
 {
     private readonly QueryParser _parser = new("body", new StandardAnalyser());
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Parse: Single Term Returns Term Query scenario.
+    /// </summary>
+    [Fact(DisplayName = "Parse: Single Term Returns Term Query")]
     public void Parse_SingleTerm_ReturnsTermQuery()
     {
         var query = _parser.Parse("lucene");
@@ -22,7 +28,10 @@ public sealed class QueryParserTests
         Assert.Equal("lucene", tq.Term);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Parse: Field Colon Term Returns Term Query With Field scenario.
+    /// </summary>
+    [Fact(DisplayName = "Parse: Field Colon Term Returns Term Query With Field")]
     public void Parse_FieldColonTerm_ReturnsTermQueryWithField()
     {
         var query = _parser.Parse("title:search");
@@ -31,7 +40,10 @@ public sealed class QueryParserTests
         Assert.Equal("search", tq.Term);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Parse: Quoted Phrase Returns Phrase Query scenario.
+    /// </summary>
+    [Fact(DisplayName = "Parse: Quoted Phrase Returns Phrase Query")]
     public void Parse_QuotedPhrase_ReturnsPhraseQuery()
     {
         var query = _parser.Parse("\"quick brown fox\"");
@@ -40,7 +52,10 @@ public sealed class QueryParserTests
         Assert.Equal(new[] { "quick", "brown", "fox" }, pq.Terms);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Parse: Required Term Returns Must Clause scenario.
+    /// </summary>
+    [Fact(DisplayName = "Parse: Required Term Returns Must Clause")]
     public void Parse_RequiredTerm_ReturnsMustClause()
     {
         var query = _parser.Parse("+required");
@@ -49,7 +64,10 @@ public sealed class QueryParserTests
         Assert.Equal(Occur.Must, bq.Clauses[0].Occur);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Parse: Excluded Term Returns Must Not Clause scenario.
+    /// </summary>
+    [Fact(DisplayName = "Parse: Excluded Term Returns Must Not Clause")]
     public void Parse_ExcludedTerm_ReturnsMustNotClause()
     {
         var query = _parser.Parse("-excluded");
@@ -58,7 +76,10 @@ public sealed class QueryParserTests
         Assert.Equal(Occur.MustNot, bq.Clauses[0].Occur);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Parse: Multiple Terms Returns Boolean With Should Clauses scenario.
+    /// </summary>
+    [Fact(DisplayName = "Parse: Multiple Terms Returns Boolean With Should Clauses")]
     public void Parse_MultipleTerms_ReturnsBooleanWithShouldClauses()
     {
         var query = _parser.Parse("quick brown fox");
@@ -67,7 +88,10 @@ public sealed class QueryParserTests
         Assert.All(bq.Clauses, c => Assert.Equal(Occur.Should, c.Occur));
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Parse: Prefix Wildcard Returns Prefix Query scenario.
+    /// </summary>
+    [Fact(DisplayName = "Parse: Prefix Wildcard Returns Prefix Query")]
     public void Parse_PrefixWildcard_ReturnsPrefixQuery()
     {
         var query = _parser.Parse("search*");
@@ -76,7 +100,10 @@ public sealed class QueryParserTests
         Assert.Equal("search", pq.Prefix);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Parse: Wildcard Pattern Returns Wildcard Query scenario.
+    /// </summary>
+    [Fact(DisplayName = "Parse: Wildcard Pattern Returns Wildcard Query")]
     public void Parse_WildcardPattern_ReturnsWildcardQuery()
     {
         var query = _parser.Parse("te?t");
@@ -85,7 +112,10 @@ public sealed class QueryParserTests
         Assert.Equal("te?t", wq.Pattern);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Parse: Fuzzy Term Returns Fuzzy Query scenario.
+    /// </summary>
+    [Fact(DisplayName = "Parse: Fuzzy Term Returns Fuzzy Query")]
     public void Parse_FuzzyTerm_ReturnsFuzzyQuery()
     {
         var query = _parser.Parse("lucene~2");
@@ -95,7 +125,10 @@ public sealed class QueryParserTests
         Assert.Equal(2, fq.MaxEdits);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Parse: Phrase With Slop Returns Phrase Query With Slop scenario.
+    /// </summary>
+    [Fact(DisplayName = "Parse: Phrase With Slop Returns Phrase Query With Slop")]
     public void Parse_PhraseWithSlop_ReturnsPhraseQueryWithSlop()
     {
         var query = _parser.Parse("\"quick fox\"~2");
@@ -103,14 +136,20 @@ public sealed class QueryParserTests
         Assert.Equal(2, pq.Slop);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Parse: Boost Suffix Sets Boost On Query scenario.
+    /// </summary>
+    [Fact(DisplayName = "Parse: Boost Suffix Sets Boost On Query")]
     public void Parse_BoostSuffix_SetsBoostOnQuery()
     {
         var query = _parser.Parse("important^3.5");
         Assert.Equal(3.5f, query.Boost, 0.01f);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Parse: Empty String Returns Boolean Query With No Clauses scenario.
+    /// </summary>
+    [Fact(DisplayName = "Parse: Empty String Returns Boolean Query With No Clauses")]
     public void Parse_EmptyString_ReturnsBooleanQueryWithNoClauses()
     {
         var query = _parser.Parse("");
@@ -118,7 +157,10 @@ public sealed class QueryParserTests
         Assert.Empty(bq.Clauses);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Parse: Grouped Parens Returns Nested Boolean Query scenario.
+    /// </summary>
+    [Fact(DisplayName = "Parse: Grouped Parens Returns Nested Boolean Query")]
     public void Parse_GroupedParens_ReturnsNestedBooleanQuery()
     {
         var query = _parser.Parse("+(quick brown)");
@@ -128,7 +170,10 @@ public sealed class QueryParserTests
         Assert.IsType<BooleanQuery>(bq.Clauses[0].Query);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Parse: Field Colon Phrase Returns Phrase Query On Field scenario.
+    /// </summary>
+    [Fact(DisplayName = "Parse: Field Colon Phrase Returns Phrase Query On Field")]
     public void Parse_FieldColonPhrase_ReturnsPhraseQueryOnField()
     {
         var query = _parser.Parse("title:\"exact match\"");
@@ -136,7 +181,10 @@ public sealed class QueryParserTests
         Assert.Equal("title", pq.Field);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Parse: Mixed Clauses Correct Occur Types scenario.
+    /// </summary>
+    [Fact(DisplayName = "Parse: Mixed Clauses Correct Occur Types")]
     public void Parse_MixedClauses_CorrectOccurTypes()
     {
         var query = _parser.Parse("+required optional -excluded");
@@ -147,7 +195,11 @@ public sealed class QueryParserTests
         Assert.Equal(Occur.MustNot, bq.Clauses[2].Occur);
     }
 
-    [Theory]
+    /// <summary>
+    /// Verifies the Parse: Invalid Syntax Throws Query Parse Exception scenario.
+    /// </summary>
+    /// <param name="query">The query value for the test case.</param>
+    [Theory(DisplayName = "Parse: Invalid Syntax Throws Query Parse Exception")]
     [InlineData("\"unterminated")]
     [InlineData("(quick brown")]
     [InlineData("title:")]

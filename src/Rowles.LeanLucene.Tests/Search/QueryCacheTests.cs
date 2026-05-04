@@ -11,6 +11,9 @@ using Rowles.LeanLucene.Store;
 
 namespace Rowles.LeanLucene.Tests.Search;
 
+/// <summary>
+/// Contains unit tests for Query Cache.
+/// </summary>
 public sealed class QueryCacheTests : IDisposable
 {
     private readonly string _dir;
@@ -26,7 +29,10 @@ public sealed class QueryCacheTests : IDisposable
         try { Directory.Delete(_dir, true); } catch { }
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Cache: Returns Cached Result On Second Search scenario.
+    /// </summary>
+    [Fact(DisplayName = "Cache: Returns Cached Result On Second Search")]
     public void Cache_ReturnsCachedResult_OnSecondSearch()
     {
         var dir = new MMapDirectory(_dir);
@@ -49,7 +55,10 @@ public sealed class QueryCacheTests : IDisposable
         Assert.Equal(1, searcher.Cache.Misses);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Cache: Disabled By Default scenario.
+    /// </summary>
+    [Fact(DisplayName = "Cache: Disabled By Default")]
     public void Cache_Disabled_ByDefault()
     {
         var dir = new MMapDirectory(_dir);
@@ -63,7 +72,10 @@ public sealed class QueryCacheTests : IDisposable
         Assert.Null(searcher.Cache);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Cache: Different Queries Different Entries scenario.
+    /// </summary>
+    [Fact(DisplayName = "Cache: Different Queries Different Entries")]
     public void Cache_DifferentQueries_DifferentEntries()
     {
         var dir = new MMapDirectory(_dir);
@@ -84,7 +96,10 @@ public sealed class QueryCacheTests : IDisposable
         Assert.Equal(2, searcher.Cache.Misses);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Cache: Different Top N Different Entries scenario.
+    /// </summary>
+    [Fact(DisplayName = "Cache: Different Top N Different Entries")]
     public void Cache_DifferentTopN_DifferentEntries()
     {
         var dir = new MMapDirectory(_dir);
@@ -104,7 +119,10 @@ public sealed class QueryCacheTests : IDisposable
         Assert.Equal(2, searcher.Cache!.Count);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Cache: Invalidation Clears Stale Entries scenario.
+    /// </summary>
+    [Fact(DisplayName = "Cache: Invalidation Clears Stale Entries")]
     public void Cache_Invalidation_ClearsStaleEntries()
     {
         var cache = new QueryCache(100);
@@ -117,7 +135,10 @@ public sealed class QueryCacheTests : IDisposable
         Assert.Null(cache.TryGet(q, 10));
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Cache: LRU Evicts Oldest Entry scenario.
+    /// </summary>
+    [Fact(DisplayName = "Cache: LRU Evicts Oldest Entry")]
     public void Cache_LRU_EvictsOldestEntry()
     {
         var cache = new QueryCache(2);
@@ -134,7 +155,10 @@ public sealed class QueryCacheTests : IDisposable
         Assert.NotNull(cache.TryGet(q3, 10));
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Query Equality: Term Query scenario.
+    /// </summary>
+    [Fact(DisplayName = "Query Equality: Term Query")]
     public void QueryEquality_TermQuery()
     {
         var a = new TermQuery("body", "hello");
@@ -146,7 +170,10 @@ public sealed class QueryCacheTests : IDisposable
         Assert.NotEqual(a, c);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Query Equality: Boolean Query scenario.
+    /// </summary>
+    [Fact(DisplayName = "Query Equality: Boolean Query")]
     public void QueryEquality_BooleanQuery()
     {
         var a = new BooleanQuery();
@@ -161,7 +188,10 @@ public sealed class QueryCacheTests : IDisposable
         Assert.Equal(a.GetHashCode(), b.GetHashCode());
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Query Equality: Phrase Query scenario.
+    /// </summary>
+    [Fact(DisplayName = "Query Equality: Phrase Query")]
     public void QueryEquality_PhraseQuery()
     {
         var a = new PhraseQuery("body", "hello", "world");
@@ -172,7 +202,10 @@ public sealed class QueryCacheTests : IDisposable
         Assert.NotEqual(a, c); // different slop
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Query Equality: Boost Affects Equality scenario.
+    /// </summary>
+    [Fact(DisplayName = "Query Equality: Boost Affects Equality")]
     public void QueryEquality_Boost_AffectsEquality()
     {
         var a = new TermQuery("f", "t") { Boost = 1.0f };
@@ -181,7 +214,10 @@ public sealed class QueryCacheTests : IDisposable
         Assert.NotEqual(a, b);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Cache: Query Mutation After Put Does Not Return Stale Entry scenario.
+    /// </summary>
+    [Fact(DisplayName = "Cache: Query Mutation After Put Does Not Return Stale Entry")]
     public void Cache_QueryMutationAfterPut_DoesNotReturnStaleEntry()
     {
         var cache = new QueryCache(10);

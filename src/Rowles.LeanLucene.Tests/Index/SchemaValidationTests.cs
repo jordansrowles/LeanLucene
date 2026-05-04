@@ -4,9 +4,15 @@ using Rowles.LeanLucene.Index.Indexer;
 
 namespace Rowles.LeanLucene.Tests.Index;
 
+/// <summary>
+/// Contains unit tests for Schema Validation.
+/// </summary>
 public sealed class SchemaValidationTests
 {
-    [Fact]
+    /// <summary>
+    /// Verifies the Validate: Required Field Missing Throws scenario.
+    /// </summary>
+    [Fact(DisplayName = "Validate: Required Field Missing Throws")]
     public void Validate_RequiredFieldMissing_Throws()
     {
         var schema = new IndexSchema()
@@ -19,7 +25,10 @@ public sealed class SchemaValidationTests
         Assert.Contains("title", ex.Message);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Validate: Wrong Field Type Throws scenario.
+    /// </summary>
+    [Fact(DisplayName = "Validate: Wrong Field Type Throws")]
     public void Validate_WrongFieldType_Throws()
     {
         var schema = new IndexSchema()
@@ -33,7 +42,10 @@ public sealed class SchemaValidationTests
         Assert.Contains("Numeric", ex.Message);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Validate: Strict Mode Rejects Unknown Fields scenario.
+    /// </summary>
+    [Fact(DisplayName = "Validate: Strict Mode Rejects Unknown Fields")]
     public void Validate_StrictMode_RejectsUnknownFields()
     {
         var schema = new IndexSchema { StrictMode = true }
@@ -47,7 +59,10 @@ public sealed class SchemaValidationTests
         Assert.Contains("body", ex.Message);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Validate: Non Strict Mode Allows Unknown Fields scenario.
+    /// </summary>
+    [Fact(DisplayName = "Validate: Non Strict Mode Allows Unknown Fields")]
     public void Validate_NonStrictMode_AllowsUnknownFields()
     {
         var schema = new IndexSchema { StrictMode = false }
@@ -61,7 +76,10 @@ public sealed class SchemaValidationTests
         schema.Validate(doc);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Validate: Correct Document Passes scenario.
+    /// </summary>
+    [Fact(DisplayName = "Validate: Correct Document Passes")]
     public void Validate_CorrectDocument_Passes()
     {
         var schema = new IndexSchema()

@@ -5,6 +5,9 @@ using Rowles.LeanLucene.Store;
 
 namespace Rowles.LeanLucene.Tests.Codecs;
 
+/// <summary>
+/// Contains unit tests for Field Compression.
+/// </summary>
 public class FieldCompressionTests : IDisposable
 {
     private readonly string _baseDir;
@@ -43,7 +46,10 @@ public class FieldCompressionTests : IDisposable
         writer.Commit();
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Policy: None Produces Largest Files scenario.
+    /// </summary>
+    [Fact(DisplayName = "Policy: None Produces Largest Files")]
     public void Policy_None_ProducesLargestFiles()
     {
         var dirNone = SubDir("none");
@@ -58,7 +64,10 @@ public class FieldCompressionTests : IDisposable
         Assert.True(sizeNone >= sizeLz4, $"None ({sizeNone}) should be >= Lz4 ({sizeLz4})");
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Policy: Zstandard Produces Smaller Than Lz 4 scenario.
+    /// </summary>
+    [Fact(DisplayName = "Policy: Zstandard Produces Smaller Than Lz 4")]
     public void Policy_Zstandard_ProducesSmallerThanLz4()
     {
         var dirLz4 = SubDir("lz4_2");
@@ -74,7 +83,10 @@ public class FieldCompressionTests : IDisposable
         Assert.True(sizeZstd <= sizeLz4, $"Zstandard ({sizeZstd}) should be <= Lz4 ({sizeLz4})");
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the All Policies: Round-trip Correctly scenario.
+    /// </summary>
+    [Fact(DisplayName = "All Policies: Round-trip Correctly")]
     public void AllPolicies_RoundTrip_Correctly()
     {
         foreach (var policy in new[] { FieldCompressionPolicy.None, FieldCompressionPolicy.Lz4, FieldCompressionPolicy.Zstandard })
@@ -91,14 +103,20 @@ public class FieldCompressionTests : IDisposable
         }
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Compression Policy: Default Is Lz 4 scenario.
+    /// </summary>
+    [Fact(DisplayName = "Compression Policy: Default Is Lz 4")]
     public void CompressionPolicy_DefaultIsLz4()
     {
         var config = new IndexWriterConfig();
         Assert.Equal(FieldCompressionPolicy.Lz4, config.CompressionPolicy);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Compression Policy: Can Be Changed scenario.
+    /// </summary>
+    [Fact(DisplayName = "Compression Policy: Can Be Changed")]
     public void CompressionPolicy_CanBeChanged()
     {
         var config = new IndexWriterConfig { CompressionPolicy = FieldCompressionPolicy.Zstandard };

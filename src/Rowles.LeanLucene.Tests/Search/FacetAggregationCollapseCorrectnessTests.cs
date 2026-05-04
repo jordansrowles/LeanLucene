@@ -4,6 +4,9 @@ using Rowles.LeanLucene.Store;
 
 namespace Rowles.LeanLucene.Tests.Search;
 
+/// <summary>
+/// Contains unit tests for Facet Aggregation Collapse Correctness.
+/// </summary>
 public sealed class FacetAggregationCollapseCorrectnessTests : IDisposable
 {
     private readonly string _dir;
@@ -20,7 +23,10 @@ public sealed class FacetAggregationCollapseCorrectnessTests : IDisposable
         catch { }
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Facets: Count All Matching Documents Not Only Top N scenario.
+    /// </summary>
+    [Fact(DisplayName = "Facets: Count All Matching Documents Not Only Top N")]
     public void Facets_CountAllMatchingDocuments_NotOnlyTopN()
     {
         using var writer = new IndexWriter(new MMapDirectory(_dir), new IndexWriterConfig());
@@ -36,7 +42,10 @@ public sealed class FacetAggregationCollapseCorrectnessTests : IDisposable
         Assert.Equal(1, groupFacet.Buckets.Single(b => b.Value == "rare").Count);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Aggregations: Count All Matching Documents Not Only Top N scenario.
+    /// </summary>
+    [Fact(DisplayName = "Aggregations: Count All Matching Documents Not Only Top N")]
     public void Aggregations_CountAllMatchingDocuments_NotOnlyTopN()
     {
         using var writer = new IndexWriter(new MMapDirectory(_dir), new IndexWriterConfig());
@@ -54,7 +63,10 @@ public sealed class FacetAggregationCollapseCorrectnessTests : IDisposable
         Assert.Equal(66, aggregations[0].Sum);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Collapse: Sees Groups Outside Original Over Fetch Window scenario.
+    /// </summary>
+    [Fact(DisplayName = "Collapse: Sees Groups Outside Original Over Fetch Window")]
     public void Collapse_SeesGroupsOutsideOriginalOverFetchWindow()
     {
         using var writer = new IndexWriter(new MMapDirectory(_dir), new IndexWriterConfig());

@@ -4,10 +4,19 @@ using Rowles.LeanLucene.Analysis.Tokenisers;
 
 namespace Rowles.LeanLucene.Tests.Analysis;
 
+/// <summary>
+/// Unit tests for the <see cref="AnalyserPipelineTests"/> class, verifying that the analyser
+/// correctly composes a tokeniser with zero or more filters, and that standard components
+/// implement their expected interfaces.
+/// </summary>
 [Trait("Category", "Analysis")]
 public sealed class AnalyserPipelineTests
 {
-    [Fact]
+    /// <summary>
+    /// Ensures that an analyser built with a tokeniser, lowercase filter, and stop-word filter
+    /// processes text correctly: lowercases all tokens and removes stop words like "the".
+    /// </summary>
+    [Fact(DisplayName = "Analyser composes tokeniser and filters correctly")]
     public void Analyser_ComposesTokeniserAndFilters()
     {
         var analyser = new Analyser(
@@ -25,7 +34,11 @@ public sealed class AnalyserPipelineTests
         Assert.Contains("jumps", texts);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies that adding a Porter stemmer filter to the pipeline reduces
+    /// inflected words (e.g., "Running", "Quickly") to their base forms (e.g., "run").
+    /// </summary>
+    [Fact(DisplayName = "Analyser with stemmer reduces words to base form")]
     public void Analyser_WithStemmer_StemsTokens()
     {
         var analyser = new Analyser(
@@ -39,7 +52,11 @@ public sealed class AnalyserPipelineTests
         Assert.Contains("run", texts);
     }
 
-    [Fact]
+    /// <summary>
+    /// Confirms that <see cref="StandardAnalyser"/> correctly implements <see cref="IAnalyser"/>
+    /// and performs typical analysis: tokenisation + lowercasing.
+    /// </summary>
+    [Fact(DisplayName = "StandardAnalyser implements IAnalyser and lowercases tokens")]
     public void StandardAnalyser_ImplementsIAnalyser()
     {
         IAnalyser analyser = new StandardAnalyser();
@@ -49,7 +66,11 @@ public sealed class AnalyserPipelineTests
         Assert.Equal("world", tokens[1].Text);
     }
 
-    [Fact]
+    /// <summary>
+    /// Tests that <see cref="StopWordFilter"/> correctly implements <see cref="ITokenFilter"/>
+    /// by removing common stop words (e.g., "the") from a token list.
+    /// </summary>
+    [Fact(DisplayName = "StopWordFilter implements ITokenFilter and removes stop words")]
     public void ITokenFilter_StopWordFilter_Implements()
     {
         ITokenFilter filter = new StopWordFilter();
@@ -59,7 +80,11 @@ public sealed class AnalyserPipelineTests
         Assert.Equal("cat", tokens[0].Text);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies that <see cref="LowercaseFilter"/> implements <see cref="ITokenFilter"/>
+    /// and converts token text to lowercase.
+    /// </summary>
+    [Fact(DisplayName = "LowercaseFilter implements ITokenFilter and lowercases tokens")]
     public void ITokenFilter_LowercaseFilter_Implements()
     {
         ITokenFilter filter = new LowercaseFilter();
@@ -68,7 +93,11 @@ public sealed class AnalyserPipelineTests
         Assert.Equal("hello", tokens[0].Text);
     }
 
-    [Fact]
+    /// <summary>
+    /// Ensures that the default <see cref="Tokeniser"/> implements <see cref="ITokeniser"/>
+    /// and correctly splits a space‑separated string into tokens.
+    /// </summary>
+    [Fact(DisplayName = "Tokeniser implements ITokeniser and splits on whitespace")]
     public void ITokeniser_Tokeniser_Implements()
     {
         ITokeniser tokeniser = new Tokeniser();

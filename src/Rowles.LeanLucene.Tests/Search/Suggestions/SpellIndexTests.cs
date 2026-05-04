@@ -8,6 +8,9 @@ using Rowles.LeanLucene.Tests.Fixtures;
 
 namespace Rowles.LeanLucene.Tests.Search.Suggestions;
 
+/// <summary>
+/// Contains unit tests for Spell Index.
+/// </summary>
 public sealed class SpellIndexTests : IClassFixture<TestDirectoryFixture>
 {
     private readonly string _path;
@@ -23,7 +26,10 @@ public sealed class SpellIndexTests : IClassFixture<TestDirectoryFixture>
 
     // ── Integration tests (via IndexSearcher) ───────────────────────────
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Suggest: Returns Closest Term By Edit Distance scenario.
+    /// </summary>
+    [Fact(DisplayName = "Suggest: Returns Closest Term By Edit Distance")]
     public void Suggest_ReturnsClosestTermByEditDistance()
     {
         var mmap = new MMapDirectory(SubDir(nameof(Suggest_ReturnsClosestTermByEditDistance)));
@@ -47,7 +53,10 @@ public sealed class SpellIndexTests : IClassFixture<TestDirectoryFixture>
         Assert.Contains(suggestions, s => s.Term == "hello");
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Suggest: Excludes Exact Match scenario.
+    /// </summary>
+    [Fact(DisplayName = "Suggest: Excludes Exact Match")]
     public void Suggest_ExcludesExactMatch()
     {
         var mmap = new MMapDirectory(SubDir(nameof(Suggest_ExcludesExactMatch)));
@@ -67,7 +76,10 @@ public sealed class SpellIndexTests : IClassFixture<TestDirectoryFixture>
         Assert.DoesNotContain(suggestions, s => s.Term == "hello");
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Suggest: Respects Top N scenario.
+    /// </summary>
+    [Fact(DisplayName = "Suggest: Respects Top N")]
     public void Suggest_RespectsTopN()
     {
         var mmap = new MMapDirectory(SubDir(nameof(Suggest_RespectsTopN)));
@@ -90,7 +102,10 @@ public sealed class SpellIndexTests : IClassFixture<TestDirectoryFixture>
         Assert.True(suggestions.Count <= 3);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Suggest: Returns Empty For No Matches scenario.
+    /// </summary>
+    [Fact(DisplayName = "Suggest: Returns Empty For No Matches")]
     public void Suggest_ReturnsEmptyForNoMatches()
     {
         var mmap = new MMapDirectory(SubDir(nameof(Suggest_ReturnsEmptyForNoMatches)));
@@ -110,7 +125,10 @@ public sealed class SpellIndexTests : IClassFixture<TestDirectoryFixture>
         Assert.Empty(suggestions);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Suggest: Higher Doc Frequency Ranks Higher scenario.
+    /// </summary>
+    [Fact(DisplayName = "Suggest: Higher Doc Frequency Ranks Higher")]
     public void Suggest_HigherDocFrequency_RanksHigher()
     {
         // "helt" is edit distance 1 from both "help" and "held"
@@ -141,7 +159,10 @@ public sealed class SpellIndexTests : IClassFixture<TestDirectoryFixture>
         Assert.Equal("help", suggestions[0].Term);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Suggest: Search Typo Inserted Letter scenario.
+    /// </summary>
+    [Fact(DisplayName = "Suggest: Search Typo Inserted Letter")]
     public void Suggest_SearchTypo_InsertedLetter()
     {
         // "serch" should suggest "search" (edit distance 1: insert 'a')
@@ -168,7 +189,10 @@ public sealed class SpellIndexTests : IClassFixture<TestDirectoryFixture>
 
     // ── Unit tests via BuildFromTerms (no I/O) ─────────────────────────
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Build From Terms: Handles Short Terms scenario.
+    /// </summary>
+    [Fact(DisplayName = "Build From Terms: Handles Short Terms")]
     public void BuildFromTerms_HandlesShortTerms()
     {
         // Terms shorter than 3 chars produce no trigrams but should still
@@ -186,7 +210,10 @@ public sealed class SpellIndexTests : IClassFixture<TestDirectoryFixture>
         Assert.All(suggestions, s => Assert.True(s.EditDistance <= 1));
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Build From Terms: Empty Index Returns Empty scenario.
+    /// </summary>
+    [Fact(DisplayName = "Build From Terms: Empty Index Returns Empty")]
     public void BuildFromTerms_EmptyIndex_ReturnsEmpty()
     {
         var index = SpellIndex.BuildFromTerms([]);
@@ -194,7 +221,10 @@ public sealed class SpellIndexTests : IClassFixture<TestDirectoryFixture>
         Assert.Empty(suggestions);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Build From Terms: Term Count Matches Input scenario.
+    /// </summary>
+    [Fact(DisplayName = "Build From Terms: Term Count Matches Input")]
     public void BuildFromTerms_TermCount_MatchesInput()
     {
         var index = SpellIndex.BuildFromTerms([
@@ -206,7 +236,10 @@ public sealed class SpellIndexTests : IClassFixture<TestDirectoryFixture>
         Assert.Equal(3, index.TermCount);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Build From Terms: Edit Distance 2 Finds Match scenario.
+    /// </summary>
+    [Fact(DisplayName = "Build From Terms: Edit Distance 2 Finds Match")]
     public void BuildFromTerms_EditDistance2_FindsMatch()
     {
         // "languge" should suggest "language" (edit distance 2)
@@ -223,7 +256,10 @@ public sealed class SpellIndexTests : IClassFixture<TestDirectoryFixture>
         Assert.Contains(suggestions, s => s.Term == "language");
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Build From Terms: Gibberish Returns Empty scenario.
+    /// </summary>
+    [Fact(DisplayName = "Build From Terms: Gibberish Returns Empty")]
     public void BuildFromTerms_Gibberish_ReturnsEmpty()
     {
         var index = SpellIndex.BuildFromTerms([

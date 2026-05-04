@@ -3,6 +3,9 @@ using Rowles.LeanLucene.Tests.Fixtures;
 
 namespace Rowles.LeanLucene.Tests.Store;
 
+/// <summary>
+/// Contains unit tests for MMap Directory.
+/// </summary>
 [Trait("Category", "Store")]
 public sealed class MMapDirectoryTests : IClassFixture<TestDirectoryFixture>
 {
@@ -10,7 +13,10 @@ public sealed class MMapDirectoryTests : IClassFixture<TestDirectoryFixture>
 
     public MMapDirectoryTests(TestDirectoryFixture fixture) => _fixture = fixture;
 
-    [Fact]
+    /// <summary>
+    /// Verifies the MMap Directory: Open Input Returns Readable Span scenario.
+    /// </summary>
+    [Fact(DisplayName = "MMap Directory: Open Input Returns Readable Span")]
     public void MMapDirectory_OpenInput_ReturnsReadableSpan()
     {
         // Write known bytes to a file, open via MMapDirectory,
@@ -29,7 +35,10 @@ public sealed class MMapDirectoryTests : IClassFixture<TestDirectoryFixture>
         Assert.Equal(expected, actual);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Index Input: Read Unaligned Returns Correct Primitive scenario.
+    /// </summary>
+    [Fact(DisplayName = "Index Input: Read Unaligned Returns Correct Primitive")]
     public void IndexInput_ReadUnaligned_ReturnsCorrectPrimitive()
     {
         // Write a float and an int at non-aligned offsets, read back via
@@ -55,7 +64,10 @@ public sealed class MMapDirectoryTests : IClassFixture<TestDirectoryFixture>
         Assert.Equal(expectedFloat, actualFloat);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Index Output: Write And Flush Produces Durable File scenario.
+    /// </summary>
+    [Fact(DisplayName = "Index Output: Write And Flush Produces Durable File")]
     public void IndexOutput_WriteAndFlush_ProducesDurableFile()
     {
         // Write a sequence of bytes via IndexOutput, dispose, read back raw,
@@ -76,7 +88,10 @@ public sealed class MMapDirectoryTests : IClassFixture<TestDirectoryFixture>
         Assert.Equal(expected, actual);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Index Input: Read Int 32 Beyond File End Throws End Of Stream Exception scenario.
+    /// </summary>
+    [Fact(DisplayName = "Index Input: Read Int 32 Beyond File End Throws End Of Stream Exception")]
     public void IndexInput_ReadInt32_BeyondFileEnd_ThrowsEndOfStreamException()
     {
         var dir = new MMapDirectory(_fixture.Path);
@@ -91,14 +106,20 @@ public sealed class MMapDirectoryTests : IClassFixture<TestDirectoryFixture>
         Assert.Throws<EndOfStreamException>(() => input.ReadInt32());
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the MMap Directory: Path Traversal File Name Throws Argument Exception scenario.
+    /// </summary>
+    [Fact(DisplayName = "MMap Directory: Path Traversal File Name Throws Argument Exception")]
     public void MMapDirectory_PathTraversalFileName_ThrowsArgumentException()
     {
         var dir = new MMapDirectory(_fixture.Path);
         Assert.Throws<ArgumentException>(() => dir.OpenInput("..\\..\\windows\\win.ini"));
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Index Output: Use Pooled Buffer No Heap Allocation scenario.
+    /// </summary>
+    [Fact(DisplayName = "Index Output: Use Pooled Buffer No Heap Allocation")]
     [Trait("Category", "Advanced")]
     public void IndexOutput_UsePooledBuffer_NoHeapAllocation()
     {

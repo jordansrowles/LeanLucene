@@ -38,7 +38,10 @@ public sealed class Stage2SearchTests : IClassFixture<TestDirectoryFixture>
 
     // ── ISimilarity ─────────────────────────────────────────────────────────
 
-    [Fact]
+    /// <summary>
+    /// Verifies the BM25 Similarity: Score Returns Positive Value scenario.
+    /// </summary>
+    [Fact(DisplayName = "BM25 Similarity: Score Returns Positive Value")]
     public void Bm25Similarity_Score_ReturnsPositiveValue()
     {
         var sim = Bm25Similarity.Instance;
@@ -46,7 +49,10 @@ public sealed class Stage2SearchTests : IClassFixture<TestDirectoryFixture>
         Assert.True(score > 0f);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Tf Idf Similarity: Score Returns Positive Value scenario.
+    /// </summary>
+    [Fact(DisplayName = "Tf Idf Similarity: Score Returns Positive Value")]
     public void TfIdfSimilarity_Score_ReturnsPositiveValue()
     {
         var sim = TfIdfSimilarity.Instance;
@@ -54,7 +60,10 @@ public sealed class Stage2SearchTests : IClassFixture<TestDirectoryFixture>
         Assert.True(score > 0f);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Tf Idf Similarity: Precompute Factors Id F Is Positive scenario.
+    /// </summary>
+    [Fact(DisplayName = "Tf Idf Similarity: Precompute Factors Id F Is Positive")]
     public void TfIdfSimilarity_PrecomputeFactors_IdFIsPositive()
     {
         var sim = TfIdfSimilarity.Instance;
@@ -62,7 +71,10 @@ public sealed class Stage2SearchTests : IClassFixture<TestDirectoryFixture>
         Assert.True(idf > 0f);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Tf Idf Similarity: Score Precomputed Matches Full Score scenario.
+    /// </summary>
+    [Fact(DisplayName = "Tf Idf Similarity: Score Precomputed Matches Full Score")]
     public void TfIdfSimilarity_ScorePrecomputed_MatchesFullScore()
     {
         var sim = TfIdfSimilarity.Instance;
@@ -72,7 +84,10 @@ public sealed class Stage2SearchTests : IClassFixture<TestDirectoryFixture>
         Assert.Equal(full, precomputed, precision: 4);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Index Searcher: With Tf Idf Similarity Returns Results scenario.
+    /// </summary>
+    [Fact(DisplayName = "Index Searcher: With Tf Idf Similarity Returns Results")]
     public void IndexSearcher_WithTfIdfSimilarity_ReturnsResults()
     {
         var dir = new MMapDirectory(SubDir("sim_tfidf"));
@@ -90,7 +105,10 @@ public sealed class Stage2SearchTests : IClassFixture<TestDirectoryFixture>
 
     // ── FunctionScoreQuery ──────────────────────────────────────────────────
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Function Score Query: Multiply Boosts Score By Field Value scenario.
+    /// </summary>
+    [Fact(DisplayName = "Function Score Query: Multiply Boosts Score By Field Value")]
     public void FunctionScoreQuery_Multiply_BoostsScoreByFieldValue()
     {
         var dir = new MMapDirectory(SubDir("fsq_multiply"));
@@ -113,7 +131,10 @@ public sealed class Stage2SearchTests : IClassFixture<TestDirectoryFixture>
         Assert.True(results.ScoreDocs[0].Score >= results.ScoreDocs[1].Score);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Function Score Query: Replace Uses Field Value As Score scenario.
+    /// </summary>
+    [Fact(DisplayName = "Function Score Query: Replace Uses Field Value As Score")]
     public void FunctionScoreQuery_Replace_UsesFieldValueAsScore()
     {
         var dir = new MMapDirectory(SubDir("fsq_replace"));
@@ -136,7 +157,10 @@ public sealed class Stage2SearchTests : IClassFixture<TestDirectoryFixture>
         Assert.Equal(50.0f, results.ScoreDocs[1].Score, precision: 1);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Function Score Query: Combine All Modes scenario.
+    /// </summary>
+    [Fact(DisplayName = "Function Score Query: Combine All Modes")]
     public void FunctionScoreQuery_Combine_AllModes()
     {
         Assert.Equal(6f, FunctionScoreQuery.Combine(2f, 3.0, ScoreMode.Multiply));
@@ -147,7 +171,10 @@ public sealed class Stage2SearchTests : IClassFixture<TestDirectoryFixture>
 
     // ── SpanQueries ─────────────────────────────────────────────────────────
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Span Near Query: Adjacent Terms Finds Match scenario.
+    /// </summary>
+    [Fact(DisplayName = "Span Near Query: Adjacent Terms Finds Match")]
     public void SpanNearQuery_AdjacentTerms_FindsMatch()
     {
         var dir = new MMapDirectory(SubDir("span_near"));
@@ -165,7 +192,10 @@ public sealed class Stage2SearchTests : IClassFixture<TestDirectoryFixture>
         Assert.Equal(1, results.TotalHits);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Span Near Query: With Slop Finds Non Adjacent Terms scenario.
+    /// </summary>
+    [Fact(DisplayName = "Span Near Query: With Slop Finds Non Adjacent Terms")]
     public void SpanNearQuery_WithSlop_FindsNonAdjacentTerms()
     {
         var dir = new MMapDirectory(SubDir("span_slop"));
@@ -183,7 +213,10 @@ public sealed class Stage2SearchTests : IClassFixture<TestDirectoryFixture>
         Assert.Equal(1, results.TotalHits);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Span Near Query: Exceeds Slop No Match scenario.
+    /// </summary>
+    [Fact(DisplayName = "Span Near Query: Exceeds Slop No Match")]
     public void SpanNearQuery_ExceedsSlop_NoMatch()
     {
         var dir = new MMapDirectory(SubDir("span_noslop"));
@@ -201,7 +234,10 @@ public sealed class Stage2SearchTests : IClassFixture<TestDirectoryFixture>
         Assert.Equal(0, results.TotalHits);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Span Or Query: Returns Union Of Matches scenario.
+    /// </summary>
+    [Fact(DisplayName = "Span Or Query: Returns Union Of Matches")]
     public void SpanOrQuery_ReturnsUnionOfMatches()
     {
         var dir = new MMapDirectory(SubDir("span_or"));
@@ -222,7 +258,10 @@ public sealed class Stage2SearchTests : IClassFixture<TestDirectoryFixture>
         Assert.Equal(2, results.TotalHits);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Span Not Query: Excludes Matching Spans scenario.
+    /// </summary>
+    [Fact(DisplayName = "Span Not Query: Excludes Matching Spans")]
     public void SpanNotQuery_ExcludesMatchingSpans()
     {
         var dir = new MMapDirectory(SubDir("span_not"));
@@ -246,7 +285,10 @@ public sealed class Stage2SearchTests : IClassFixture<TestDirectoryFixture>
 
     // ── Facets ──────────────────────────────────────────────────────────────
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Search With Facets: Returns Facet Counts scenario.
+    /// </summary>
+    [Fact(DisplayName = "Search With Facets: Returns Facet Counts")]
     public void SearchWithFacets_ReturnsFacetCounts()
     {
         var dir = new MMapDirectory(SubDir("facets"));
@@ -275,7 +317,10 @@ public sealed class Stage2SearchTests : IClassFixture<TestDirectoryFixture>
         Assert.Contains(sizeFacet.Buckets, b => b.Value == "large" && b.Count == 1);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Facets Collector: Empty Results Returns Empty Facets scenario.
+    /// </summary>
+    [Fact(DisplayName = "Facets Collector: Empty Results Returns Empty Facets")]
     public void FacetsCollector_EmptyResults_ReturnsEmptyFacets()
     {
         var collector = new FacetsCollector();
@@ -283,7 +328,10 @@ public sealed class Stage2SearchTests : IClassFixture<TestDirectoryFixture>
         Assert.Empty(results);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Facets Collector: Single Field Correct Counts scenario.
+    /// </summary>
+    [Fact(DisplayName = "Facets Collector: Single Field Correct Counts")]
     public void FacetsCollector_SingleField_CorrectCounts()
     {
         var collector = new FacetsCollector();

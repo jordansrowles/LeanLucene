@@ -29,7 +29,10 @@ public sealed class VarIntAndSkipTests : IClassFixture<TestDirectoryFixture>
 
     private string FilePath(string name) => System.IO.Path.Combine(_fixture.Path, name);
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Write VarInt: Read VarInt Round Trips Small Values scenario.
+    /// </summary>
+    [Fact(DisplayName = "Write VarInt: Read VarInt Round Trips Small Values")]
     public void WriteVarInt_ReadVarInt_RoundTripsSmallValues()
     {
         var path = FilePath("varint_small.bin");
@@ -46,7 +49,10 @@ public sealed class VarIntAndSkipTests : IClassFixture<TestDirectoryFixture>
         Assert.Equal(127, input.ReadVarInt());
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Write VarInt: Read VarInt Round Trips Large Values scenario.
+    /// </summary>
+    [Fact(DisplayName = "Write VarInt: Read VarInt Round Trips Large Values")]
     public void WriteVarInt_ReadVarInt_RoundTripsLargeValues()
     {
         var path = FilePath("varint_large.bin");
@@ -63,7 +69,10 @@ public sealed class VarIntAndSkipTests : IClassFixture<TestDirectoryFixture>
             Assert.Equal(expected, input.ReadVarInt());
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Write VarInt: Single Byte For Values Under 128 scenario.
+    /// </summary>
+    [Fact(DisplayName = "Write VarInt: Single Byte For Values Under 128")]
     public void WriteVarInt_SingleByte_ForValuesUnder128()
     {
         var path = FilePath("varint_onebyte.bin");
@@ -77,7 +86,10 @@ public sealed class VarIntAndSkipTests : IClassFixture<TestDirectoryFixture>
         Assert.Equal(2, new FileInfo(path).Length);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Write VarInt: Two Bytes For Values Up To 16383 scenario.
+    /// </summary>
+    [Fact(DisplayName = "Write VarInt: Two Bytes For Values Up To 16383")]
     public void WriteVarInt_TwoBytes_ForValuesUpTo16383()
     {
         var path = FilePath("varint_twobyte.bin");
@@ -91,7 +103,10 @@ public sealed class VarIntAndSkipTests : IClassFixture<TestDirectoryFixture>
         Assert.Equal(4, new FileInfo(path).Length);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Postings Writer: Read VarInt Compatible With Index Input scenario.
+    /// </summary>
+    [Fact(DisplayName = "Postings Writer: Read VarInt Compatible With Index Input")]
     public void PostingsWriter_ReadVarInt_CompatibleWithIndexInput()
     {
         // Verify PostingsWriter.WriteVarInt (BinaryWriter) and IndexInput.ReadVarInt are compatible
@@ -110,7 +125,10 @@ public sealed class VarIntAndSkipTests : IClassFixture<TestDirectoryFixture>
             Assert.Equal(expected, input.ReadVarInt());
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Index Output: Write VarInt Compatible With Postings Reader scenario.
+    /// </summary>
+    [Fact(DisplayName = "Index Output: Write VarInt Compatible With Postings Reader")]
     public void IndexOutput_WriteVarInt_CompatibleWithPostingsReader()
     {
         // Verify IndexOutput.WriteVarInt and PostingsReader.ReadVarInt are compatible
@@ -129,7 +147,10 @@ public sealed class VarIntAndSkipTests : IClassFixture<TestDirectoryFixture>
             Assert.Equal(expected, PostingsReader.ReadVarInt(br));
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Prefetch: Does Not Throw On Valid Input scenario.
+    /// </summary>
+    [Fact(DisplayName = "Prefetch: Does Not Throw On Valid Input")]
     public void Prefetch_DoesNotThrow_OnValidInput()
     {
         var path = FilePath("prefetch_test.bin");
@@ -143,7 +164,10 @@ public sealed class VarIntAndSkipTests : IClassFixture<TestDirectoryFixture>
         Assert.Equal(4096, input.Length);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Prefetch: Empty File Does Not Throw scenario.
+    /// </summary>
+    [Fact(DisplayName = "Prefetch: Empty File Does Not Throw")]
     public void Prefetch_EmptyFile_DoesNotThrow()
     {
         var path = FilePath("prefetch_empty.bin");

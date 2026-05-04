@@ -8,7 +8,10 @@ namespace Rowles.LeanLucene.Tests.Index;
 /// </summary>
 public sealed class PostingAccumulatorTests
 {
-    [Fact]
+    /// <summary>
+    /// Verifies the Add: Single Doc Single Position Records Correctly scenario.
+    /// </summary>
+    [Fact(DisplayName = "Add: Single Doc Single Position Records Correctly")]
     public void Add_SingleDocSinglePosition_RecordsCorrectly()
     {
         var acc = new PostingAccumulator();
@@ -23,7 +26,10 @@ public sealed class PostingAccumulatorTests
         Assert.Equal(5, positions[0]);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Add: Same Doc Multiple Positions Increments Freq And Stores All scenario.
+    /// </summary>
+    [Fact(DisplayName = "Add: Same Doc Multiple Positions Increments Freq And Stores All")]
     public void Add_SameDocMultiplePositions_IncrementsFreqAndStoresAll()
     {
         var acc = new PostingAccumulator();
@@ -41,7 +47,10 @@ public sealed class PostingAccumulatorTests
         Assert.Equal(20, positions[2]);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Add: Multiple Docs Tracks Each Separately scenario.
+    /// </summary>
+    [Fact(DisplayName = "Add: Multiple Docs Tracks Each Separately")]
     public void Add_MultipleDocs_TracksEachSeparately()
     {
         var acc = new PostingAccumulator();
@@ -56,7 +65,10 @@ public sealed class PostingAccumulatorTests
         Assert.Equal(2, acc.DocIds[2]);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Add Doc Only: Records Doc With No Positions scenario.
+    /// </summary>
+    [Fact(DisplayName = "Add Doc Only: Records Doc With No Positions")]
     public void AddDocOnly_RecordsDocWithNoPositions()
     {
         var acc = new PostingAccumulator();
@@ -69,7 +81,10 @@ public sealed class PostingAccumulatorTests
         Assert.True(acc.GetPositions(0).IsEmpty);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Add Doc Only: Duplicate Doc Ignores Second Add scenario.
+    /// </summary>
+    [Fact(DisplayName = "Add Doc Only: Duplicate Doc Ignores Second Add")]
     public void AddDocOnly_DuplicateDoc_IgnoresSecondAdd()
     {
         var acc = new PostingAccumulator();
@@ -80,7 +95,10 @@ public sealed class PostingAccumulatorTests
         Assert.Equal(1, acc.Count);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Add With Payload: Stores And Retrieves Payload scenario.
+    /// </summary>
+    [Fact(DisplayName = "Add With Payload: Stores And Retrieves Payload")]
     public void AddWithPayload_StoresAndRetrievesPayload()
     {
         var acc = new PostingAccumulator();
@@ -95,7 +113,10 @@ public sealed class PostingAccumulatorTests
         Assert.Equal(payload, retrieved);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Add With Payload: Multiple Positions Same Doc All Payloads Retrievable scenario.
+    /// </summary>
+    [Fact(DisplayName = "Add With Payload: Multiple Positions Same Doc All Payloads Retrievable")]
     public void AddWithPayload_MultiplePositionsSameDoc_AllPayloadsRetrievable()
     {
         var acc = new PostingAccumulator();
@@ -110,7 +131,10 @@ public sealed class PostingAccumulatorTests
         Assert.Equal(p2, acc.GetPayload(0, 1));
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Grow: Triggered By Exceeding Initial Capacity All Data Preserved scenario.
+    /// </summary>
+    [Fact(DisplayName = "Grow: Triggered By Exceeding Initial Capacity All Data Preserved")]
     public void Grow_TriggeredByExceedingInitialCapacity_AllDataPreserved()
     {
         var acc = new PostingAccumulator();
@@ -128,7 +152,10 @@ public sealed class PostingAccumulatorTests
         }
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Ensure Pos Buf Capacity: Many Positions Trigger Growth scenario.
+    /// </summary>
+    [Fact(DisplayName = "Ensure Pos Buf Capacity: Many Positions Trigger Growth")]
     public void EnsurePosBufCapacity_ManyPositionsTriggerGrowth()
     {
         var acc = new PostingAccumulator();
@@ -145,7 +172,10 @@ public sealed class PostingAccumulatorTests
             Assert.Equal(p, positions[p]);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Has Freqs: Returns True When Any Doc Has Positions scenario.
+    /// </summary>
+    [Fact(DisplayName = "Has Freqs: Returns True When Any Doc Has Positions")]
     public void HasFreqs_ReturnsTrue_WhenAnyDocHasPositions()
     {
         var acc = new PostingAccumulator();
@@ -154,7 +184,10 @@ public sealed class PostingAccumulatorTests
         Assert.True(acc.HasFreqs);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Has Freqs: Returns False When Only Doc Only Entries scenario.
+    /// </summary>
+    [Fact(DisplayName = "Has Freqs: Returns False When Only Doc Only Entries")]
     public void HasFreqs_ReturnsFalse_WhenOnlyDocOnlyEntries()
     {
         var acc = new PostingAccumulator();
@@ -163,7 +196,10 @@ public sealed class PostingAccumulatorTests
         Assert.False(acc.HasFreqs);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Has Positions: Returns True When Positions Exist scenario.
+    /// </summary>
+    [Fact(DisplayName = "Has Positions: Returns True When Positions Exist")]
     public void HasPositions_ReturnsTrue_WhenPositionsExist()
     {
         var acc = new PostingAccumulator();
@@ -172,7 +208,10 @@ public sealed class PostingAccumulatorTests
         Assert.True(acc.HasPositions);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Has Positions: Returns False When No Positions scenario.
+    /// </summary>
+    [Fact(DisplayName = "Has Positions: Returns False When No Positions")]
     public void HasPositions_ReturnsFalse_WhenNoPositions()
     {
         var acc = new PostingAccumulator();
@@ -181,7 +220,10 @@ public sealed class PostingAccumulatorTests
         Assert.False(acc.HasPositions);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Has Payloads: Returns False When No Payloads Added scenario.
+    /// </summary>
+    [Fact(DisplayName = "Has Payloads: Returns False When No Payloads Added")]
     public void HasPayloads_ReturnsFalse_WhenNoPayloadsAdded()
     {
         var acc = new PostingAccumulator();
@@ -190,7 +232,10 @@ public sealed class PostingAccumulatorTests
         Assert.False(acc.HasPayloads);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Return Buffers: Resets State And Does Not Throw scenario.
+    /// </summary>
+    [Fact(DisplayName = "Return Buffers: Resets State And Does Not Throw")]
     public void ReturnBuffers_ResetsStateAndDoesNotThrow()
     {
         var acc = new PostingAccumulator();
@@ -203,7 +248,10 @@ public sealed class PostingAccumulatorTests
         Assert.True(acc.DocIds.IsEmpty);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Remap Doc IDs: Translates And Sorts Correctly scenario.
+    /// </summary>
+    [Fact(DisplayName = "Remap Doc IDs: Translates And Sorts Correctly")]
     public void RemapDocIds_TranslatesAndSortsCorrectly()
     {
         var acc = new PostingAccumulator();
@@ -230,7 +278,10 @@ public sealed class PostingAccumulatorTests
         Assert.Equal(100, acc.GetPositions(2)[0]); // was doc 0
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Remap Doc IDs: Empty Accumulator Does Not Throw scenario.
+    /// </summary>
+    [Fact(DisplayName = "Remap Doc IDs: Empty Accumulator Does Not Throw")]
     public void RemapDocIds_EmptyAccumulator_DoesNotThrow()
     {
         var acc = new PostingAccumulator();
@@ -241,7 +292,10 @@ public sealed class PostingAccumulatorTests
         Assert.Equal(0, acc.Count);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Remap Doc IDs: Preserves Payloads scenario.
+    /// </summary>
+    [Fact(DisplayName = "Remap Doc IDs: Preserves Payloads")]
     public void RemapDocIds_PreservesPayloads()
     {
         var acc = new PostingAccumulator();
@@ -261,7 +315,10 @@ public sealed class PostingAccumulatorTests
         Assert.Equal(p0, acc.GetPayload(1, 0)); // was doc 0
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Get Payload: Returns Null When No Payloads Initialised scenario.
+    /// </summary>
+    [Fact(DisplayName = "Get Payload: Returns Null When No Payloads Initialised")]
     public void GetPayload_ReturnsNull_WhenNoPayloadsInitialised()
     {
         var acc = new PostingAccumulator();
@@ -270,7 +327,10 @@ public sealed class PostingAccumulatorTests
         Assert.Null(acc.GetPayload(0, 0));
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Estimated Bytes: After Add Reflects Buffer Size scenario.
+    /// </summary>
+    [Fact(DisplayName = "Estimated Bytes: After Add Reflects Buffer Size")]
     public void EstimatedBytes_AfterAdd_ReflectsBufferSize()
     {
         var acc = new PostingAccumulator();
@@ -289,7 +349,10 @@ public sealed class PostingAccumulatorTests
         Assert.True(bytes >= 176, $"Expected >= 176 but was {bytes}");
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Estimated Bytes: After Resize Increases scenario.
+    /// </summary>
+    [Fact(DisplayName = "Estimated Bytes: After Resize Increases")]
     public void EstimatedBytes_AfterResize_Increases()
     {
         var acc = new PostingAccumulator();
@@ -307,7 +370,10 @@ public sealed class PostingAccumulatorTests
             $"Expected EstimatedBytes to increase after resize: before={bytesBefore}, after={bytesAfter}");
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Estimated Bytes: After Return Buffers Is Minimal scenario.
+    /// </summary>
+    [Fact(DisplayName = "Estimated Bytes: After Return Buffers Is Minimal")]
     public void EstimatedBytes_AfterReturnBuffers_IsMinimal()
     {
         var acc = new PostingAccumulator();

@@ -20,6 +20,9 @@ using Rowles.LeanLucene.Tests.Fixtures;
 
 namespace Rowles.LeanLucene.Tests.Search;
 
+/// <summary>
+/// Contains unit tests for HNSW Metrics.
+/// </summary>
 [Trait("Category", "Phase5")]
 public sealed class HnswMetricsTests : IClassFixture<TestDirectoryFixture>
 {
@@ -66,7 +69,10 @@ public sealed class HnswMetricsTests : IClassFixture<TestDirectoryFixture>
         return (dir, metrics);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the HNSW Build On Flush: Records HNSW Build Metric scenario.
+    /// </summary>
+    [Fact(DisplayName = "HNSW Build On Flush: Records HNSW Build Metric")]
     public void HnswBuildOnFlush_RecordsHnswBuildMetric()
     {
         var (_, metrics) = BuildIndex(SubDir("hnsw_metrics_build"), docCount: 50);
@@ -76,7 +82,10 @@ public sealed class HnswMetricsTests : IClassFixture<TestDirectoryFixture>
         Assert.Equal(50, snapshot.HnswNodesBuilt);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the HNSW Search: Records HNSW Search Metric scenario.
+    /// </summary>
+    [Fact(DisplayName = "HNSW Search: Records HNSW Search Metric")]
     public void HnswSearch_RecordsHnswSearchMetric()
     {
         var dir = new MMapDirectory(SubDir("hnsw_metrics_search"));
@@ -115,7 +124,10 @@ public sealed class HnswMetricsTests : IClassFixture<TestDirectoryFixture>
         Assert.True(snapshot.HnswNodesVisited > 0, "Nodes visited should be positive.");
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Explain: Vector Query Reports HNSW Strategy And Score scenario.
+    /// </summary>
+    [Fact(DisplayName = "Explain: Vector Query Reports HNSW Strategy And Score")]
     public void Explain_VectorQuery_ReportsHnswStrategyAndScore()
     {
         var (dir, _) = BuildIndex(SubDir("hnsw_explain"), docCount: 40);

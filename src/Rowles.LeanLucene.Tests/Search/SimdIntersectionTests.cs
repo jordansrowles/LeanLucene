@@ -11,7 +11,10 @@ namespace Rowles.LeanLucene.Tests.Search;
 /// </summary>
 public sealed class SimdIntersectionTests
 {
-    [Fact]
+    /// <summary>
+    /// Verifies the Intersect: Identical Arrays Returns All scenario.
+    /// </summary>
+    [Fact(DisplayName = "Intersect: Identical Arrays Returns All")]
     public void Intersect_IdenticalArrays_ReturnsAll()
     {
         // Arrange
@@ -27,7 +30,10 @@ public sealed class SimdIntersectionTests
         Assert.Equal(a, result[..count].ToArray());
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Intersect: No Overlap Returns Empty scenario.
+    /// </summary>
+    [Fact(DisplayName = "Intersect: No Overlap Returns Empty")]
     public void Intersect_NoOverlap_ReturnsEmpty()
     {
         // Arrange
@@ -42,7 +48,10 @@ public sealed class SimdIntersectionTests
         Assert.Equal(0, count);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Intersect: Partial Overlap Returns Common scenario.
+    /// </summary>
+    [Fact(DisplayName = "Intersect: Partial Overlap Returns Common")]
     public void Intersect_PartialOverlap_ReturnsCommon()
     {
         // Arrange
@@ -59,7 +68,10 @@ public sealed class SimdIntersectionTests
         Assert.Equal(expected, result[..count].ToArray());
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Intersect: Empty Input Returns Empty scenario.
+    /// </summary>
+    [Fact(DisplayName = "Intersect: Empty Input Returns Empty")]
     public void Intersect_EmptyInput_ReturnsEmpty()
     {
         // Arrange
@@ -76,7 +88,10 @@ public sealed class SimdIntersectionTests
         Assert.Equal(0, countEmptySecond);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Intersect: Large Arrays Correct Result scenario.
+    /// </summary>
+    [Fact(DisplayName = "Intersect: Large Arrays Correct Result")]
     public void Intersect_LargeArrays_CorrectResult()
     {
         // Arrange — 10K even numbers vs 10K multiples of 3
@@ -110,7 +125,10 @@ public sealed class SimdIntersectionTests
         Assert.Equal(expected, result[..count]);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Intersect Count: Matches Intersect Length scenario.
+    /// </summary>
+    [Fact(DisplayName = "Intersect Count: Matches Intersect Length")]
     public void IntersectCount_MatchesIntersectLength()
     {
         // Arrange
@@ -126,7 +144,10 @@ public sealed class SimdIntersectionTests
         Assert.Equal(intersectLength, intersectCount);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Intersect: Single Element Match scenario.
+    /// </summary>
+    [Fact(DisplayName = "Intersect: Single Element Match")]
     public void Intersect_SingleElement_Match()
     {
         // Arrange
@@ -142,7 +163,10 @@ public sealed class SimdIntersectionTests
         Assert.Equal(42, result[0]);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Intersect: Single Element No Match scenario.
+    /// </summary>
+    [Fact(DisplayName = "Intersect: Single Element No Match")]
     public void Intersect_SingleElement_NoMatch()
     {
         // Arrange

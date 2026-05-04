@@ -2,9 +2,15 @@ namespace Rowles.LeanLucene.Tests.Util;
 
 using Rowles.LeanLucene.Util;
 
+/// <summary>
+/// Contains unit tests for Roaring Bitmap.
+/// </summary>
 public sealed class RoaringBitmapTests
 {
-    [Fact]
+    /// <summary>
+    /// Verifies the Add: Contains Single Value scenario.
+    /// </summary>
+    [Fact(DisplayName = "Add: Contains Single Value")]
     public void Add_Contains_SingleValue()
     {
         var rb = new RoaringBitmap();
@@ -13,7 +19,10 @@ public sealed class RoaringBitmapTests
         Assert.False(rb.Contains(43));
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Add: Contains Multiple Values scenario.
+    /// </summary>
+    [Fact(DisplayName = "Add: Contains Multiple Values")]
     public void Add_Contains_MultipleValues()
     {
         var rb = new RoaringBitmap();
@@ -28,7 +37,10 @@ public sealed class RoaringBitmapTests
         Assert.False(rb.Contains(101));
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Cardinality: Reflects Added Values scenario.
+    /// </summary>
+    [Fact(DisplayName = "Cardinality: Reflects Added Values")]
     public void Cardinality_ReflectsAddedValues()
     {
         var rb = new RoaringBitmap();
@@ -38,7 +50,10 @@ public sealed class RoaringBitmapTests
         Assert.Equal(50, rb.Cardinality);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Remove: Decreases Cardinality scenario.
+    /// </summary>
+    [Fact(DisplayName = "Remove: Decreases Cardinality")]
     public void Remove_DecreasesCardinality()
     {
         var rb = new RoaringBitmap();
@@ -52,7 +67,10 @@ public sealed class RoaringBitmapTests
         Assert.False(rb.Contains(20));
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Remove: Non Existent Returns False scenario.
+    /// </summary>
+    [Fact(DisplayName = "Remove: Non Existent Returns False")]
     public void Remove_NonExistent_ReturnsFalse()
     {
         var rb = new RoaringBitmap();
@@ -61,7 +79,10 @@ public sealed class RoaringBitmapTests
         Assert.Equal(1, rb.Cardinality);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Array Container: Converts To Bitmap Above 4096 scenario.
+    /// </summary>
+    [Fact(DisplayName = "Array Container: Converts To Bitmap Above 4096")]
     public void ArrayContainer_ConvertsToBitmap_Above4096()
     {
         var rb = new RoaringBitmap();
@@ -75,7 +96,10 @@ public sealed class RoaringBitmapTests
             Assert.True(rb.Contains(i), $"Should contain {i}");
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Bitmap Container: Converts To Array Below 4096 scenario.
+    /// </summary>
+    [Fact(DisplayName = "Bitmap Container: Converts To Array Below 4096")]
     public void BitmapContainer_ConvertsToArray_Below4096()
     {
         var rb = new RoaringBitmap();
@@ -92,7 +116,10 @@ public sealed class RoaringBitmapTests
             Assert.True(rb.Contains(i));
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Add Range: Adds Consecutive Doc IDs scenario.
+    /// </summary>
+    [Fact(DisplayName = "Add Range: Adds Consecutive Doc IDs")]
     public void AddRange_AddsConsecutiveDocIds()
     {
         var rb = new RoaringBitmap();
@@ -105,7 +132,10 @@ public sealed class RoaringBitmapTests
         Assert.False(rb.Contains(2000));
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Cross Container: Values In Multiple Chunks scenario.
+    /// </summary>
+    [Fact(DisplayName = "Cross Container: Values In Multiple Chunks")]
     public void CrossContainer_ValuesInMultipleChunks()
     {
         var rb = new RoaringBitmap();
@@ -119,7 +149,10 @@ public sealed class RoaringBitmapTests
             Assert.True(rb.Contains(v));
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Enumeration: Yields In Sorted Order scenario.
+    /// </summary>
+    [Fact(DisplayName = "Enumeration: Yields In Sorted Order")]
     public void Enumeration_YieldsInSortedOrder()
     {
         var rb = new RoaringBitmap();
@@ -136,7 +169,10 @@ public sealed class RoaringBitmapTests
             Assert.True(result[i] > result[i - 1], $"Not sorted: {result[i - 1]} >= {result[i]}");
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Large Scale: One Million Doc IDs scenario.
+    /// </summary>
+    [Fact(DisplayName = "Large Scale: One Million Doc IDs")]
     public void LargeScale_OneMillion_DocIds()
     {
         var rb = new RoaringBitmap();
@@ -158,7 +194,10 @@ public sealed class RoaringBitmapTests
             Assert.True(rb.Contains(v));
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Optimise Runs: Converts Consecutive Ranges scenario.
+    /// </summary>
+    [Fact(DisplayName = "Optimise Runs: Converts Consecutive Ranges")]
     public void OptimiseRuns_ConvertsConsecutiveRanges()
     {
         var rb = new RoaringBitmap();
@@ -173,14 +212,20 @@ public sealed class RoaringBitmapTests
         Assert.False(rb.Contains(600));
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Is Empty: When New Is True scenario.
+    /// </summary>
+    [Fact(DisplayName = "Is Empty: When New Is True")]
     public void IsEmpty_WhenNew_IsTrue()
     {
         var rb = new RoaringBitmap();
         Assert.True(rb.IsEmpty);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Is Empty: After Add And Remove All Is True scenario.
+    /// </summary>
+    [Fact(DisplayName = "Is Empty: After Add And Remove All Is True")]
     public void IsEmpty_AfterAddAndRemoveAll_IsTrue()
     {
         var rb = new RoaringBitmap();
@@ -190,7 +235,10 @@ public sealed class RoaringBitmapTests
         Assert.True(rb.IsEmpty);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Duplicate Add: Does Not Increase Cardinality scenario.
+    /// </summary>
+    [Fact(DisplayName = "Duplicate Add: Does Not Increase Cardinality")]
     public void DuplicateAdd_DoesNotIncreaseCardinality()
     {
         var rb = new RoaringBitmap();
@@ -200,7 +248,10 @@ public sealed class RoaringBitmapTests
         Assert.Equal(1, rb.Cardinality);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the And: Returns Intersection scenario.
+    /// </summary>
+    [Fact(DisplayName = "And: Returns Intersection")]
     public void And_ReturnsIntersection()
     {
         var a = new RoaringBitmap();
@@ -216,7 +267,10 @@ public sealed class RoaringBitmapTests
         Assert.False(result.Contains(100));
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Or: Returns Union scenario.
+    /// </summary>
+    [Fact(DisplayName = "Or: Returns Union")]
     public void Or_ReturnsUnion()
     {
         var a = new RoaringBitmap();
@@ -230,7 +284,10 @@ public sealed class RoaringBitmapTests
             Assert.True(result.Contains(i));
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the And Not: Returns Difference scenario.
+    /// </summary>
+    [Fact(DisplayName = "And Not: Returns Difference")]
     public void AndNot_ReturnsDifference()
     {
         var a = new RoaringBitmap();
@@ -245,7 +302,10 @@ public sealed class RoaringBitmapTests
         Assert.False(result.Contains(50));
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Xor: Returns Symmetric Difference scenario.
+    /// </summary>
+    [Fact(DisplayName = "Xor: Returns Symmetric Difference")]
     public void Xor_ReturnsSymmetricDifference()
     {
         var a = new RoaringBitmap();
@@ -263,7 +323,10 @@ public sealed class RoaringBitmapTests
             Assert.False(result.Contains(i));
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the And: Commutativity scenario.
+    /// </summary>
+    [Fact(DisplayName = "And: Commutativity")]
     public void And_Commutativity()
     {
         var a = new RoaringBitmap();
@@ -277,7 +340,10 @@ public sealed class RoaringBitmapTests
         Assert.Equal(ab.Cardinality, ba.Cardinality);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Or: With Empty Returns Original scenario.
+    /// </summary>
+    [Fact(DisplayName = "Or: With Empty Returns Original")]
     public void Or_WithEmpty_ReturnsOriginal()
     {
         var a = new RoaringBitmap();
@@ -288,7 +354,10 @@ public sealed class RoaringBitmapTests
         Assert.Equal(a.Cardinality, result.Cardinality);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the And: With Empty Returns Empty scenario.
+    /// </summary>
+    [Fact(DisplayName = "And: With Empty Returns Empty")]
     public void And_WithEmpty_ReturnsEmpty()
     {
         var a = new RoaringBitmap();
@@ -299,7 +368,10 @@ public sealed class RoaringBitmapTests
         Assert.Equal(0, result.Cardinality);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Set Ops: Cross Chunk scenario.
+    /// </summary>
+    [Fact(DisplayName = "Set Ops: Cross Chunk")]
     public void SetOps_CrossChunk()
     {
         var a = new RoaringBitmap();
@@ -318,7 +390,10 @@ public sealed class RoaringBitmapTests
         Assert.Equal(350, or.Cardinality); // 150 + 100 + 100
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Serialise: Round-trip Array Container scenario.
+    /// </summary>
+    [Fact(DisplayName = "Serialise: Round-trip Array Container")]
     public void Serialise_RoundTrip_ArrayContainer()
     {
         var rb = new RoaringBitmap();
@@ -341,7 +416,10 @@ public sealed class RoaringBitmapTests
         finally { File.Delete(path); }
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Serialise: Round-trip Bitmap Container scenario.
+    /// </summary>
+    [Fact(DisplayName = "Serialise: Round-trip Bitmap Container")]
     public void Serialise_RoundTrip_BitmapContainer()
     {
         var rb = new RoaringBitmap();
@@ -363,7 +441,10 @@ public sealed class RoaringBitmapTests
         finally { File.Delete(path); }
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Serialise: Round-trip Run Container scenario.
+    /// </summary>
+    [Fact(DisplayName = "Serialise: Round-trip Run Container")]
     public void Serialise_RoundTrip_RunContainer()
     {
         var rb = new RoaringBitmap();
@@ -387,7 +468,10 @@ public sealed class RoaringBitmapTests
         finally { File.Delete(path); }
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Serialise: Round-trip Multiple Chunks scenario.
+    /// </summary>
+    [Fact(DisplayName = "Serialise: Round-trip Multiple Chunks")]
     public void Serialise_RoundTrip_MultipleChunks()
     {
         var rb = new RoaringBitmap();
@@ -412,7 +496,10 @@ public sealed class RoaringBitmapTests
         finally { File.Delete(path); }
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Serialise: Empty Round Trips scenario.
+    /// </summary>
+    [Fact(DisplayName = "Serialise: Empty Round Trips")]
     public void Serialise_Empty_RoundTrips()
     {
         var rb = new RoaringBitmap();
@@ -428,7 +515,10 @@ public sealed class RoaringBitmapTests
         finally { File.Delete(path); }
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Deserialise: Rejects Corrupt CRC scenario.
+    /// </summary>
+    [Fact(DisplayName = "Deserialise: Rejects Corrupt CRC")]
     public void Deserialise_RejectsCorruptCrc()
     {
         var rb = new RoaringBitmap();
@@ -448,7 +538,10 @@ public sealed class RoaringBitmapTests
         finally { File.Delete(path); }
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Deserialise: Rejects Truncated File scenario.
+    /// </summary>
+    [Fact(DisplayName = "Deserialise: Rejects Truncated File")]
     public void Deserialise_RejectsTruncatedFile()
     {
         var rb = new RoaringBitmap();
@@ -467,7 +560,10 @@ public sealed class RoaringBitmapTests
         finally { File.Delete(path); }
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Deserialise: Rejects Bad Magic scenario.
+    /// </summary>
+    [Fact(DisplayName = "Deserialise: Rejects Bad Magic")]
     public void Deserialise_RejectsBadMagic()
     {
         var path = Path.Combine(Path.GetTempPath(), $"roaring_test_{Guid.NewGuid():N}.bin");

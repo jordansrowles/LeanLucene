@@ -4,12 +4,18 @@ using Rowles.LeanLucene.Analysis.Tokenisers;
 
 namespace Rowles.LeanLucene.Tests.Analysis;
 
+/// <summary>
+/// Contains unit tests for Tokeniser Offsets.
+/// </summary>
 [Trait("Category", "Analysis")]
 public class TokeniserOffsetsTests
 {
     private readonly Tokeniser _tokeniser = new();
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Tokenise Offsets: Sentence Returns Correct Offsets scenario.
+    /// </summary>
+    [Fact(DisplayName = "Tokenise Offsets: Sentence Returns Correct Offsets")]
     public void TokeniseOffsets_Sentence_ReturnsCorrectOffsets()
     {
         var offsets = new List<(int Start, int End)>();
@@ -22,7 +28,10 @@ public class TokeniserOffsetsTests
         Assert.Equal((16, 19), offsets[3]);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Tokenise Offsets: Empty Input Returns Empty List scenario.
+    /// </summary>
+    [Fact(DisplayName = "Tokenise Offsets: Empty Input Returns Empty List")]
     public void TokeniseOffsets_EmptyInput_ReturnsEmptyList()
     {
         var offsets = new List<(int Start, int End)>();
@@ -31,7 +40,10 @@ public class TokeniserOffsetsTests
         Assert.Empty(offsets);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Tokenise Offsets: Only Punctuation Returns Empty List scenario.
+    /// </summary>
+    [Fact(DisplayName = "Tokenise Offsets: Only Punctuation Returns Empty List")]
     public void TokeniseOffsets_OnlyPunctuation_ReturnsEmptyList()
     {
         var offsets = new List<(int Start, int End)>();
@@ -40,7 +52,10 @@ public class TokeniserOffsetsTests
         Assert.Empty(offsets);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Tokenise Offsets: Clears Existing Entries scenario.
+    /// </summary>
+    [Fact(DisplayName = "Tokenise Offsets: Clears Existing Entries")]
     public void TokeniseOffsets_ClearsExistingEntries()
     {
         var offsets = new List<(int Start, int End)> { (99, 100) };
@@ -50,7 +65,10 @@ public class TokeniserOffsetsTests
         Assert.Equal((0, 5), offsets[0]);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Tokenise Offsets: Matches Tokenise scenario.
+    /// </summary>
+    [Fact(DisplayName = "Tokenise Offsets: Matches Tokenise")]
     public void TokeniseOffsets_MatchesTokenise()
     {
         const string input = "Hello, world! This is a test.";

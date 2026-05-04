@@ -11,6 +11,9 @@ using Xunit.Abstractions;
 
 namespace Rowles.LeanLucene.Tests.Search;
 
+/// <summary>
+/// Contains unit tests for Boolean Query Streaming.
+/// </summary>
 [Trait("Category", "Search")]
 [Trait("Category", "BooleanQuery")]
 public sealed class BooleanQueryStreamingTests : IClassFixture<TestDirectoryFixture>
@@ -31,7 +34,10 @@ public sealed class BooleanQueryStreamingTests : IClassFixture<TestDirectoryFixt
         return path;
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Must: Single Clause Returns Matching Docs scenario.
+    /// </summary>
+    [Fact(DisplayName = "Must: Single Clause Returns Matching Docs")]
     public void Must_SingleClause_ReturnsMatchingDocs()
     {
         var dir = new MMapDirectory(SubDir("bool_stream_single_must"));
@@ -54,7 +60,10 @@ public sealed class BooleanQueryStreamingTests : IClassFixture<TestDirectoryFixt
         Assert.Equal(2, results.TotalHits);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Must: Three Terms Intersects All scenario.
+    /// </summary>
+    [Fact(DisplayName = "Must: Three Terms Intersects All")]
     public void Must_ThreeTerms_IntersectsAll()
     {
         var dir = new MMapDirectory(SubDir("bool_stream_three_must"));
@@ -86,7 +95,10 @@ public sealed class BooleanQueryStreamingTests : IClassFixture<TestDirectoryFixt
         Assert.Equal(2, results.TotalHits);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Must: No Common Docs Returns Empty scenario.
+    /// </summary>
+    [Fact(DisplayName = "Must: No Common Docs Returns Empty")]
     public void Must_NoCommonDocs_ReturnsEmpty()
     {
         var dir = new MMapDirectory(SubDir("bool_stream_must_disjoint"));
@@ -111,7 +123,10 @@ public sealed class BooleanQueryStreamingTests : IClassFixture<TestDirectoryFixt
         Assert.Equal(0, results.TotalHits);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Must: Nonexistent Term Returns Empty scenario.
+    /// </summary>
+    [Fact(DisplayName = "Must: Nonexistent Term Returns Empty")]
     public void Must_NonexistentTerm_ReturnsEmpty()
     {
         var dir = new MMapDirectory(SubDir("bool_stream_must_missing"));
@@ -131,7 +146,10 @@ public sealed class BooleanQueryStreamingTests : IClassFixture<TestDirectoryFixt
         Assert.Equal(0, results.TotalHits);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Should: Single Clause Returns Matching Docs scenario.
+    /// </summary>
+    [Fact(DisplayName = "Should: Single Clause Returns Matching Docs")]
     public void Should_SingleClause_ReturnsMatchingDocs()
     {
         var dir = new MMapDirectory(SubDir("bool_stream_single_should"));
@@ -154,7 +172,10 @@ public sealed class BooleanQueryStreamingTests : IClassFixture<TestDirectoryFixt
         Assert.Equal(2, results.TotalHits);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Should: Multiple Terms Score Sums Correctly scenario.
+    /// </summary>
+    [Fact(DisplayName = "Should: Multiple Terms Score Sums Correctly")]
     public void Should_MultipleTerms_ScoreSumsCorrectly()
     {
         var dir = new MMapDirectory(SubDir("bool_stream_should_score"));
@@ -188,7 +209,10 @@ public sealed class BooleanQueryStreamingTests : IClassFixture<TestDirectoryFixt
         Assert.Equal(0, results.ScoreDocs[0].DocId);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Must Not: Excludes From Must Results scenario.
+    /// </summary>
+    [Fact(DisplayName = "Must Not: Excludes From Must Results")]
     public void MustNot_ExcludesFromMustResults()
     {
         var dir = new MMapDirectory(SubDir("bool_stream_mustnot"));
@@ -212,7 +236,10 @@ public sealed class BooleanQueryStreamingTests : IClassFixture<TestDirectoryFixt
         Assert.Equal(2, results.TotalHits);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Must Not: Multiple Clauses Excludes All scenario.
+    /// </summary>
+    [Fact(DisplayName = "Must Not: Multiple Clauses Excludes All")]
     public void MustNot_MultipleClauses_ExcludesAll()
     {
         var dir = new MMapDirectory(SubDir("bool_stream_multi_mustnot"));
@@ -237,7 +264,10 @@ public sealed class BooleanQueryStreamingTests : IClassFixture<TestDirectoryFixt
         Assert.Equal(2, results.TotalHits);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Must: With Should Should Boosts Score scenario.
+    /// </summary>
+    [Fact(DisplayName = "Must: With Should Should Boosts Score")]
     public void Must_WithShould_ShouldBoostsScore()
     {
         var dir = new MMapDirectory(SubDir("bool_stream_must_should"));
@@ -266,7 +296,10 @@ public sealed class BooleanQueryStreamingTests : IClassFixture<TestDirectoryFixt
         Assert.True(results.ScoreDocs[0].Score > results.ScoreDocs[1].Score);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Must: Nested Should Group And Must Term Returns Matching Doc scenario.
+    /// </summary>
+    [Fact(DisplayName = "Must: Nested Should Group And Must Term Returns Matching Doc")]
     public void Must_NestedShouldGroupAndMustTerm_ReturnsMatchingDoc()
     {
         var dir = new MMapDirectory(SubDir("bool_stream_nested_should_must"));
@@ -296,7 +329,10 @@ public sealed class BooleanQueryStreamingTests : IClassFixture<TestDirectoryFixt
         Assert.Equal("1", stored["id"][0]);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Deleted Docs: Excluded From Streaming Results scenario.
+    /// </summary>
+    [Fact(DisplayName = "Deleted Docs: Excluded From Streaming Results")]
     public void DeletedDocs_ExcludedFromStreamingResults()
     {
         var dir = new MMapDirectory(SubDir("bool_stream_deleted"));
@@ -325,7 +361,10 @@ public sealed class BooleanQueryStreamingTests : IClassFixture<TestDirectoryFixt
         Assert.DoesNotContain(1, docIds);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Must Not: All Excluded Returns Empty scenario.
+    /// </summary>
+    [Fact(DisplayName = "Must Not: All Excluded Returns Empty")]
     public void MustNot_AllExcluded_ReturnsEmpty()
     {
         var dir = new MMapDirectory(SubDir("bool_stream_all_excluded"));
@@ -350,7 +389,10 @@ public sealed class BooleanQueryStreamingTests : IClassFixture<TestDirectoryFixt
         Assert.Equal(0, results.TotalHits);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Empty Index: Returns Empty scenario.
+    /// </summary>
+    [Fact(DisplayName = "Empty Index: Returns Empty")]
     public void EmptyIndex_ReturnsEmpty()
     {
         var dir = new MMapDirectory(SubDir("bool_stream_empty"));
@@ -365,7 +407,10 @@ public sealed class BooleanQueryStreamingTests : IClassFixture<TestDirectoryFixt
         Assert.Equal(0, results.TotalHits);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Should With Must Not: Streaming Merge Excludes Correctly scenario.
+    /// </summary>
+    [Fact(DisplayName = "Should With Must Not: Streaming Merge Excludes Correctly")]
     public void ShouldWithMustNot_StreamingMerge_ExcludesCorrectly()
     {
         var dir = new MMapDirectory(SubDir("bool_stream_should_mustnot"));
@@ -394,7 +439,10 @@ public sealed class BooleanQueryStreamingTests : IClassFixture<TestDirectoryFixt
         Assert.Equal(2, results.TotalHits);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Should: Three Terms Scores Multi Match Higher scenario.
+    /// </summary>
+    [Fact(DisplayName = "Should: Three Terms Scores Multi Match Higher")]
     public void Should_ThreeTerms_ScoresMultiMatchHigher()
     {
         var dir = new MMapDirectory(SubDir("bool_stream_should_three"));

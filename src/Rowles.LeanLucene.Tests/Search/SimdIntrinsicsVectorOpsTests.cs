@@ -5,10 +5,16 @@ using Rowles.LeanLucene.Search.Highlighting;
 
 namespace Rowles.LeanLucene.Tests.Search;
 
+/// <summary>
+/// Contains unit tests for SIMD Intrinsics Vector Ops.
+/// </summary>
 [Trait("Category", "Phase5")]
 public sealed class SimdIntrinsicsVectorOpsTests
 {
-    [Fact]
+    /// <summary>
+    /// Verifies the Cosine Similarity: Matches Numerics Implementation scenario.
+    /// </summary>
+    [Fact(DisplayName = "Cosine Similarity: Matches Numerics Implementation")]
     public void CosineSimilarity_MatchesNumericsImplementation()
     {
         var rnd = new Random(7);
@@ -28,7 +34,10 @@ public sealed class SimdIntrinsicsVectorOpsTests
         }
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Dot Product: Matches Numerics Implementation scenario.
+    /// </summary>
+    [Fact(DisplayName = "Dot Product: Matches Numerics Implementation")]
     public void DotProduct_MatchesNumericsImplementation()
     {
         var rnd = new Random(11);
@@ -47,13 +56,19 @@ public sealed class SimdIntrinsicsVectorOpsTests
         }
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Cosine Similarity: Empty Inputs Return Zero scenario.
+    /// </summary>
+    [Fact(DisplayName = "Cosine Similarity: Empty Inputs Return Zero")]
     public void CosineSimilarity_EmptyInputs_ReturnZero()
     {
         Assert.Equal(0f, SimdIntrinsicsVectorOps.CosineSimilarity([], []));
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Cosine Similarity: Identical Vectors Return One scenario.
+    /// </summary>
+    [Fact(DisplayName = "Cosine Similarity: Identical Vectors Return One")]
     public void CosineSimilarity_IdenticalVectors_ReturnOne()
     {
         float[] v = [1f, 2f, 3f, 4f, 5f, 6f, 7f, 8f];

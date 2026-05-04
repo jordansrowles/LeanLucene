@@ -10,6 +10,9 @@ using Xunit;
 
 namespace Rowles.LeanLucene.Tests.Search.Geo;
 
+/// <summary>
+/// Contains unit tests for Geo Query.
+/// </summary>
 public sealed class GeoQueryTests : IDisposable
 {
     private readonly string _dir = Path.Combine(Path.GetTempPath(), "leanlucene_geo_" + Guid.NewGuid().ToString("N")[..8]);
@@ -44,7 +47,10 @@ public sealed class GeoQueryTests : IDisposable
         writer.AddDocument(doc);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Bounding Box: Returns Points Inside Box scenario.
+    /// </summary>
+    [Fact(DisplayName = "Bounding Box: Returns Points Inside Box")]
     public void BoundingBox_ReturnsPointsInsideBox()
     {
         IndexCities();
@@ -58,7 +64,10 @@ public sealed class GeoQueryTests : IDisposable
         Assert.Equal(2, results.TotalHits);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Bounding Box: Empty Region Returns No Hits scenario.
+    /// </summary>
+    [Fact(DisplayName = "Bounding Box: Empty Region Returns No Hits")]
     public void BoundingBox_EmptyRegion_ReturnsNoHits()
     {
         IndexCities();
@@ -72,7 +81,10 @@ public sealed class GeoQueryTests : IDisposable
         Assert.Equal(0, results.TotalHits);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Geo Distance: Finds Cities Within Radius scenario.
+    /// </summary>
+    [Fact(DisplayName = "Geo Distance: Finds Cities Within Radius")]
     public void GeoDistance_FindsCitiesWithinRadius()
     {
         IndexCities();
@@ -87,7 +99,10 @@ public sealed class GeoQueryTests : IDisposable
         Assert.True(results.TotalHits <= 2, "Should find at most London and Paris");
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Geo Distance: Small Radius Finds Only Exact City scenario.
+    /// </summary>
+    [Fact(DisplayName = "Geo Distance: Small Radius Finds Only Exact City")]
     public void GeoDistance_SmallRadius_FindsOnlyExactCity()
     {
         IndexCities();
@@ -101,7 +116,10 @@ public sealed class GeoQueryTests : IDisposable
         Assert.Equal(1, results.TotalHits);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Geo Distance: Large Radius Finds Multiple Cities scenario.
+    /// </summary>
+    [Fact(DisplayName = "Geo Distance: Large Radius Finds Multiple Cities")]
     public void GeoDistance_LargeRadius_FindsMultipleCities()
     {
         IndexCities();
@@ -115,7 +133,10 @@ public sealed class GeoQueryTests : IDisposable
         Assert.True(results.TotalHits >= 3, $"Expected ≥3 hits, got {results.TotalHits}");
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Geo Point Field: Stored Field Round-trip scenario.
+    /// </summary>
+    [Fact(DisplayName = "Geo Point Field: Stored Field Round-trip")]
     public void GeoPointField_StoredFieldRoundTrip()
     {
         IndexCities();
@@ -131,7 +152,10 @@ public sealed class GeoQueryTests : IDisposable
         Assert.True(stored.ContainsKey("location"), "Stored field should contain the geo point");
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Geo Encoding Utils: Haversine Distance Known Pair scenario.
+    /// </summary>
+    [Fact(DisplayName = "Geo Encoding Utils: Haversine Distance Known Pair")]
     public void GeoEncodingUtils_HaversineDistance_KnownPair()
     {
         // London to Paris: ~343km
@@ -139,7 +163,10 @@ public sealed class GeoQueryTests : IDisposable
         Assert.InRange(dist, 340_000, 350_000);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Geo Encoding Utils: Encode Decode Lat Round Trips scenario.
+    /// </summary>
+    [Fact(DisplayName = "Geo Encoding Utils: Encode Decode Lat Round Trips")]
     public void GeoEncodingUtils_EncodeDecodeLat_RoundTrips()
     {
         double lat = 51.5074;
@@ -148,7 +175,10 @@ public sealed class GeoQueryTests : IDisposable
         Assert.InRange(decoded, lat - 0.001, lat + 0.001);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Geo Encoding Utils: Encode Decode Lon Round Trips scenario.
+    /// </summary>
+    [Fact(DisplayName = "Geo Encoding Utils: Encode Decode Lon Round Trips")]
     public void GeoEncodingUtils_EncodeDecodeLon_RoundTrips()
     {
         double lon = -0.1278;

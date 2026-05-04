@@ -25,7 +25,10 @@ public sealed class DwptTests
         return doc;
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the DWPT Pool: Lock Free Single Thread Indexes Correctly scenario.
+    /// </summary>
+    [Fact(DisplayName = "DWPT Pool: Lock Free Single Thread Indexes Correctly")]
     public void DwptPool_LockFree_SingleThread_IndexesCorrectly()
     {
         // Arrange
@@ -60,7 +63,10 @@ public sealed class DwptTests
         }
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the DWPT Pool: Multi Thread Indexes Correctly scenario.
+    /// </summary>
+    [Fact(DisplayName = "DWPT Pool: Multi Thread Indexes Correctly")]
     public void DwptPool_MultiThread_IndexesCorrectly()
     {
         // Arrange
@@ -95,7 +101,10 @@ public sealed class DwptTests
         }
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the DWPT Pool: Concurrent Batch Indexes Correctly scenario.
+    /// </summary>
+    [Fact(DisplayName = "DWPT Pool: Concurrent Batch Indexes Correctly")]
     public void DwptPool_ConcurrentBatch_IndexesCorrectly()
     {
         // Arrange
@@ -130,7 +139,10 @@ public sealed class DwptTests
         }
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the DWPT: Estimated Ram Bytes Increases With Documents scenario.
+    /// </summary>
+    [Fact(DisplayName = "DWPT: Estimated Ram Bytes Increases With Documents")]
     public void Dwpt_EstimatedRamBytes_IncreasesWithDocuments()
     {
         // Arrange — create a DWPT directly (internal class, accessible via InternalsVisibleTo)
@@ -151,7 +163,10 @@ public sealed class DwptTests
         Assert.Equal(10, dwpt.DocCount);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the DWPT Pool: Commit Flushes All Buffers scenario.
+    /// </summary>
+    [Fact(DisplayName = "DWPT Pool: Commit Flushes All Buffers")]
     public void DwptPool_CommitFlushesAllBuffers()
     {
         // Arrange

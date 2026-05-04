@@ -4,9 +4,15 @@ using Rowles.LeanLucene.Document.Json;
 
 namespace Rowles.LeanLucene.Tests.Document;
 
+/// <summary>
+/// Contains unit tests for JSON Document Mapper.
+/// </summary>
 public sealed class JsonDocumentMapperTests
 {
-    [Fact]
+    /// <summary>
+    /// Verifies the Flat Object: Maps String And Numeric Fields scenario.
+    /// </summary>
+    [Fact(DisplayName = "Flat Object: Maps String And Numeric Fields")]
     public void FlatObject_MapsStringAndNumericFields()
     {
         var json = """{"name": "Alice", "age": 30}""";
@@ -19,7 +25,10 @@ public sealed class JsonDocumentMapperTests
         Assert.IsType<NumericField>(doc.GetField("age"));
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Nested Object: Produces Prefixed Field Names scenario.
+    /// </summary>
+    [Fact(DisplayName = "Nested Object: Produces Prefixed Field Names")]
     public void NestedObject_ProducesPrefixedFieldNames()
     {
         var json = """{"address": {"city": "London", "zip": "SW1A"}}""";
@@ -29,7 +38,10 @@ public sealed class JsonDocumentMapperTests
         Assert.NotNull(doc.GetField("address.zip"));
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Array: Produces Multi Valued Fields scenario.
+    /// </summary>
+    [Fact(DisplayName = "Array: Produces Multi Valued Fields")]
     public void Array_ProducesMultiValuedFields()
     {
         var json = """{"tags": ["red", "blue", "green"]}""";
@@ -39,7 +51,10 @@ public sealed class JsonDocumentMapperTests
         Assert.Equal(3, fields.Count);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Boolean Values: Mapped As String Fields scenario.
+    /// </summary>
+    [Fact(DisplayName = "Boolean Values: Mapped As String Fields")]
     public void BooleanValues_MappedAsStringFields()
     {
         var json = """{"active": true, "deleted": false}""";
@@ -53,7 +68,10 @@ public sealed class JsonDocumentMapperTests
         Assert.Equal("false", deleted!.Value);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Null Values: Are Skipped scenario.
+    /// </summary>
+    [Fact(DisplayName = "Null Values: Are Skipped")]
     public void NullValues_AreSkipped()
     {
         var json = """{"name": "Alice", "bio": null}""";
@@ -63,7 +81,10 @@ public sealed class JsonDocumentMapperTests
         Assert.NotNull(doc.GetField("name"));
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Long Strings: Become Text Fields scenario.
+    /// </summary>
+    [Fact(DisplayName = "Long Strings: Become Text Fields")]
     public void LongStrings_BecomeTextFields()
     {
         var longText = new string('x', 100);
@@ -73,7 +94,10 @@ public sealed class JsonDocumentMapperTests
         Assert.IsType<TextField>(doc.GetField("body"));
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Custom Separator: Used For Nested Names scenario.
+    /// </summary>
+    [Fact(DisplayName = "Custom Separator: Used For Nested Names")]
     public void CustomSeparator_UsedForNestedNames()
     {
         var json = """{"address": {"city": "London"}}""";
@@ -83,7 +107,10 @@ public sealed class JsonDocumentMapperTests
         Assert.NotNull(doc.GetField("address/city"));
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Empty Object: Returns Empty Document scenario.
+    /// </summary>
+    [Fact(DisplayName = "Empty Object: Returns Empty Document")]
     public void EmptyObject_ReturnsEmptyDocument()
     {
         var doc = JsonDocumentMapper.FromJsonString("{}");

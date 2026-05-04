@@ -2,6 +2,9 @@ using Rowles.LeanLucene.Codecs.Postings;
 
 namespace Rowles.LeanLucene.Tests.Codecs;
 
+/// <summary>
+/// Contains unit tests for Packed Int Codec.
+/// </summary>
 [Trait("Category", "Codecs")]
 public sealed class PackedIntCodecTests
 {
@@ -9,7 +12,7 @@ public sealed class PackedIntCodecTests
     /// For each bit width 1–32, creates 128 values where the maximum fits in exactly
     /// that width, packs, unpacks, and verifies the round-trip produces identical values.
     /// </summary>
-    [Fact]
+    [Fact(DisplayName = "Pack: Unpack All Bit Widths")]
     public void Pack_Unpack_AllBitWidths()
     {
         for (int bits = 1; bits <= 32; bits++)
@@ -42,7 +45,7 @@ public sealed class PackedIntCodecTests
     /// 128 zeros should produce numBits = 0 and a single-byte output.
     /// Round-trip must restore all zeros.
     /// </summary>
-    [Fact]
+    [Fact(DisplayName = "Pack: Unpack All Zeros")]
     public void Pack_Unpack_AllZeros()
     {
         var values = new int[PackedIntCodec.BlockSize];
@@ -62,7 +65,7 @@ public sealed class PackedIntCodecTests
     /// <summary>
     /// 128 copies of 42 must round-trip correctly.
     /// </summary>
-    [Fact]
+    [Fact(DisplayName = "Pack: Unpack All Same Value")]
     public void Pack_Unpack_AllSameValue()
     {
         var values = new int[PackedIntCodec.BlockSize];
@@ -85,7 +88,7 @@ public sealed class PackedIntCodecTests
     /// 128 copies of <see cref="int.MaxValue"/> (0x7FFFFFFF) require 31 bits.
     /// Round-trip must restore every value exactly.
     /// </summary>
-    [Fact]
+    [Fact(DisplayName = "Pack: Unpack Max Int")]
     public void Pack_Unpack_MaxInt()
     {
         var values = new int[PackedIntCodec.BlockSize];
@@ -108,7 +111,7 @@ public sealed class PackedIntCodecTests
     /// Sorted ascending array [100, 105, 110, …] with offset = 0.
     /// Delta-pack then delta-unpack must recover the original values.
     /// </summary>
-    [Fact]
+    [Fact(DisplayName = "Pack Delta: Unpack Delta Sorted Input")]
     public void PackDelta_UnpackDelta_SortedInput()
     {
         var values = new int[PackedIntCodec.BlockSize];
@@ -128,7 +131,7 @@ public sealed class PackedIntCodecTests
     /// Sorted array starting at 1000 with offset = 900.
     /// First delta = 100, subsequent deltas = 3.
     /// </summary>
-    [Fact]
+    [Fact(DisplayName = "Pack Delta: Unpack Delta With Offset")]
     public void PackDelta_UnpackDelta_WithOffset()
     {
         var values = new int[PackedIntCodec.BlockSize];
@@ -148,7 +151,7 @@ public sealed class PackedIntCodecTests
     /// 128 sequential values [1, 2, 3, …, 128] with offset = 0.
     /// All deltas equal 1, so numBits should be 1.
     /// </summary>
-    [Fact]
+    [Fact(DisplayName = "Pack Delta: Single Element Block")]
     public void PackDelta_SingleElement_Block()
     {
         var values = new int[PackedIntCodec.BlockSize];
@@ -170,7 +173,7 @@ public sealed class PackedIntCodecTests
     /// <summary>
     /// Verifies <see cref="PackedIntCodec.BitsRequired"/> for known boundary values.
     /// </summary>
-    [Fact]
+    [Fact(DisplayName = "Bits Required: Returns Correct Width")]
     public void BitsRequired_ReturnsCorrectWidth()
     {
         Assert.Equal(0, PackedIntCodec.BitsRequired([0]));
@@ -191,7 +194,7 @@ public sealed class PackedIntCodecTests
     /// <summary>
     /// Verifies that the output byte count equals <c>1 + numBits × 16</c> for every bit width.
     /// </summary>
-    [Fact]
+    [Fact(DisplayName = "Pack: Output Size Is Correct")]
     public void Pack_OutputSize_IsCorrect()
     {
         for (int bits = 0; bits <= 32; bits++)

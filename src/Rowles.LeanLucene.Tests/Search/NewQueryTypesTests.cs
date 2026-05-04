@@ -38,7 +38,10 @@ public sealed class NewQueryTypesTests : IClassFixture<TestDirectoryFixture>
 
     // ── TermRangeQuery ──────────────────────────────────────────────────────
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Term Range Query: Inclusive Both Bounds Returns Matching Terms scenario.
+    /// </summary>
+    [Fact(DisplayName = "Term Range Query: Inclusive Both Bounds Returns Matching Terms")]
     public void TermRangeQuery_InclusiveBothBounds_ReturnsMatchingTerms()
     {
         var dir = new MMapDirectory(SubDir("trq_inclusive"));
@@ -56,7 +59,10 @@ public sealed class NewQueryTypesTests : IClassFixture<TestDirectoryFixture>
         Assert.Equal(3, results.TotalHits); // banana, cherry, date
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Term Range Query: Exclusive Bounds Excludes Boundary Terms scenario.
+    /// </summary>
+    [Fact(DisplayName = "Term Range Query: Exclusive Bounds Excludes Boundary Terms")]
     public void TermRangeQuery_ExclusiveBounds_ExcludesBoundaryTerms()
     {
         var dir = new MMapDirectory(SubDir("trq_exclusive"));
@@ -75,7 +81,10 @@ public sealed class NewQueryTypesTests : IClassFixture<TestDirectoryFixture>
         Assert.Equal(1, results.TotalHits); // only cherry
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Term Range Query: Null Lower Start From Beginning scenario.
+    /// </summary>
+    [Fact(DisplayName = "Term Range Query: Null Lower Start From Beginning")]
     public void TermRangeQuery_NullLower_StartFromBeginning()
     {
         var dir = new MMapDirectory(SubDir("trq_nulllower"));
@@ -93,7 +102,10 @@ public sealed class NewQueryTypesTests : IClassFixture<TestDirectoryFixture>
         Assert.Equal(2, results.TotalHits); // apple, banana
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Term Range Query: Null Upper Goes To End scenario.
+    /// </summary>
+    [Fact(DisplayName = "Term Range Query: Null Upper Goes To End")]
     public void TermRangeQuery_NullUpper_GoesToEnd()
     {
         var dir = new MMapDirectory(SubDir("trq_nullupper"));
@@ -113,7 +125,10 @@ public sealed class NewQueryTypesTests : IClassFixture<TestDirectoryFixture>
 
     // ── ConstantScoreQuery ──────────────────────────────────────────────────
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Constant Score Query: All Matches Have Same Score scenario.
+    /// </summary>
+    [Fact(DisplayName = "Constant Score Query: All Matches Have Same Score")]
     public void ConstantScoreQuery_AllMatchesHaveSameScore()
     {
         var dir = new MMapDirectory(SubDir("csq_scores"));
@@ -134,7 +149,10 @@ public sealed class NewQueryTypesTests : IClassFixture<TestDirectoryFixture>
         Assert.All(results.ScoreDocs, sd => Assert.Equal(5.0f, sd.Score));
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Constant Score Query: Empty Inner Query Returns Empty scenario.
+    /// </summary>
+    [Fact(DisplayName = "Constant Score Query: Empty Inner Query Returns Empty")]
     public void ConstantScoreQuery_EmptyInnerQuery_ReturnsEmpty()
     {
         var dir = new MMapDirectory(SubDir("csq_empty"));
@@ -150,7 +168,10 @@ public sealed class NewQueryTypesTests : IClassFixture<TestDirectoryFixture>
         Assert.Equal(0, results.TotalHits);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Constant Score Query: Does Not Drop Matches Above Ten Thousand scenario.
+    /// </summary>
+    [Fact(DisplayName = "Constant Score Query: Does Not Drop Matches Above Ten Thousand")]
     public void ConstantScoreQuery_DoesNotDropMatchesAboveTenThousand()
     {
         var dir = new MMapDirectory(SubDir("csq_over_10000"));
@@ -171,7 +192,10 @@ public sealed class NewQueryTypesTests : IClassFixture<TestDirectoryFixture>
 
     // ── DisjunctionMaxQuery ─────────────────────────────────────────────────
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Disjunction Max Query: Score Is Max Of Matching Clauses scenario.
+    /// </summary>
+    [Fact(DisplayName = "Disjunction Max Query: Score Is Max Of Matching Clauses")]
     public void DisjunctionMaxQuery_ScoreIsMaxOfMatchingClauses()
     {
         var dir = new MMapDirectory(SubDir("dmq_max"));
@@ -198,7 +222,10 @@ public sealed class NewQueryTypesTests : IClassFixture<TestDirectoryFixture>
         Assert.Equal(2, results.TotalHits);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Disjunction Max Query: Tie Breaker Applied scenario.
+    /// </summary>
+    [Fact(DisplayName = "Disjunction Max Query: Tie Breaker Applied")]
     public void DisjunctionMaxQuery_TieBreakerApplied()
     {
         var dir = new MMapDirectory(SubDir("dmq_tiebreaker"));
@@ -229,7 +256,10 @@ public sealed class NewQueryTypesTests : IClassFixture<TestDirectoryFixture>
         Assert.True(r5.ScoreDocs[0].Score >= r0.ScoreDocs[0].Score);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Disjunction Max Query: Does Not Drop Matches Above Ten Thousand scenario.
+    /// </summary>
+    [Fact(DisplayName = "Disjunction Max Query: Does Not Drop Matches Above Ten Thousand")]
     public void DisjunctionMaxQuery_DoesNotDropMatchesAboveTenThousand()
     {
         var dir = new MMapDirectory(SubDir("dmq_over_10000"));
@@ -252,7 +282,10 @@ public sealed class NewQueryTypesTests : IClassFixture<TestDirectoryFixture>
 
     // ── RegexpQuery ─────────────────────────────────────────────────────────
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Regexp Query: Matches Terms By Pattern scenario.
+    /// </summary>
+    [Fact(DisplayName = "Regexp Query: Matches Terms By Pattern")]
     public void RegexpQuery_MatchesTermsByPattern()
     {
         var dir = new MMapDirectory(SubDir("rxq_basic"));
@@ -271,7 +304,10 @@ public sealed class NewQueryTypesTests : IClassFixture<TestDirectoryFixture>
         Assert.Equal(3, results.TotalHits);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Regexp Query: No Match Returns Empty scenario.
+    /// </summary>
+    [Fact(DisplayName = "Regexp Query: No Match Returns Empty")]
     public void RegexpQuery_NoMatch_ReturnsEmpty()
     {
         var dir = new MMapDirectory(SubDir("rxq_nomatch"));
@@ -288,7 +324,10 @@ public sealed class NewQueryTypesTests : IClassFixture<TestDirectoryFixture>
 
     // ── CancellationToken ───────────────────────────────────────────────────
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Search: With Cancellation Token Uncancelled Returns Results scenario.
+    /// </summary>
+    [Fact(DisplayName = "Search: With Cancellation Token Uncancelled Returns Results")]
     public void Search_WithCancellationToken_Uncancelled_ReturnsResults()
     {
         var dir = new MMapDirectory(SubDir("ct_normal"));
@@ -304,7 +343,10 @@ public sealed class NewQueryTypesTests : IClassFixture<TestDirectoryFixture>
         Assert.Equal(1, results.TotalHits);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Search: With Cancellation Token Already Cancelled Throws scenario.
+    /// </summary>
+    [Fact(DisplayName = "Search: With Cancellation Token Already Cancelled Throws")]
     public void Search_WithCancellationToken_AlreadyCancelled_Throws()
     {
         var dir = new MMapDirectory(SubDir("ct_cancelled"));
@@ -328,7 +370,10 @@ public sealed class NewQueryTypesTests : IClassFixture<TestDirectoryFixture>
 
     // ── Suggest ─────────────────────────────────────────────────────────────
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Suggest: Returns Top N Matching Prefixes scenario.
+    /// </summary>
+    [Fact(DisplayName = "Suggest: Returns Top N Matching Prefixes")]
     public void Suggest_ReturnsTopNMatchingPrefixes()
     {
         var dir = new MMapDirectory(SubDir("suggest_basic"));
@@ -355,7 +400,10 @@ public sealed class NewQueryTypesTests : IClassFixture<TestDirectoryFixture>
         Assert.Equal(3, suggestions[0].DocFreq);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Suggest: No Prefix Returns Empty scenario.
+    /// </summary>
+    [Fact(DisplayName = "Suggest: No Prefix Returns Empty")]
     public void Suggest_NoPrefix_ReturnsEmpty()
     {
         var dir = new MMapDirectory(SubDir("suggest_noprefix"));
@@ -370,7 +418,10 @@ public sealed class NewQueryTypesTests : IClassFixture<TestDirectoryFixture>
         Assert.Empty(suggestions);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Suggest: Top N Limit Honoured scenario.
+    /// </summary>
+    [Fact(DisplayName = "Suggest: Top N Limit Honoured")]
     public void Suggest_TopNLimit_Honoured()
     {
         var dir = new MMapDirectory(SubDir("suggest_topn"));
@@ -388,4 +439,3 @@ public sealed class NewQueryTypesTests : IClassFixture<TestDirectoryFixture>
         Assert.Equal(2, suggestions.Count);
     }
 }
-

@@ -25,7 +25,10 @@ public sealed class WriterEquivalenceTests : IDisposable
         try { Directory.Delete(_root, recursive: true); } catch { }
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Text Field: Single Vs Concurrent Same Term Query Results scenario.
+    /// </summary>
+    [Fact(DisplayName = "Text Field: Single Vs Concurrent Same Term Query Results")]
     public void TextField_SingleVsConcurrent_SameTermQueryResults()
     {
         var docs = BuildTextDocs(50);
@@ -34,7 +37,10 @@ public sealed class WriterEquivalenceTests : IDisposable
         Assert.Equal(single, concurrent);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the String Field: Single Vs Concurrent Same Term Query Results scenario.
+    /// </summary>
+    [Fact(DisplayName = "String Field: Single Vs Concurrent Same Term Query Results")]
     public void StringField_SingleVsConcurrent_SameTermQueryResults()
     {
         var docs = BuildStringDocs(40);
@@ -43,7 +49,10 @@ public sealed class WriterEquivalenceTests : IDisposable
         Assert.Equal(single, concurrent);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Numeric Field: Single Vs Concurrent Same Range Query Results scenario.
+    /// </summary>
+    [Fact(DisplayName = "Numeric Field: Single Vs Concurrent Same Range Query Results")]
     public void NumericField_SingleVsConcurrent_SameRangeQueryResults()
     {
         var docs = BuildNumericDocs(60);
@@ -53,7 +62,10 @@ public sealed class WriterEquivalenceTests : IDisposable
         Assert.Equal(single, concurrent);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Vector Field: Single Vs Concurrent Same Top K Results scenario.
+    /// </summary>
+    [Fact(DisplayName = "Vector Field: Single Vs Concurrent Same Top K Results")]
     public void VectorField_SingleVsConcurrent_SameTopKResults()
     {
         // VectorQuery returns topK results per segment, so hit counts differ when the two
@@ -67,7 +79,10 @@ public sealed class WriterEquivalenceTests : IDisposable
         Assert.Equal(32, concurrent);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Geo Field: Single Vs Concurrent Same Bounding Box Results scenario.
+    /// </summary>
+    [Fact(DisplayName = "Geo Field: Single Vs Concurrent Same Bounding Box Results")]
     public void GeoField_SingleVsConcurrent_SameBoundingBoxResults()
     {
         var docs = BuildGeoDocs();
@@ -77,7 +92,10 @@ public sealed class WriterEquivalenceTests : IDisposable
         Assert.Equal(single, concurrent);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Sorted Doc Values: Single Vs Concurrent Same Collapse scenario.
+    /// </summary>
+    [Fact(DisplayName = "Sorted Doc Values: Single Vs Concurrent Same Collapse")]
     public void SortedDocValues_SingleVsConcurrent_SameCollapse()
     {
         var docs = BuildCategoryDocs(30);
@@ -86,7 +104,10 @@ public sealed class WriterEquivalenceTests : IDisposable
         Assert.Equal(single, concurrent);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the All Field Types: Single Vs Concurrent Same Facet Counts scenario.
+    /// </summary>
+    [Fact(DisplayName = "All Field Types: Single Vs Concurrent Same Facet Counts")]
     public void AllFieldTypes_SingleVsConcurrent_SameFacetCounts()
     {
         var docs = BuildMixedDocs(24);

@@ -11,6 +11,9 @@ using Rowles.LeanLucene.Store;
 
 namespace Rowles.LeanLucene.Tests.Search;
 
+/// <summary>
+/// Contains unit tests for Searcher Manager.
+/// </summary>
 public sealed class SearcherManagerTests : IDisposable
 {
     private readonly string _dir;
@@ -26,7 +29,10 @@ public sealed class SearcherManagerTests : IDisposable
         try { Directory.Delete(_dir, true); } catch { }
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Acquire: Returns Usable Searcher scenario.
+    /// </summary>
+    [Fact(DisplayName = "Acquire: Returns Usable Searcher")]
     public void Acquire_ReturnsUsableSearcher()
     {
         var dir = new MMapDirectory(_dir);
@@ -49,7 +55,10 @@ public sealed class SearcherManagerTests : IDisposable
         }
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Using Searcher: Convenience Pattern scenario.
+    /// </summary>
+    [Fact(DisplayName = "Using Searcher: Convenience Pattern")]
     public void UsingSearcher_ConveniencePattern()
     {
         var dir = new MMapDirectory(_dir);
@@ -64,7 +73,10 @@ public sealed class SearcherManagerTests : IDisposable
         Assert.Equal(1, hits);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Maybe Refresh: Detects New Commit scenario.
+    /// </summary>
+    [Fact(DisplayName = "Maybe Refresh: Detects New Commit")]
     public void MaybeRefresh_DetectsNewCommit()
     {
         var dir = new MMapDirectory(_dir);
@@ -86,7 +98,10 @@ public sealed class SearcherManagerTests : IDisposable
         Assert.Equal(2, after);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Maybe Refresh: Returns False When No New Commit scenario.
+    /// </summary>
+    [Fact(DisplayName = "Maybe Refresh: Returns False When No New Commit")]
     public void MaybeRefresh_ReturnsFalse_WhenNoNewCommit()
     {
         var dir = new MMapDirectory(_dir);
@@ -101,7 +116,10 @@ public sealed class SearcherManagerTests : IDisposable
         Assert.False(refreshed);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Maybe Refresh: Returns False When Generation Changes Without Content Change scenario.
+    /// </summary>
+    [Fact(DisplayName = "Maybe Refresh: Returns False When Generation Changes Without Content Change")]
     public void MaybeRefresh_ReturnsFalse_WhenGenerationChangesWithoutContentChange()
     {
         var dir = new MMapDirectory(_dir);
@@ -121,7 +139,10 @@ public sealed class SearcherManagerTests : IDisposable
         Assert.True(mgr.MaybeRefresh());
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Held Searcher: Remains Usable After Refresh And Release scenario.
+    /// </summary>
+    [Fact(DisplayName = "Held Searcher: Remains Usable After Refresh And Release")]
     public void HeldSearcher_RemainsUsableAfterRefreshAndRelease()
     {
         var dir = new MMapDirectory(_dir);
@@ -149,7 +170,10 @@ public sealed class SearcherManagerTests : IDisposable
         }
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Dispose: With Outstanding Acquire Keeps Held Searcher Usable Until Release scenario.
+    /// </summary>
+    [Fact(DisplayName = "Dispose: With Outstanding Acquire Keeps Held Searcher Usable Until Release")]
     public void Dispose_WithOutstandingAcquire_KeepsHeldSearcherUsableUntilRelease()
     {
         var dir = new MMapDirectory(_dir);
@@ -170,7 +194,10 @@ public sealed class SearcherManagerTests : IDisposable
         mgr.Release(held);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Release: Unknown Searcher Does Not Throw scenario.
+    /// </summary>
+    [Fact(DisplayName = "Release: Unknown Searcher Does Not Throw")]
     public void Release_UnknownSearcher_DoesNotThrow()
     {
         var dir = new MMapDirectory(_dir);
@@ -186,7 +213,10 @@ public sealed class SearcherManagerTests : IDisposable
         mgr.Release(unknownSearcher);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Maybe Refresh Async: Works scenario.
+    /// </summary>
+    [Fact(DisplayName = "Maybe Refresh Async: Works")]
     public async Task MaybeRefreshAsync_Works()
     {
         var dir = new MMapDirectory(_dir);
@@ -204,7 +234,10 @@ public sealed class SearcherManagerTests : IDisposable
         Assert.True(refreshed);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Dispose: Is Idempotent scenario.
+    /// </summary>
+    [Fact(DisplayName = "Dispose: Is Idempotent")]
     public void Dispose_IsIdempotent()
     {
         var dir = new MMapDirectory(_dir);
@@ -219,7 +252,10 @@ public sealed class SearcherManagerTests : IDisposable
         mgr.Dispose(); // should not throw
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Acquire: After Dispose Throws scenario.
+    /// </summary>
+    [Fact(DisplayName = "Acquire: After Dispose Throws")]
     public void Acquire_AfterDispose_Throws()
     {
         var dir = new MMapDirectory(_dir);
@@ -239,7 +275,7 @@ public sealed class SearcherManagerTests : IDisposable
     /// Regression test for C3: verifies that concurrent Acquire/Release calls never receive
     /// a disposed <see cref="IndexSearcher"/> while a refresh thread is swapping in new ones.
     /// </summary>
-    [Fact(Timeout = 30_000)]
+    [Fact(DisplayName = "Acquire: During Concurrent Refresh Never Returns Disposed Searcher", Timeout = 30_000)]
     public async Task Acquire_DuringConcurrentRefresh_NeverReturnsDisposedSearcher()
     {
         var dir = new MMapDirectory(_dir);

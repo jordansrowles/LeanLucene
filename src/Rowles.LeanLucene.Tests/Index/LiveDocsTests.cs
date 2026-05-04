@@ -11,6 +11,9 @@ using Xunit.Abstractions;
 
 namespace Rowles.LeanLucene.Tests.Index;
 
+/// <summary>
+/// Contains unit tests for Live Docs.
+/// </summary>
 [Trait("Category", "Index")]
 [Trait("Category", "LiveDocs")]
 public sealed class LiveDocsTests : IClassFixture<TestDirectoryFixture>
@@ -24,7 +27,10 @@ public sealed class LiveDocsTests : IClassFixture<TestDirectoryFixture>
         _output = output;
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Live Docs: Delete Document Marked In Bitset scenario.
+    /// </summary>
+    [Fact(DisplayName = "Live Docs: Delete Document Marked In Bitset")]
     public void LiveDocs_DeleteDocument_MarkedInBitset()
     {
         var liveDocs = new LiveDocs(3);
@@ -35,7 +41,10 @@ public sealed class LiveDocsTests : IClassFixture<TestDirectoryFixture>
         Assert.True(liveDocs.IsLive(2));
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Live Docs: Deleted Doc Not Returned By Search scenario.
+    /// </summary>
+    [Fact(DisplayName = "Live Docs: Deleted Doc Not Returned By Search")]
     public void LiveDocs_DeletedDoc_NotReturnedBySearch()
     {
         var subDir = System.IO.Path.Combine(_fixture.Path, "livedocs_search");
@@ -60,7 +69,10 @@ public sealed class LiveDocsTests : IClassFixture<TestDirectoryFixture>
         Assert.Equal(0, results.TotalHits);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Delete And Reopen: Deleted Document Remains Deleted Non Deleted Document Found scenario.
+    /// </summary>
+    [Fact(DisplayName = "Delete And Reopen: Deleted Document Remains Deleted Non Deleted Document Found")]
     public void DeleteAndReopen_DeletedDocumentRemainsDeleted_NonDeletedDocumentFound()
     {
         var subDir = System.IO.Path.Combine(_fixture.Path, "delete_reopen");
@@ -111,7 +123,10 @@ public sealed class LiveDocsTests : IClassFixture<TestDirectoryFixture>
         }
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Delete Documents: While Merge Eligible Does Not Resurrect Deleted Docs scenario.
+    /// </summary>
+    [Fact(DisplayName = "Delete Documents: While Merge Eligible Does Not Resurrect Deleted Docs")]
     public void DeleteDocuments_WhileMergeEligible_DoesNotResurrectDeletedDocs()
     {
         var subDir = System.IO.Path.Combine(_fixture.Path, "delete_merge_eligible");
@@ -143,7 +158,10 @@ public sealed class LiveDocsTests : IClassFixture<TestDirectoryFixture>
         Assert.Equal(3, searcher.Search(new TermQuery("id", "survivor"), 10).TotalHits);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Update Document: After Immediate Replacement Flush Replaces Exactly Once scenario.
+    /// </summary>
+    [Fact(DisplayName = "Update Document: After Immediate Replacement Flush Replaces Exactly Once")]
     public void UpdateDocument_AfterImmediateReplacementFlush_ReplacesExactlyOnce()
     {
         var subDir = System.IO.Path.Combine(_fixture.Path, "update_merge_eligible");
@@ -180,7 +198,10 @@ public sealed class LiveDocsTests : IClassFixture<TestDirectoryFixture>
         Assert.Equal(4, searcher.Stats.LiveDocCount);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Delete Documents: Multiple Terms Across Segments Applies To All Live Segments scenario.
+    /// </summary>
+    [Fact(DisplayName = "Delete Documents: Multiple Terms Across Segments Applies To All Live Segments")]
     public void DeleteDocuments_MultipleTermsAcrossSegments_AppliesToAllLiveSegments()
     {
         var subDir = System.IO.Path.Combine(_fixture.Path, "delete_multi_terms");

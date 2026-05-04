@@ -39,7 +39,10 @@ public sealed class SearchEdgeCaseTests : IClassFixture<TestDirectoryFixture>
 
     // ── ConstantScoreQuery — wrapping various inner queries ─────────────────
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Constant Score Query: Wrapping Boolean Query All Matches Have Same Score scenario.
+    /// </summary>
+    [Fact(DisplayName = "Constant Score Query: Wrapping Boolean Query All Matches Have Same Score")]
     public void ConstantScoreQuery_WrappingBooleanQuery_AllMatchesHaveSameScore()
     {
         var dir = new MMapDirectory(SubDir("csq_bool"));
@@ -68,7 +71,10 @@ public sealed class SearchEdgeCaseTests : IClassFixture<TestDirectoryFixture>
         });
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Constant Score Query: Wrapping Range Query All Matches Have Same Score scenario.
+    /// </summary>
+    [Fact(DisplayName = "Constant Score Query: Wrapping Range Query All Matches Have Same Score")]
     public void ConstantScoreQuery_WrappingRangeQuery_AllMatchesHaveSameScore()
     {
         var dir = new MMapDirectory(SubDir("csq_range"));
@@ -90,7 +96,10 @@ public sealed class SearchEdgeCaseTests : IClassFixture<TestDirectoryFixture>
         Assert.All(results.ScoreDocs, sd => Assert.Equal(3.0f, sd.Score));
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Constant Score Query: Wrapping Zero Result Query Returns Empty scenario.
+    /// </summary>
+    [Fact(DisplayName = "Constant Score Query: Wrapping Zero Result Query Returns Empty")]
     public void ConstantScoreQuery_WrappingZeroResultQuery_ReturnsEmpty()
     {
         var dir = new MMapDirectory(SubDir("csq_zero"));
@@ -110,7 +119,10 @@ public sealed class SearchEdgeCaseTests : IClassFixture<TestDirectoryFixture>
 
     // ── DisjunctionMaxQuery — with deleted documents ────────────────────────
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Disjunction Max Query: Deleted Docs Excluded From Results scenario.
+    /// </summary>
+    [Fact(DisplayName = "Disjunction Max Query: Deleted Docs Excluded From Results")]
     public void DisjunctionMaxQuery_DeletedDocs_ExcludedFromResults()
     {
         var dir = new MMapDirectory(SubDir("dmq_deleted"));
@@ -148,7 +160,10 @@ public sealed class SearchEdgeCaseTests : IClassFixture<TestDirectoryFixture>
 
     // ── SpanNearQuery — out-of-order matching ───────────────────────────────
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Span Near Query: In Order False Matches Reversed Terms scenario.
+    /// </summary>
+    [Fact(DisplayName = "Span Near Query: In Order False Matches Reversed Terms")]
     public void SpanNearQuery_InOrderFalse_MatchesReversedTerms()
     {
         var dir = new MMapDirectory(SubDir("span_ooo"));
@@ -169,7 +184,10 @@ public sealed class SearchEdgeCaseTests : IClassFixture<TestDirectoryFixture>
         Assert.Equal(1, results.TotalHits);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Span Near Query: In Order True Does Not Match Reversed Terms scenario.
+    /// </summary>
+    [Fact(DisplayName = "Span Near Query: In Order True Does Not Match Reversed Terms")]
     public void SpanNearQuery_InOrderTrue_DoesNotMatchReversedTerms()
     {
         var dir = new MMapDirectory(SubDir("span_inorder"));
@@ -192,7 +210,10 @@ public sealed class SearchEdgeCaseTests : IClassFixture<TestDirectoryFixture>
 
     // ── WildcardQuery — leading wildcard ────────────────────────────────────
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Wildcard Query: Leading Wildcard Matches Suffix scenario.
+    /// </summary>
+    [Fact(DisplayName = "Wildcard Query: Leading Wildcard Matches Suffix")]
     public void WildcardQuery_LeadingWildcard_MatchesSuffix()
     {
         var dir = new MMapDirectory(SubDir("wc_leading"));
@@ -215,7 +236,10 @@ public sealed class SearchEdgeCaseTests : IClassFixture<TestDirectoryFixture>
             $"Expected at least 1 doc matching '*ning', got {results.TotalHits}");
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Wildcard Query: Leading Wildcard No Match Returns Empty scenario.
+    /// </summary>
+    [Fact(DisplayName = "Wildcard Query: Leading Wildcard No Match Returns Empty")]
     public void WildcardQuery_LeadingWildcard_NoMatch_ReturnsEmpty()
     {
         var dir = new MMapDirectory(SubDir("wc_leading_nomatch"));
@@ -234,7 +258,10 @@ public sealed class SearchEdgeCaseTests : IClassFixture<TestDirectoryFixture>
 
     // ── RegexpQuery — complex patterns ──────────────────────────────────────
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Regexp Query: Character Class Matches Vowel Only Terms scenario.
+    /// </summary>
+    [Fact(DisplayName = "Regexp Query: Character Class Matches Vowel Only Terms")]
     public void RegexpQuery_CharacterClass_MatchesVowelOnlyTerms()
     {
         var dir = new MMapDirectory(SubDir("rxq_charclass"));
@@ -256,7 +283,10 @@ public sealed class SearchEdgeCaseTests : IClassFixture<TestDirectoryFixture>
         Assert.Equal(2, results.TotalHits);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Regexp Query: Anchored Full Match Only Exact Term Matches scenario.
+    /// </summary>
+    [Fact(DisplayName = "Regexp Query: Anchored Full Match Only Exact Term Matches")]
     public void RegexpQuery_AnchoredFullMatch_OnlyExactTermMatches()
     {
         var dir = new MMapDirectory(SubDir("rxq_anchored"));
@@ -276,7 +306,10 @@ public sealed class SearchEdgeCaseTests : IClassFixture<TestDirectoryFixture>
         Assert.Equal(1, results.TotalHits);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Regexp Query: Dot Wildcard Matches Single Char scenario.
+    /// </summary>
+    [Fact(DisplayName = "Regexp Query: Dot Wildcard Matches Single Char")]
     public void RegexpQuery_DotWildcard_MatchesSingleChar()
     {
         var dir = new MMapDirectory(SubDir("rxq_dot"));
@@ -299,7 +332,10 @@ public sealed class SearchEdgeCaseTests : IClassFixture<TestDirectoryFixture>
 
     // ── FunctionScoreQuery — missing numeric field ──────────────────────────
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Function Score Query: Missing Numeric Field Doc Still Returned scenario.
+    /// </summary>
+    [Fact(DisplayName = "Function Score Query: Missing Numeric Field Doc Still Returned")]
     public void FunctionScoreQuery_MissingNumericField_DocStillReturned()
     {
         var dir = new MMapDirectory(SubDir("fsq_missing"));
@@ -333,7 +369,10 @@ public sealed class SearchEdgeCaseTests : IClassFixture<TestDirectoryFixture>
 
     // ── TopDocs — topN > totalHits ──────────────────────────────────────────
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Search: Top N Greater Than Total Hits Returns Total Hits Only scenario.
+    /// </summary>
+    [Fact(DisplayName = "Search: Top N Greater Than Total Hits Returns Total Hits Only")]
     public void Search_TopNGreaterThanTotalHits_ReturnsTotalHitsOnly()
     {
         var dir = new MMapDirectory(SubDir("topn_exceeds"));

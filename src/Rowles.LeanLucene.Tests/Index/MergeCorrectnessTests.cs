@@ -35,7 +35,10 @@ public sealed class MergeCorrectnessTests : IClassFixture<TestDirectoryFixture>
         return path;
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Delete In Multiple Segments: Then Merge All Deleted Docs Gone scenario.
+    /// </summary>
+    [Fact(DisplayName = "Delete In Multiple Segments: Then Merge All Deleted Docs Gone")]
     public void DeleteInMultipleSegments_ThenMerge_AllDeletedDocsGone()
     {
         // Arrange: create many 1-doc segments to trigger tiered merge (threshold=10),
@@ -83,7 +86,10 @@ public sealed class MergeCorrectnessTests : IClassFixture<TestDirectoryFixture>
         Assert.Equal(0, deletedB.TotalHits);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Delete All Docs In One Group: After Merge Only Kept Docs Remain scenario.
+    /// </summary>
+    [Fact(DisplayName = "Delete All Docs In One Group: After Merge Only Kept Docs Remain")]
     public void DeleteAllDocsInOneGroup_AfterMerge_OnlyKeptDocsRemain()
     {
         var dir = new MMapDirectory(SubDir("merge_all_deleted"));
@@ -123,7 +129,10 @@ public sealed class MergeCorrectnessTests : IClassFixture<TestDirectoryFixture>
         Assert.Equal(0, disposableResults.TotalHits);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Delete And Commit: Stored Fields Surviving Docs Accessible scenario.
+    /// </summary>
+    [Fact(DisplayName = "Delete And Commit: Stored Fields Surviving Docs Accessible")]
     public void DeleteAndCommit_StoredFields_SurvivingDocsAccessible()
     {
         var dir = new MMapDirectory(SubDir("merge_storedfields"));

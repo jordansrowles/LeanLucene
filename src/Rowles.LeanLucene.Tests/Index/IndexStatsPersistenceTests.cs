@@ -30,7 +30,10 @@ public sealed class IndexStatsPersistenceTests : IDisposable
         try { Directory.Delete(_dir, true); } catch { }
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Commit: Writes Stats File scenario.
+    /// </summary>
+    [Fact(DisplayName = "Commit: Writes Stats File")]
     public void Commit_WritesStatsFile()
     {
         var dir = new MMapDirectory(_dir);
@@ -44,7 +47,10 @@ public sealed class IndexStatsPersistenceTests : IDisposable
         Assert.True(File.Exists(statsPath), "stats_1.json should exist after commit");
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Persisted Stats: Match Recomputed Stats scenario.
+    /// </summary>
+    [Fact(DisplayName = "Persisted Stats: Match Recomputed Stats")]
     public void PersistedStats_MatchRecomputedStats()
     {
         var dir = new MMapDirectory(_dir);
@@ -66,7 +72,10 @@ public sealed class IndexStatsPersistenceTests : IDisposable
         Assert.Equal(computed.LiveDocCount, persisted.LiveDocCount);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Persisted Stats: After Deletion Updates Live Doc Count scenario.
+    /// </summary>
+    [Fact(DisplayName = "Persisted Stats: After Deletion Updates Live Doc Count")]
     public void PersistedStats_AfterDeletion_UpdatesLiveDocCount()
     {
         var dir = new MMapDirectory(_dir);
@@ -87,7 +96,10 @@ public sealed class IndexStatsPersistenceTests : IDisposable
         Assert.Equal(2, stats.LiveDocCount);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Commit Stats: Uses Per Segment Stats Without Opening Old Segment Data scenario.
+    /// </summary>
+    [Fact(DisplayName = "Commit Stats: Uses Per Segment Stats Without Opening Old Segment Data")]
     public void CommitStats_UsesPerSegmentStatsWithoutOpeningOldSegmentData()
     {
         var dir = new MMapDirectory(_dir);
@@ -115,7 +127,10 @@ public sealed class IndexStatsPersistenceTests : IDisposable
         Assert.Equal(2, stats.LiveDocCount);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Missing Stats File: Falls Back To Recomputation scenario.
+    /// </summary>
+    [Fact(DisplayName = "Missing Stats File: Falls Back To Recomputation")]
     public void MissingStatsFile_FallsBackToRecomputation()
     {
         var dir = new MMapDirectory(_dir);
@@ -132,7 +147,10 @@ public sealed class IndexStatsPersistenceTests : IDisposable
         Assert.Equal(1, searcher.Stats.LiveDocCount);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Corrupt Stats File: Falls Back To Recomputation scenario.
+    /// </summary>
+    [Fact(DisplayName = "Corrupt Stats File: Falls Back To Recomputation")]
     public void CorruptStatsFile_FallsBackToRecomputation()
     {
         var dir = new MMapDirectory(_dir);
@@ -148,7 +166,10 @@ public sealed class IndexStatsPersistenceTests : IDisposable
         Assert.Equal(1, searcher.Stats.TotalDocCount);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Stats File: Round-trip Preserves Field Data scenario.
+    /// </summary>
+    [Fact(DisplayName = "Stats File: Round-trip Preserves Field Data")]
     public void StatsFile_RoundTrip_PreservesFieldData()
     {
         var avgLengths = new Dictionary<string, float>(StringComparer.Ordinal)
@@ -176,7 +197,10 @@ public sealed class IndexStatsPersistenceTests : IDisposable
         Assert.Equal(9500, loaded.GetFieldDocCount("body"));
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Old Stats Files: Pruned By Deletion Policy scenario.
+    /// </summary>
+    [Fact(DisplayName = "Old Stats Files: Pruned By Deletion Policy")]
     public void OldStatsFiles_PrunedByDeletionPolicy()
     {
         var dir = new MMapDirectory(_dir);
@@ -194,7 +218,10 @@ public sealed class IndexStatsPersistenceTests : IDisposable
             "stats_2.json should remain");
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Empty Index: Returns Empty Stats scenario.
+    /// </summary>
+    [Fact(DisplayName = "Empty Index: Returns Empty Stats")]
     public void EmptyIndex_ReturnsEmptyStats()
     {
         var dir = new MMapDirectory(_dir);

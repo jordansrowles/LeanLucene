@@ -32,7 +32,10 @@ public sealed class Phase3SearchTests : IClassFixture<TestDirectoryFixture>
         return path;
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Range Query: With Boost Scores Reflect Boost Multiplier scenario.
+    /// </summary>
+    [Fact(DisplayName = "Range Query: With Boost Scores Reflect Boost Multiplier")]
     public void RangeQuery_WithBoost_ScoresReflectBoostMultiplier()
     {
         var dir = new MMapDirectory(SubDir("range_boost"));
@@ -65,7 +68,10 @@ public sealed class Phase3SearchTests : IClassFixture<TestDirectoryFixture>
         }
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Range Query: Default Boost Scores Unchanged scenario.
+    /// </summary>
+    [Fact(DisplayName = "Range Query: Default Boost Scores Unchanged")]
     public void RangeQuery_DefaultBoost_ScoresUnchanged()
     {
         var dir = new MMapDirectory(SubDir("range_defaultboost"));
@@ -85,7 +91,10 @@ public sealed class Phase3SearchTests : IClassFixture<TestDirectoryFixture>
         Assert.True(results.ScoreDocs[0].Score > 0f);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Multi Segment: Parallel Search Returns Correct Results scenario.
+    /// </summary>
+    [Fact(DisplayName = "Multi Segment: Parallel Search Returns Correct Results")]
     public void MultiSegment_ParallelSearch_ReturnsCorrectResults()
     {
         // Create multiple segments to exercise the Parallel.ForEach path
@@ -109,7 +118,10 @@ public sealed class Phase3SearchTests : IClassFixture<TestDirectoryFixture>
         Assert.Equal(7, results.TotalHits);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the VarInt Postings: End-to-end Positions Preserved scenario.
+    /// </summary>
+    [Fact(DisplayName = "VarInt Postings: End-to-end Positions Preserved")]
     public void VarIntPostings_EndToEnd_PositionsPreserved()
     {
         // Verify positions survive VarInt encoding round-trip through indexing
@@ -140,7 +152,10 @@ public sealed class Phase3SearchTests : IClassFixture<TestDirectoryFixture>
         Assert.Equal(0, searcher.Search(noMatch, 10).TotalHits);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the VarInt Postings: End-to-end Term Frequencies Correct scenario.
+    /// </summary>
+    [Fact(DisplayName = "VarInt Postings: End-to-end Term Frequencies Correct")]
     public void VarIntPostings_EndToEnd_TermFrequenciesCorrect()
     {
         var dir = new MMapDirectory(SubDir("varint_freqs"));
@@ -163,7 +178,10 @@ public sealed class Phase3SearchTests : IClassFixture<TestDirectoryFixture>
             "Higher TF term should score higher");
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Large Postings List: VarInt Encoded Smaller Than Raw Int 32 scenario.
+    /// </summary>
+    [Fact(DisplayName = "Large Postings List: VarInt Encoded Smaller Than Raw Int 32")]
     public void LargePostingsList_VarIntEncoded_SmallerThanRawInt32()
     {
         // Many sequential doc IDs → deltas of 1 → each encodes as 1 byte (vs 4 bytes raw)
@@ -184,7 +202,10 @@ public sealed class Phase3SearchTests : IClassFixture<TestDirectoryFixture>
         Assert.Equal(500, results.TotalHits);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Segment Merge: Preserves VarInt Postings scenario.
+    /// </summary>
+    [Fact(DisplayName = "Segment Merge: Preserves VarInt Postings")]
     public void SegmentMerge_PreservesVarIntPostings()
     {
         // Index across multiple commits, verify results after auto-merge
@@ -206,7 +227,10 @@ public sealed class Phase3SearchTests : IClassFixture<TestDirectoryFixture>
         Assert.Equal(6, searcher.Search(new TermQuery("body", "odd"), 20).TotalHits);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Segment Merge: Preserves Positions After Merge scenario.
+    /// </summary>
+    [Fact(DisplayName = "Segment Merge: Preserves Positions After Merge")]
     public void SegmentMerge_PreservesPositionsAfterMerge()
     {
         var dir = new MMapDirectory(SubDir("merge_positions"));

@@ -4,10 +4,16 @@ using Rowles.LeanLucene.Analysis.Tokenisers;
 
 namespace Rowles.LeanLucene.Tests.Analysis;
 
+/// <summary>
+/// Contains unit tests for EdgeNGram Tokeniser.
+/// </summary>
 [Trait("Category", "Analysis")]
 public sealed class EdgeNGramTokeniserTests
 {
-    [Fact]
+    /// <summary>
+    /// Verifies the EdgeNGram: Emits Edge N Grams scenario.
+    /// </summary>
+    [Fact(DisplayName = "EdgeNGram: Emits Edge N Grams")]
     public void EdgeNGram_EmitsEdgeNGrams()
     {
         var tok = new EdgeNGramTokeniser(1, 3);
@@ -21,7 +27,10 @@ public sealed class EdgeNGramTokeniserTests
         Assert.DoesNotContain("ello", texts);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the EdgeNGram: Multiple Words Each Word Has Edge N Grams scenario.
+    /// </summary>
+    [Fact(DisplayName = "EdgeNGram: Multiple Words Each Word Has Edge N Grams")]
     public void EdgeNGram_MultipleWords_EachWordHasEdgeNGrams()
     {
         var tok = new EdgeNGramTokeniser(1, 2);
@@ -33,7 +42,10 @@ public sealed class EdgeNGramTokeniserTests
         Assert.Contains("me", texts);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the EdgeNGram: Empty Input Returns Empty scenario.
+    /// </summary>
+    [Fact(DisplayName = "EdgeNGram: Empty Input Returns Empty")]
     public void EdgeNGram_EmptyInput_ReturnsEmpty()
     {
         var tok = new EdgeNGramTokeniser(1, 3);

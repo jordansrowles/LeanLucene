@@ -9,13 +9,19 @@ using Rowles.LeanLucene.Tests.Fixtures;
 
 namespace Rowles.LeanLucene.Tests.Search;
 
+/// <summary>
+/// Contains unit tests for RRF Query.
+/// </summary>
 public sealed class RrfQueryTests : IClassFixture<TestDirectoryFixture>
 {
     private readonly string _path;
 
     public RrfQueryTests(TestDirectoryFixture fixture) => _path = fixture.Path;
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Combine: Fuses Ranked Lists scenario.
+    /// </summary>
+    [Fact(DisplayName = "Combine: Fuses Ranked Lists")]
     public void Combine_FusesRankedLists()
     {
         // Arrange — two result sets with overlapping docs
@@ -30,14 +36,20 @@ public sealed class RrfQueryTests : IClassFixture<TestDirectoryFixture>
         Assert.Equal(2, fused.ScoreDocs[0].DocId);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Combine: Empty Inputs Returns Empty scenario.
+    /// </summary>
+    [Fact(DisplayName = "Combine: Empty Inputs Returns Empty")]
     public void Combine_EmptyInputs_ReturnsEmpty()
     {
         var result = RrfQuery.Combine([], topN: 10);
         Assert.Equal(0, result.TotalHits);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Combine: Respects Top N scenario.
+    /// </summary>
+    [Fact(DisplayName = "Combine: Respects Top N")]
     public void Combine_RespectsTopN()
     {
         var set1 = new TopDocs(5,
@@ -50,7 +62,10 @@ public sealed class RrfQueryTests : IClassFixture<TestDirectoryFixture>
         Assert.True(fused.ScoreDocs.Length <= 3);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the RRF Query: End-to-end Merges Text Queries scenario.
+    /// </summary>
+    [Fact(DisplayName = "RRF Query: End-to-end Merges Text Queries")]
     public void RrfQuery_EndToEnd_MergesTextQueries()
     {
         // Arrange
@@ -94,7 +109,10 @@ public sealed class RrfQueryTests : IClassFixture<TestDirectoryFixture>
         Assert.True(results.TotalHits > 0);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the RRF Query: Equality scenario.
+    /// </summary>
+    [Fact(DisplayName = "RRF Query: Equality")]
     public void RrfQuery_Equality()
     {
         var q1 = new RrfQuery(60).Add(new TermQuery("f", "a")).Add(new TermQuery("f", "b"));

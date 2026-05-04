@@ -4,10 +4,16 @@ using Rowles.LeanLucene.Analysis.Tokenisers;
 
 namespace Rowles.LeanLucene.Tests.Analysis;
 
+/// <summary>
+/// Contains unit tests for NGram Tokeniser.
+/// </summary>
 [Trait("Category", "Analysis")]
 public sealed class NGramTokeniserTests
 {
-    [Fact]
+    /// <summary>
+    /// Verifies the NGram: Single Char Tokens scenario.
+    /// </summary>
+    [Fact(DisplayName = "NGram: Single Char Tokens")]
     public void NGram_SingleCharTokens()
     {
         var tok = new NGramTokeniser(1, 1);
@@ -18,7 +24,10 @@ public sealed class NGramTokeniserTests
         Assert.Equal("c", tokens[2].Text);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the NGram: Bigrams And Trigrams scenario.
+    /// </summary>
+    [Fact(DisplayName = "NGram: Bigrams And Trigrams")]
     public void NGram_BigramsAndTrigrams()
     {
         var tok = new NGramTokeniser(2, 3);
@@ -32,7 +41,10 @@ public sealed class NGramTokeniserTests
         Assert.Contains("cd", texts);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the NGram: Empty Input Returns Empty List scenario.
+    /// </summary>
+    [Fact(DisplayName = "NGram: Empty Input Returns Empty List")]
     public void NGram_EmptyInput_ReturnsEmptyList()
     {
         var tok = new NGramTokeniser(1, 2);
@@ -40,7 +52,10 @@ public sealed class NGramTokeniserTests
         Assert.Empty(tokens);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the NGram: Input Shorter Than Min Gram Returns Empty scenario.
+    /// </summary>
+    [Fact(DisplayName = "NGram: Input Shorter Than Min Gram Returns Empty")]
     public void NGram_InputShorterThanMinGram_ReturnsEmpty()
     {
         var tok = new NGramTokeniser(3, 4);
@@ -48,7 +63,10 @@ public sealed class NGramTokeniserTests
         Assert.Empty(tokens);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the NGram: Offset Values Are Correct scenario.
+    /// </summary>
+    [Fact(DisplayName = "NGram: Offset Values Are Correct")]
     public void NGram_OffsetValues_AreCorrect()
     {
         var tok = new NGramTokeniser(2, 2);

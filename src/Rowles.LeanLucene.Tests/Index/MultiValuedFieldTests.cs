@@ -11,6 +11,9 @@ using Xunit.Abstractions;
 
 namespace Rowles.LeanLucene.Tests.Index;
 
+/// <summary>
+/// Contains unit tests for Multi Valued Field.
+/// </summary>
 [Trait("Category", "Index")]
 [Trait("Category", "MultiValuedField")]
 public sealed class MultiValuedFieldTests : IClassFixture<TestDirectoryFixture>
@@ -31,7 +34,10 @@ public sealed class MultiValuedFieldTests : IClassFixture<TestDirectoryFixture>
         return path;
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Multi Valued Text Field: All Values Stored scenario.
+    /// </summary>
+    [Fact(DisplayName = "Multi Valued Text Field: All Values Stored")]
     public void MultiValuedTextField_AllValuesStored()
     {
         var dir = new MMapDirectory(SubDir("multival_text"));
@@ -54,7 +60,10 @@ public sealed class MultiValuedFieldTests : IClassFixture<TestDirectoryFixture>
         Assert.Equal("cherry", stored["tags"][2]);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Multi Valued String Field: All Values Stored scenario.
+    /// </summary>
+    [Fact(DisplayName = "Multi Valued String Field: All Values Stored")]
     public void MultiValuedStringField_AllValuesStored()
     {
         var dir = new MMapDirectory(SubDir("multival_string"));
@@ -77,7 +86,10 @@ public sealed class MultiValuedFieldTests : IClassFixture<TestDirectoryFixture>
         Assert.Equal("organic", stored["category"][2]);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Multi Valued Field: Postings Generated For Each Value scenario.
+    /// </summary>
+    [Fact(DisplayName = "Multi Valued Field: Postings Generated For Each Value")]
     public void MultiValuedField_PostingsGeneratedForEachValue()
     {
         var dir = new MMapDirectory(SubDir("multival_postings"));
@@ -104,7 +116,10 @@ public sealed class MultiValuedFieldTests : IClassFixture<TestDirectoryFixture>
         Assert.Equal(1, cherryResults.TotalHits);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Multi Valued Field: Mixed With Single Value scenario.
+    /// </summary>
+    [Fact(DisplayName = "Multi Valued Field: Mixed With Single Value")]
     public void MultiValuedField_MixedWithSingleValue()
     {
         var dir = new MMapDirectory(SubDir("multival_mixed"));
@@ -133,7 +148,10 @@ public sealed class MultiValuedFieldTests : IClassFixture<TestDirectoryFixture>
         Assert.Equal("banana", stored["tags"][1]);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Multi Valued Numeric Field: All Values Stored scenario.
+    /// </summary>
+    [Fact(DisplayName = "Multi Valued Numeric Field: All Values Stored")]
     public void MultiValuedNumericField_AllValuesStored()
     {
         var dir = new MMapDirectory(SubDir("multival_numeric"));
@@ -156,7 +174,10 @@ public sealed class MultiValuedFieldTests : IClassFixture<TestDirectoryFixture>
         Assert.Equal("30.5", stored["score"][2]);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Multi Valued Field: Multiple Documents scenario.
+    /// </summary>
+    [Fact(DisplayName = "Multi Valued Field: Multiple Documents")]
     public void MultiValuedField_MultipleDocuments()
     {
         var dir = new MMapDirectory(SubDir("multival_multidoc"));
@@ -193,7 +214,10 @@ public sealed class MultiValuedFieldTests : IClassFixture<TestDirectoryFixture>
         Assert.Equal("orange", stored2["tags"][2]);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Multi Valued Field: Empty List Not Created scenario.
+    /// </summary>
+    [Fact(DisplayName = "Multi Valued Field: Empty List Not Created")]
     public void MultiValuedField_EmptyListNotCreated()
     {
         var dir = new MMapDirectory(SubDir("multival_empty"));
@@ -213,4 +237,3 @@ public sealed class MultiValuedFieldTests : IClassFixture<TestDirectoryFixture>
         Assert.False(stored.ContainsKey("tags"));
     }
 }
-

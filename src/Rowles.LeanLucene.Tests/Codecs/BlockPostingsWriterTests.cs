@@ -3,6 +3,9 @@ using Rowles.LeanLucene.Store;
 
 namespace Rowles.LeanLucene.Tests.Codecs;
 
+/// <summary>
+/// Contains unit tests for Block Postings Writer.
+/// </summary>
 public sealed class BlockPostingsWriterTests : IDisposable
 {
     private readonly string _tempDir;
@@ -18,7 +21,11 @@ public sealed class BlockPostingsWriterTests : IDisposable
         try { Directory.Delete(_tempDir, true); } catch { }
     }
 
-    [Theory]
+    /// <summary>
+    /// Verifies the Round-trip: Write Then Read Back Doc IDs Match scenario.
+    /// </summary>
+    /// <param name="count">The count value for the test case.</param>
+    [Theory(DisplayName = "Round-trip: Write Then Read Back Doc IDs Match")]
     [InlineData(1)]
     [InlineData(127)]
     [InlineData(128)]
@@ -54,7 +61,10 @@ public sealed class BlockPostingsWriterTests : IDisposable
             Assert.Equal(-1, meta.SingletonDocId);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Round-trip: Frequencies Preserved scenario.
+    /// </summary>
+    [Fact(DisplayName = "Round-trip: Frequencies Preserved")]
     public void RoundTrip_FrequenciesPreserved()
     {
         var docPath = Path.Combine(_tempDir, "freq_test.doc");
@@ -73,7 +83,10 @@ public sealed class BlockPostingsWriterTests : IDisposable
         Assert.True(new FileInfo(docPath).Length > 0);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Skip Data: Written For Full Blocks scenario.
+    /// </summary>
+    [Fact(DisplayName = "Skip Data: Written For Full Blocks")]
     public void SkipData_WrittenForFullBlocks()
     {
         var docPath = Path.Combine(_tempDir, "skip_test.doc");
@@ -94,7 +107,10 @@ public sealed class BlockPostingsWriterTests : IDisposable
         Assert.True(meta.SkipOffset > meta.DocStartOffset, "Skip data should come after doc data");
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Singleton: Doc Freq One scenario.
+    /// </summary>
+    [Fact(DisplayName = "Singleton: Doc Freq One")]
     public void Singleton_DocFreqOne()
     {
         var docPath = Path.Combine(_tempDir, "singleton.doc");
@@ -112,7 +128,10 @@ public sealed class BlockPostingsWriterTests : IDisposable
         Assert.Equal(42, meta.SingletonDocId);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Positions: Written To Separate File scenario.
+    /// </summary>
+    [Fact(DisplayName = "Positions: Written To Separate File")]
     public void Positions_WrittenToSeparateFile()
     {
         var docPath = Path.Combine(_tempDir, "pos_doc.doc");
@@ -137,7 +156,10 @@ public sealed class BlockPostingsWriterTests : IDisposable
         Assert.True(new FileInfo(posPath).Length > 0, "Position file should contain data");
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Multiple Terms: Independent Metadata scenario.
+    /// </summary>
+    [Fact(DisplayName = "Multiple Terms: Independent Metadata")]
     public void MultipleTerms_IndependentMetadata()
     {
         var docPath = Path.Combine(_tempDir, "multi_term.doc");
@@ -163,7 +185,10 @@ public sealed class BlockPostingsWriterTests : IDisposable
         Assert.True(meta2.DocStartOffset > meta1.DocStartOffset, "Second term should start after first");
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Large Scale: 100 K Postings Completes Without Error scenario.
+    /// </summary>
+    [Fact(DisplayName = "Large Scale: 100 K Postings Completes Without Error")]
     public void LargeScale_100KPostings_CompletesWithoutError()
     {
         var docPath = Path.Combine(_tempDir, "large.doc");

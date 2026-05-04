@@ -11,6 +11,9 @@ using Rowles.LeanLucene.Tests.Infrastructure;
 
 namespace Rowles.LeanLucene.Tests.Index;
 
+/// <summary>
+/// Contains unit tests for Concurrent Indexing.
+/// </summary>
 public sealed class ConcurrentIndexingTests : IDisposable
 {
     private readonly string _dir = Path.Combine(Path.GetTempPath(), $"ll-conc-{Guid.NewGuid():N}");
@@ -23,7 +26,10 @@ public sealed class ConcurrentIndexingTests : IDisposable
             Directory.Delete(_dir, recursive: true);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Add Documents Concurrent: All Docs Searchable scenario.
+    /// </summary>
+    [Fact(DisplayName = "Add Documents Concurrent: All Docs Searchable")]
     public void AddDocumentsConcurrent_AllDocsSearchable()
     {
         var directory = new MMapDirectory(_dir);
@@ -47,7 +53,10 @@ public sealed class ConcurrentIndexingTests : IDisposable
         Assert.Equal(100, results.TotalHits);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Add Documents Concurrent: Preserves Stored Fields scenario.
+    /// </summary>
+    [Fact(DisplayName = "Add Documents Concurrent: Preserves Stored Fields")]
     public void AddDocumentsConcurrent_PreservesStoredFields()
     {
         var directory = new MMapDirectory(_dir);
@@ -78,7 +87,10 @@ public sealed class ConcurrentIndexingTests : IDisposable
         Assert.True(stored["body"].Count > 0);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Add Documents Concurrent: Empty Batch No-op scenario.
+    /// </summary>
+    [Fact(DisplayName = "Add Documents Concurrent: Empty Batch No-op")]
     public void AddDocumentsConcurrent_EmptyBatch_NoOp()
     {
         var directory = new MMapDirectory(_dir);
@@ -92,7 +104,10 @@ public sealed class ConcurrentIndexingTests : IDisposable
         Assert.Equal(0, results.TotalHits);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Add Documents Concurrent: With Numeric Fields scenario.
+    /// </summary>
+    [Fact(DisplayName = "Add Documents Concurrent: With Numeric Fields")]
     public void AddDocumentsConcurrent_WithNumericFields()
     {
         var directory = new MMapDirectory(_dir);
@@ -120,7 +135,7 @@ public sealed class ConcurrentIndexingTests : IDisposable
     /// Regression test for C1: DWPT-local doc IDs were set to the global batch index,
     /// causing overlapping ID ranges across partitions and corrupt stored fields / postings.
     /// </summary>
-    [Fact]
+    [Fact(DisplayName = "Add Documents Concurrent: Produces Contiguous Doc IDs And Stored Fields Match Postings")]
     public void AddDocumentsConcurrent_ProducesContiguousDocIds_AndStoredFieldsMatchPostings()
     {
         const int DocCount = 5_000;
@@ -157,7 +172,10 @@ public sealed class ConcurrentIndexingTests : IDisposable
         }
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Add Documents Concurrent: Preserves Field Lengths For BM25 Scoring scenario.
+    /// </summary>
+    [Fact(DisplayName = "Add Documents Concurrent: Preserves Field Lengths For BM25 Scoring")]
     public void AddDocumentsConcurrent_PreservesFieldLengthsForBm25Scoring()
     {
         const int DocCount = 200;
@@ -187,7 +205,10 @@ public sealed class ConcurrentIndexingTests : IDisposable
         }
     }
 
-    [Fact(Timeout = 30_000)]
+    /// <summary>
+    /// Verifies the Add Document Lock Free: Commit While Producers Running All Committed Docs Searchable scenario.
+    /// </summary>
+    [Fact(DisplayName = "Add Document Lock Free: Commit While Producers Running All Committed Docs Searchable", Timeout = 30_000)]
     public async Task AddDocumentLockFree_CommitWhileProducersRunning_AllCommittedDocsSearchable()
     {
         const int ProducerCount = 4;
@@ -232,7 +253,10 @@ public sealed class ConcurrentIndexingTests : IDisposable
         Assert.Equal(ProducerCount * DocsPerProducer, searcher.Search(new TermQuery("body", "shared"), 1_000).TotalHits);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Add Documents Concurrent: With Deletes After Commit Live Docs Remain Correct scenario.
+    /// </summary>
+    [Fact(DisplayName = "Add Documents Concurrent: With Deletes After Commit Live Docs Remain Correct")]
     public void AddDocumentsConcurrent_WithDeletesAfterCommit_LiveDocsRemainCorrect()
     {
         const int DocCount = 120;
@@ -261,7 +285,10 @@ public sealed class ConcurrentIndexingTests : IDisposable
         Assert.Equal(80, searcher.Stats.LiveDocCount);
     }
 
-    [Fact(Timeout = 30_000)]
+    /// <summary>
+    /// Verifies the Concurrent Readers During Writer Commits: Never Throw And Eventually See Committed Docs scenario.
+    /// </summary>
+    [Fact(DisplayName = "Concurrent Readers During Writer Commits: Never Throw And Eventually See Committed Docs", Timeout = 30_000)]
     public async Task ConcurrentReadersDuringWriterCommits_NeverThrowAndEventuallySeeCommittedDocs()
     {
         var directory = new MMapDirectory(_dir);
@@ -318,7 +345,10 @@ public sealed class ConcurrentIndexingTests : IDisposable
         Assert.Equal(41, manager.UsingSearcher(s => s.Search(new TermQuery("body", "reader"), 100).TotalHits));
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Add Documents During Merge: All Docs Preserved And Indexed scenario.
+    /// </summary>
+    [Fact(DisplayName = "Add Documents During Merge: All Docs Preserved And Indexed")]
     public void AddDocumentsDuringMerge_AllDocsPreservedAndIndexed()
     {
         var directory = new MMapDirectory(_dir);

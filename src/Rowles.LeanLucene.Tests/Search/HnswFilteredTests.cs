@@ -17,6 +17,9 @@ using Rowles.LeanLucene.Tests.Fixtures;
 
 namespace Rowles.LeanLucene.Tests.Search;
 
+/// <summary>
+/// Contains unit tests for HNSW Filtered.
+/// </summary>
 [Trait("Category", "Phase3")]
 public sealed class HnswFilteredTests : IClassFixture<TestDirectoryFixture>
 {
@@ -64,7 +67,10 @@ public sealed class HnswFilteredTests : IClassFixture<TestDirectoryFixture>
         return (dir, vectors);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Filter: Restricts Results To Matching Docs scenario.
+    /// </summary>
+    [Fact(DisplayName = "Filter: Restricts Results To Matching Docs")]
     public void Filter_RestrictsResultsToMatchingDocs()
     {
         var cfg = new IndexWriterConfig
@@ -91,7 +97,10 @@ public sealed class HnswFilteredTests : IClassFixture<TestDirectoryFixture>
             Assert.Equal(0, sd.DocId % 3);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Filter: Highly Selective Brute Force Still Returns Top K scenario.
+    /// </summary>
+    [Fact(DisplayName = "Filter: Highly Selective Brute Force Still Returns Top K")]
     public void Filter_HighlySelective_BruteForceStillReturnsTopK()
     {
         var cfg = new IndexWriterConfig
@@ -129,7 +138,10 @@ public sealed class HnswFilteredTests : IClassFixture<TestDirectoryFixture>
         Assert.Equal(5, results.ScoreDocs[0].DocId);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Filter: No Matches Returns Empty scenario.
+    /// </summary>
+    [Fact(DisplayName = "Filter: No Matches Returns Empty")]
     public void Filter_NoMatches_ReturnsEmpty()
     {
         var cfg = new IndexWriterConfig { BuildHnswOnFlush = false };

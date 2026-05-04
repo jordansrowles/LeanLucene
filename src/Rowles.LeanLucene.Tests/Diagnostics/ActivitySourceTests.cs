@@ -57,7 +57,10 @@ public sealed class ActivitySourceTests : IDisposable
     private IEnumerable<Activity> Scoped(Activity scope)
         => _captured.Where(a => a.RootId == scope.RootId && a.Source.Name == SourceName);
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Search: Emits Activity With Query Type Tag scenario.
+    /// </summary>
+    [Fact(DisplayName = "Search: Emits Activity With Query Type Tag")]
     public void Search_EmitsActivity_WithQueryTypeTag()
     {
         using var scope = StartScope();
@@ -71,7 +74,10 @@ public sealed class ActivitySourceTests : IDisposable
         Assert.Equal("TermQuery", activity!.GetTagItem("query.type"));
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Search: Emits Activity With Total Hits Tag scenario.
+    /// </summary>
+    [Fact(DisplayName = "Search: Emits Activity With Total Hits Tag")]
     public void Search_EmitsActivity_WithTotalHitsTag()
     {
         using var scope = StartScope();
@@ -85,7 +91,10 @@ public sealed class ActivitySourceTests : IDisposable
         Assert.NotNull(activity!.GetTagItem("search.total_hits"));
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Commit: Emits Activity With Segment Count Tag scenario.
+    /// </summary>
+    [Fact(DisplayName = "Commit: Emits Activity With Segment Count Tag")]
     public void Commit_EmitsActivity_WithSegmentCountTag()
     {
         using var scope = StartScope();
@@ -101,7 +110,10 @@ public sealed class ActivitySourceTests : IDisposable
         Assert.NotNull(activity!.GetTagItem("index.segment_count"));
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Flush: Emits Activity With Doc Count Tag scenario.
+    /// </summary>
+    [Fact(DisplayName = "Flush: Emits Activity With Doc Count Tag")]
     public void Flush_EmitsActivity_WithDocCountTag()
     {
         using var scope = StartScope();
@@ -117,7 +129,10 @@ public sealed class ActivitySourceTests : IDisposable
         Assert.NotNull(activity.GetTagItem("index.doc_count"));
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Activities: Have Correct Source Name scenario.
+    /// </summary>
+    [Fact(DisplayName = "Activities: Have Correct Source Name")]
     public void Activities_HaveCorrectSourceName()
     {
         using var scope = StartScope();
@@ -129,7 +144,10 @@ public sealed class ActivitySourceTests : IDisposable
         Assert.All(snapshot, a => Assert.Equal(SourceName, a.Source.Name));
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the No Listener: Produces No Activities scenario.
+    /// </summary>
+    [Fact(DisplayName = "No Listener: Produces No Activities")]
     public void NoListener_ProducesNoActivities()
     {
         // Dispose our listener and drain anything already captured from other test classes

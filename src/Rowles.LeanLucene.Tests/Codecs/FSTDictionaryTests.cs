@@ -36,7 +36,10 @@ public sealed class FSTDictionaryTests : IClassFixture<TestDirectoryFixture>
 
     // ── Empty dictionary ────────────────────────────────────────────────────
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Empty Dictionary: Exact Lookup Returns False scenario.
+    /// </summary>
+    [Fact(DisplayName = "Empty Dictionary: Exact Lookup Returns False")]
     public void EmptyDictionary_ExactLookupReturnsFalse()
     {
         var path = DicPath("empty");
@@ -45,7 +48,10 @@ public sealed class FSTDictionaryTests : IClassFixture<TestDirectoryFixture>
         Assert.False(reader.TryGetPostingsOffset("anything", out _));
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Empty Dictionary: Prefix Returns Empty scenario.
+    /// </summary>
+    [Fact(DisplayName = "Empty Dictionary: Prefix Returns Empty")]
     public void EmptyDictionary_PrefixReturnsEmpty()
     {
         var path = DicPath("empty_prefix");
@@ -56,7 +62,10 @@ public sealed class FSTDictionaryTests : IClassFixture<TestDirectoryFixture>
 
     // ── Single term ─────────────────────────────────────────────────────────
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Single Term: Exact Lookup Succeeds scenario.
+    /// </summary>
+    [Fact(DisplayName = "Single Term: Exact Lookup Succeeds")]
     public void SingleTerm_ExactLookupSucceeds()
     {
         var path = DicPath("single");
@@ -72,7 +81,10 @@ public sealed class FSTDictionaryTests : IClassFixture<TestDirectoryFixture>
 
     // ── Multi-term round-trip ───────────────────────────────────────────────
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Multi Term: All Terms Round-trip scenario.
+    /// </summary>
+    [Fact(DisplayName = "Multi Term: All Terms Round-trip")]
     public void MultiTerm_AllTermsRoundTrip()
     {
         var path = DicPath("multi");
@@ -100,7 +112,10 @@ public sealed class FSTDictionaryTests : IClassFixture<TestDirectoryFixture>
 
     // ── Unicode terms (CJK, emoji) ──────────────────────────────────────────
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Unicode: CJK And Emoji Round-trip scenario.
+    /// </summary>
+    [Fact(DisplayName = "Unicode: CJK And Emoji Round-trip")]
     public void Unicode_CJKAndEmoji_RoundTrip()
     {
         var path = DicPath("unicode");
@@ -127,7 +142,10 @@ public sealed class FSTDictionaryTests : IClassFixture<TestDirectoryFixture>
 
     // ── Prefix scan ─────────────────────────────────────────────────────────
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Prefix Scan: Returns Matching Terms scenario.
+    /// </summary>
+    [Fact(DisplayName = "Prefix Scan: Returns Matching Terms")]
     public void PrefixScan_ReturnsMatchingTerms()
     {
         var path = DicPath("prefix");
@@ -152,7 +170,10 @@ public sealed class FSTDictionaryTests : IClassFixture<TestDirectoryFixture>
 
     // ── Wildcard matching ───────────────────────────────────────────────────
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Wildcard Scan: Matches Pattern scenario.
+    /// </summary>
+    [Fact(DisplayName = "Wildcard Scan: Matches Pattern")]
     public void WildcardScan_MatchesPattern()
     {
         var path = DicPath("wildcard");
@@ -173,7 +194,10 @@ public sealed class FSTDictionaryTests : IClassFixture<TestDirectoryFixture>
         Assert.Equal(3, matches.Count);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Wildcard Scan: Mid Pattern Short Prefix Returns Expected Matches scenario.
+    /// </summary>
+    [Fact(DisplayName = "Wildcard Scan: Mid Pattern Short Prefix Returns Expected Matches")]
     public void WildcardScan_MidPatternShortPrefix_ReturnsExpectedMatches()
     {
         var path = DicPath("wildcard_mid_short_prefix");
@@ -201,7 +225,10 @@ public sealed class FSTDictionaryTests : IClassFixture<TestDirectoryFixture>
         Assert.Equal([offsets["body\0market"]], offsetsOnly);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Wildcard Scan: Trailing Wildcard Equals Prefix Scan scenario.
+    /// </summary>
+    [Fact(DisplayName = "Wildcard Scan: Trailing Wildcard Equals Prefix Scan")]
     public void WildcardScan_TrailingWildcard_EqualsPrefixScan()
     {
         var path = DicPath("wildcard_prefix_equivalent");
@@ -228,7 +255,10 @@ public sealed class FSTDictionaryTests : IClassFixture<TestDirectoryFixture>
 
     // ── Fuzzy matching ──────────────────────────────────────────────────────
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Fuzzy Matches: Finds Within Edit Distance scenario.
+    /// </summary>
+    [Fact(DisplayName = "Fuzzy Matches: Finds Within Edit Distance")]
     public void FuzzyMatches_FindsWithinEditDistance()
     {
         var path = DicPath("fuzzy");
@@ -258,7 +288,10 @@ public sealed class FSTDictionaryTests : IClassFixture<TestDirectoryFixture>
         Assert.Equal(1, batMatch.Distance);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Fuzzy Matches: Large Term Set Prefix Sharing Prunes scenario.
+    /// </summary>
+    [Fact(DisplayName = "Fuzzy Matches: Large Term Set Prefix Sharing Prunes")]
     public void FuzzyMatches_LargeTermSet_PrefixSharingPrunes()
     {
         var path = DicPath("fuzzy_scale");
@@ -295,7 +328,10 @@ public sealed class FSTDictionaryTests : IClassFixture<TestDirectoryFixture>
         Assert.True(sw.ElapsedMilliseconds < 2000, $"100 fuzzy queries took {sw.ElapsedMilliseconds}ms (expected < 2000ms)");
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Fuzzy Matches: Max Edits 2 Correct Distances scenario.
+    /// </summary>
+    [Fact(DisplayName = "Fuzzy Matches: Max Edits 2 Correct Distances")]
     public void FuzzyMatches_MaxEdits2_CorrectDistances()
     {
         var path = DicPath("fuzzy_dist2");
@@ -328,7 +364,10 @@ public sealed class FSTDictionaryTests : IClassFixture<TestDirectoryFixture>
 
     // ── Range scan ──────────────────────────────────────────────────────────
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Range Scan: Returns Terms In Range scenario.
+    /// </summary>
+    [Fact(DisplayName = "Range Scan: Returns Terms In Range")]
     public void RangeScan_ReturnsTermsInRange()
     {
         var path = DicPath("range");
@@ -352,7 +391,10 @@ public sealed class FSTDictionaryTests : IClassFixture<TestDirectoryFixture>
 
     // ── Regex matching ──────────────────────────────────────────────────────
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Regex Scan: Matches Pattern scenario.
+    /// </summary>
+    [Fact(DisplayName = "Regex Scan: Matches Pattern")]
     public void RegexScan_MatchesPattern()
     {
         var path = DicPath("regex");
@@ -375,7 +417,10 @@ public sealed class FSTDictionaryTests : IClassFixture<TestDirectoryFixture>
 
     // ── Field enumeration ───────────────────────────────────────────────────
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Get All Terms For Field: Returns All Field Terms scenario.
+    /// </summary>
+    [Fact(DisplayName = "Get All Terms For Field: Returns All Field Terms")]
     public void GetAllTermsForField_ReturnsAllFieldTerms()
     {
         var path = DicPath("fieldall");
@@ -400,7 +445,10 @@ public sealed class FSTDictionaryTests : IClassFixture<TestDirectoryFixture>
 
     // ── Large-scale (10K terms) ─────────────────────────────────────────────
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Large Scale: 10 K Terms All Lookup Succeeds scenario.
+    /// </summary>
+    [Fact(DisplayName = "Large Scale: 10 K Terms All Lookup Succeeds")]
     public void LargeScale_10KTerms_AllLookupSucceeds()
     {
         var path = DicPath("large10k");
@@ -434,7 +482,10 @@ public sealed class FSTDictionaryTests : IClassFixture<TestDirectoryFixture>
 
     // ── Format version in file ──────────────────────────────────────────────
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Written File: Has Version Two scenario.
+    /// </summary>
+    [Fact(DisplayName = "Written File: Has Version Two")]
     public void WrittenFile_HasVersionTwo()
     {
         var path = DicPath("version_check");

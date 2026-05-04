@@ -5,10 +5,16 @@ using Rowles.LeanLucene.Search.Highlighting;
 
 namespace Rowles.LeanLucene.Tests.Search;
 
+/// <summary>
+/// Contains unit tests for SIMD Vector Ops.
+/// </summary>
 [Trait("Category", "Simd")]
 public sealed class SimdVectorOpsTests
 {
-    [Fact]
+    /// <summary>
+    /// Verifies the Cosine: On Identical Vectors Is One scenario.
+    /// </summary>
+    [Fact(DisplayName = "Cosine: On Identical Vectors Is One")]
     public void Cosine_OnIdenticalVectors_IsOne()
     {
         var v = new float[] { 1, 2, 3, 4, 5, 6, 7, 8 };
@@ -18,7 +24,10 @@ public sealed class SimdVectorOpsTests
         Assert.InRange(similarity, 0.9999f, 1.0001f);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Cosine: On Orthogonal Vectors Is Zero scenario.
+    /// </summary>
+    [Fact(DisplayName = "Cosine: On Orthogonal Vectors Is Zero")]
     public void Cosine_OnOrthogonalVectors_IsZero()
     {
         var a = new float[] { 1, 0, 0, 0 };
@@ -29,14 +38,20 @@ public sealed class SimdVectorOpsTests
         Assert.Equal(0f, similarity, 5);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Cosine: On Empty Or Mismatched Inputs Returns Zero scenario.
+    /// </summary>
+    [Fact(DisplayName = "Cosine: On Empty Or Mismatched Inputs Returns Zero")]
     public void Cosine_OnEmptyOrMismatchedInputs_ReturnsZero()
     {
         Assert.Equal(0f, SimdVectorOps.CosineSimilarity(Array.Empty<float>(), Array.Empty<float>()));
         Assert.Equal(0f, SimdVectorOps.CosineSimilarity(new float[] { 1, 2 }, new float[] { 1, 2, 3 }));
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Dot Product: Matches Scalar Reference scenario.
+    /// </summary>
+    [Fact(DisplayName = "Dot Product: Matches Scalar Reference")]
     public void DotProduct_MatchesScalarReference()
     {
         var rng = new Random(17);
@@ -51,7 +66,10 @@ public sealed class SimdVectorOpsTests
         Assert.Equal(reference, result, 4);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Normalise In Place: Produces Unit Norm scenario.
+    /// </summary>
+    [Fact(DisplayName = "Normalise In Place: Produces Unit Norm")]
     public void NormaliseInPlace_ProducesUnitNorm()
     {
         var v = new float[] { 3, 4, 0, 0 };
@@ -62,7 +80,10 @@ public sealed class SimdVectorOpsTests
         Assert.Equal(1f, MathF.Sqrt(SimdVectorOps.SquaredNorm(v)), 5);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Normalise In Place: On Zero Vector Returns False And Leaves Input Untouched scenario.
+    /// </summary>
+    [Fact(DisplayName = "Normalise In Place: On Zero Vector Returns False And Leaves Input Untouched")]
     public void NormaliseInPlace_OnZeroVector_ReturnsFalseAndLeavesInputUntouched()
     {
         var v = new float[] { 0, 0, 0, 0 };
@@ -73,13 +94,19 @@ public sealed class SimdVectorOpsTests
         Assert.All(v, x => Assert.Equal(0f, x));
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Normalise: On Zero Vector Throws scenario.
+    /// </summary>
+    [Fact(DisplayName = "Normalise: On Zero Vector Throws")]
     public void Normalise_OnZeroVector_Throws()
     {
         Assert.Throws<ArgumentException>(() => SimdVectorOps.Normalise(new float[] { 0, 0, 0 }));
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Dot Product: Of Normalised Equals Cosine Similarity scenario.
+    /// </summary>
+    [Fact(DisplayName = "Dot Product: Of Normalised Equals Cosine Similarity")]
     public void DotProduct_OfNormalised_EqualsCosineSimilarity()
     {
         var rng = new Random(99);

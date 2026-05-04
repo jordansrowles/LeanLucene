@@ -30,7 +30,10 @@ public sealed class PayloadRoundTripTests : IDisposable
             Directory.Delete(_tempDir, recursive: true);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Payload Round-trip: Single Doc Single Position scenario.
+    /// </summary>
+    [Fact(DisplayName = "Payload Round-trip: Single Doc Single Position")]
     public void PayloadRoundTrip_SingleDocSinglePosition()
     {
         var posPath = Path.Combine(_tempDir, "test.pos");
@@ -64,7 +67,10 @@ public sealed class PayloadRoundTripTests : IDisposable
         pe.Dispose();
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Payload Round-trip: Multi Doc Multi Position scenario.
+    /// </summary>
+    [Fact(DisplayName = "Payload Round-trip: Multi Doc Multi Position")]
     public void PayloadRoundTrip_MultiDocMultiPosition()
     {
         var posPath = Path.Combine(_tempDir, "test.pos");
@@ -111,7 +117,10 @@ public sealed class PayloadRoundTripTests : IDisposable
         pe.Dispose();
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Payload Round-trip: Null Payloads Write Zero Length scenario.
+    /// </summary>
+    [Fact(DisplayName = "Payload Round-trip: Null Payloads Write Zero Length")]
     public void PayloadRoundTrip_NullPayloadsWriteZeroLength()
     {
         var posPath = Path.Combine(_tempDir, "test.pos");
@@ -140,7 +149,10 @@ public sealed class PayloadRoundTripTests : IDisposable
         pe.Dispose();
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Payload Round-trip: No Payloads Still Works scenario.
+    /// </summary>
+    [Fact(DisplayName = "Payload Round-trip: No Payloads Still Works")]
     public void PayloadRoundTrip_NoPayloadsStillWorks()
     {
         var posPath = Path.Combine(_tempDir, "test.pos");

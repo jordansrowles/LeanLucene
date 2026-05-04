@@ -4,10 +4,16 @@ using Rowles.LeanLucene.Analysis.Tokenisers;
 
 namespace Rowles.LeanLucene.Tests.Analysis;
 
+/// <summary>
+/// Contains unit tests for Analysis.
+/// </summary>
 [Trait("Category", "Analysis")]
 public sealed class AnalysisTests
 {
-    [Fact]
+    /// <summary>
+    /// Verifies the Tokeniser: Basic Sentence Produces Correct Tokens scenario.
+    /// </summary>
+    [Fact(DisplayName = "Tokeniser: Basic Sentence Produces Correct Tokens")]
     public void Tokeniser_BasicSentence_ProducesCorrectTokens()
     {
         var tokeniser = new Tokeniser();
@@ -25,7 +31,10 @@ public sealed class AnalysisTests
         }
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Tokeniser: Punctuation Is Excluded From Tokens scenario.
+    /// </summary>
+    [Fact(DisplayName = "Tokeniser: Punctuation Is Excluded From Tokens")]
     public void Tokeniser_Punctuation_IsExcludedFromTokens()
     {
         var tokeniser = new Tokeniser();
@@ -36,7 +45,10 @@ public sealed class AnalysisTests
         Assert.Equal("world", tokens[1].Text.ToString());
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Lowercase Filter: Mutates In Place No Allocation scenario.
+    /// </summary>
+    [Fact(DisplayName = "Lowercase Filter: Mutates In Place No Allocation")]
     public void LowercaseFilter_MutatesInPlace_NoAllocation()
     {
         var filter = new LowercaseFilter();
@@ -45,7 +57,10 @@ public sealed class AnalysisTests
         Assert.Equal("hello world foo", new string(buffer));
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Stop Word Filter: Removes Common Words scenario.
+    /// </summary>
+    [Fact(DisplayName = "Stop Word Filter: Removes Common Words")]
     public void StopWordFilter_RemovesCommonWords()
     {
         // "to", "be", "or", "not" are all stop words; only "live" survives.
@@ -56,7 +71,10 @@ public sealed class AnalysisTests
         Assert.Equal("live", tokens[0].Text.ToString());
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Standard Analyser: End-to-end Lowercases Tokenises Filters scenario.
+    /// </summary>
+    [Fact(DisplayName = "Standard Analyser: End-to-end Lowercases Tokenises Filters")]
     public void StandardAnalyser_EndToEnd_LowercasesTokenisesFilters()
     {
         var analyser = new StandardAnalyser();

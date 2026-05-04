@@ -39,7 +39,10 @@ public sealed class AllocationRegressionTests : IClassFixture<TestDirectoryFixtu
         return path;
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Boolean Query: Must Streaming Path Low Allocation Per Query scenario.
+    /// </summary>
+    [Fact(DisplayName = "Boolean Query: Must Streaming Path Low Allocation Per Query")]
     public void BooleanQuery_Must_StreamingPath_LowAllocationPerQuery()
     {
         // Arrange: build a 500-doc index where ~half contain both target terms
@@ -92,7 +95,10 @@ public sealed class AllocationRegressionTests : IClassFixture<TestDirectoryFixtu
             $"BooleanQuery Must streaming path allocated {avgBytes:F0} bytes/query, budget is 16384 bytes");
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Boolean Query: Should Only Streaming Path Low Allocation Per Query scenario.
+    /// </summary>
+    [Fact(DisplayName = "Boolean Query: Should Only Streaming Path Low Allocation Per Query")]
     public void BooleanQuery_ShouldOnly_StreamingPath_LowAllocationPerQuery()
     {
         // Arrange
@@ -146,7 +152,10 @@ public sealed class AllocationRegressionTests : IClassFixture<TestDirectoryFixtu
             $"BooleanQuery Should streaming path allocated {avgBytes:F0} bytes/query, budget is 16384 bytes");
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Phrase Query: Array Pool Positions Low Allocation Per Query scenario.
+    /// </summary>
+    [Fact(DisplayName = "Phrase Query: Array Pool Positions Low Allocation Per Query")]
     public void PhraseQuery_ArrayPoolPositions_LowAllocationPerQuery()
     {
         // Arrange
@@ -197,7 +206,10 @@ public sealed class AllocationRegressionTests : IClassFixture<TestDirectoryFixtu
             $"PhraseQuery allocated {avgBytes:F0} bytes/query, budget is 16384 bytes");
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Wildcard Query: Low Allocation Per Query scenario.
+    /// </summary>
+    [Fact(DisplayName = "Wildcard Query: Low Allocation Per Query")]
     public void WildcardQuery_LowAllocationPerQuery()
     {
         // Arrange: build a 500-doc index with diverse terms
@@ -249,7 +261,10 @@ public sealed class AllocationRegressionTests : IClassFixture<TestDirectoryFixtu
             $"WildcardQuery allocated {avgBytes:F0} bytes/query, budget is 51200 bytes");
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Wildcard Query: Mid Pattern Short Prefix Low Allocation Per Query scenario.
+    /// </summary>
+    [Fact(DisplayName = "Wildcard Query: Mid Pattern Short Prefix Low Allocation Per Query")]
     public void WildcardQuery_MidPatternShortPrefix_LowAllocationPerQuery()
     {
         const int nonMatchingTerms = 2_000;
@@ -301,7 +316,10 @@ public sealed class AllocationRegressionTests : IClassFixture<TestDirectoryFixtu
             $"WildcardQuery allocated {avgBytes:F0} bytes/query, budget is 102400 bytes");
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Fuzzy Query: Low Allocation Per Query scenario.
+    /// </summary>
+    [Fact(DisplayName = "Fuzzy Query: Low Allocation Per Query")]
     public void FuzzyQuery_LowAllocationPerQuery()
     {
         // Arrange: build a 500-doc index with diverse terms
@@ -353,7 +371,10 @@ public sealed class AllocationRegressionTests : IClassFixture<TestDirectoryFixtu
             $"FuzzyQuery allocated {avgBytes:F0} bytes/query, budget is 51200 bytes");
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Fuzzy Query: High Edit Distance Short Term Low Allocation Per Query scenario.
+    /// </summary>
+    [Fact(DisplayName = "Fuzzy Query: High Edit Distance Short Term Low Allocation Per Query")]
     public void FuzzyQuery_HighEditDistance_ShortTerm_LowAllocationPerQuery()
     {
         // Regression guard for the 398 KB regression with short query terms and maxEdits=2.
@@ -409,7 +430,10 @@ public sealed class AllocationRegressionTests : IClassFixture<TestDirectoryFixtu
             $"FuzzyQuery (high-edit short term) allocated {avgBytes:F0} bytes/query, budget is 51200 bytes");
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Standard Analyser: Intern Cache Stable Corpus No New String Allocations scenario.
+    /// </summary>
+    [Fact(DisplayName = "Standard Analyser: Intern Cache Stable Corpus No New String Allocations")]
     public void StandardAnalyser_InternCache_StableCorpusNoNewStringAllocations()
     {
         // After warmup on a stable corpus, repeated analysis should hit intern cache 100%
@@ -440,7 +464,10 @@ public sealed class AllocationRegressionTests : IClassFixture<TestDirectoryFixtu
             $"StandardAnalyser allocated {avgBytes:F0} bytes/call after warmup, expected ≤ 256 (intern cache should be stable)");
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Term Query: Low Allocation Per Query scenario.
+    /// </summary>
+    [Fact(DisplayName = "Term Query: Low Allocation Per Query")]
     public void TermQuery_LowAllocationPerQuery()
     {
         const int docCount = 500;
@@ -484,7 +511,10 @@ public sealed class AllocationRegressionTests : IClassFixture<TestDirectoryFixtu
             $"TermQuery allocated {avgBytes:F0} bytes/query, budget is 4096 bytes");
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Block Join Query: Low Allocation Per Query scenario.
+    /// </summary>
+    [Fact(DisplayName = "Block Join Query: Low Allocation Per Query")]
     public void BlockJoinQuery_LowAllocationPerQuery()
     {
         const int blockCount = 50;
@@ -536,7 +566,10 @@ public sealed class AllocationRegressionTests : IClassFixture<TestDirectoryFixtu
             $"BlockJoinQuery allocated {avgBytes:F0} bytes/query, budget is 520,000 bytes");
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Did You Mean: Low Allocation Per Query scenario.
+    /// </summary>
+    [Fact(DisplayName = "Did You Mean: Low Allocation Per Query")]
     public void DidYouMean_LowAllocationPerQuery()
     {
         const int docCount = 500;

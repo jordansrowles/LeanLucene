@@ -86,7 +86,10 @@ public sealed class SegmentMergerTests : IClassFixture<TestDirectoryFixture>
             IndexSort = sort,
         };
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Merge: Preserves Field Lengths BM25 Scores Match Unmerged scenario.
+    /// </summary>
+    [Fact(DisplayName = "Merge: Preserves Field Lengths BM25 Scores Match Unmerged")]
     public void Merge_PreservesFieldLengths_BM25ScoresMatchUnmerged()
     {
         var dir = SubDir(nameof(Merge_PreservesFieldLengths_BM25ScoresMatchUnmerged));
@@ -117,7 +120,10 @@ public sealed class SegmentMergerTests : IClassFixture<TestDirectoryFixture>
         Assert.Equal(2, results.TotalHits);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Merge: Preserves Numeric Doc Values scenario.
+    /// </summary>
+    [Fact(DisplayName = "Merge: Preserves Numeric Doc Values")]
     public void Merge_PreservesNumericDocValues()
     {
         var dir = SubDir(nameof(Merge_PreservesNumericDocValues));
@@ -145,7 +151,10 @@ public sealed class SegmentMergerTests : IClassFixture<TestDirectoryFixture>
         Assert.Equal(2, sorted.TotalHits);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Merge: Preserves Sorted Doc Values scenario.
+    /// </summary>
+    [Fact(DisplayName = "Merge: Preserves Sorted Doc Values")]
     public void Merge_PreservesSortedDocValues()
     {
         var dir = SubDir(nameof(Merge_PreservesSortedDocValues));
@@ -173,7 +182,10 @@ public sealed class SegmentMergerTests : IClassFixture<TestDirectoryFixture>
         Assert.Equal(2, sorted.TotalHits);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Merge: Preserves BKD Range Query Results scenario.
+    /// </summary>
+    [Fact(DisplayName = "Merge: Preserves BKD Range Query Results")]
     public void Merge_PreservesBkdRangeQueryResults()
     {
         var dir = SubDir(nameof(Merge_PreservesBkdRangeQueryResults));
@@ -201,7 +213,10 @@ public sealed class SegmentMergerTests : IClassFixture<TestDirectoryFixture>
         Assert.Equal(2, hits.TotalHits);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Merge: Preserves Term Vectors scenario.
+    /// </summary>
+    [Fact(DisplayName = "Merge: Preserves Term Vectors")]
     public void Merge_PreservesTermVectors()
     {
         var dir = SubDir(nameof(Merge_PreservesTermVectors));
@@ -231,7 +246,10 @@ public sealed class SegmentMergerTests : IClassFixture<TestDirectoryFixture>
         Assert.True(more.TotalHits > 0, "MoreLikeThis returned zero hits — term vectors likely lost on merge");
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Merge: Preserves Parent Bit Set Block Join Query Still Returns Parents scenario.
+    /// </summary>
+    [Fact(DisplayName = "Merge: Preserves Parent Bit Set Block Join Query Still Returns Parents")]
     public void Merge_PreservesParentBitSet_BlockJoinQueryStillReturnsParents()
     {
         var dir = SubDir(nameof(Merge_PreservesParentBitSet_BlockJoinQueryStillReturnsParents));
@@ -276,7 +294,10 @@ public sealed class SegmentMergerTests : IClassFixture<TestDirectoryFixture>
         Assert.Contains("one", stored["title"][0]);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Merge: Preserves Index Sort Fields scenario.
+    /// </summary>
+    [Fact(DisplayName = "Merge: Preserves Index Sort Fields")]
     public void Merge_PreservesIndexSortFields()
     {
         var dir = SubDir(nameof(Merge_PreservesIndexSortFields));
@@ -302,7 +323,10 @@ public sealed class SegmentMergerTests : IClassFixture<TestDirectoryFixture>
         Assert.Equal("Numeric:price:False", segInfo.IndexSortFields![0]);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Cleanup Segment Files: Leaves No Orphans scenario.
+    /// </summary>
+    [Fact(DisplayName = "Cleanup Segment Files: Leaves No Orphans")]
     public void CleanupSegmentFiles_LeavesNoOrphans()
     {
         var dir = SubDir(nameof(CleanupSegmentFiles_LeavesNoOrphans));
@@ -333,7 +357,10 @@ public sealed class SegmentMergerTests : IClassFixture<TestDirectoryFixture>
         }
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Maybe Merge: With Protected Segment Keeps Protected Files And Stats scenario.
+    /// </summary>
+    [Fact(DisplayName = "Maybe Merge: With Protected Segment Keeps Protected Files And Stats")]
     public void MaybeMerge_WithProtectedSegment_KeepsProtectedFilesAndStats()
     {
         var dir = SubDir(nameof(MaybeMerge_WithProtectedSegment_KeepsProtectedFilesAndStats));

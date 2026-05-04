@@ -33,7 +33,7 @@ public sealed class FaultInjectionTests : IDisposable
     /// regression test for F2/N3: the <c>.seg</c> file must be rewritten before the
     /// commit rename so that <c>DelGeneration</c> survives a writer restart.
     /// </summary>
-    [Fact]
+    [Fact(DisplayName = "Delete Commit: Reopen Document Remains Deleted")]
     public void DeleteCommit_Reopen_DocumentRemainsDeleted()
     {
         string path = SubDir("del-reopen");
@@ -58,7 +58,7 @@ public sealed class FaultInjectionTests : IDisposable
     /// absent on reopen. Verifies that gen-versioned <c>.del</c> files do not
     /// shadow each other and the <c>.seg</c> always points to the latest generation.
     /// </summary>
-    [Fact]
+    [Fact(DisplayName = "Multiple Delete Commits: All Deleted Documents Absent On Reopen")]
     public void MultipleDeleteCommits_AllDeletedDocumentsAbsentOnReopen()
     {
         string path = SubDir("del-multi-gen");
@@ -91,7 +91,10 @@ public sealed class FaultInjectionTests : IDisposable
         Assert.Equal(2, searcher.Stats.LiveDocCount);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Writer Reopen: After Versioned Delete Commit Preserves Live Doc Count scenario.
+    /// </summary>
+    [Fact(DisplayName = "Writer Reopen: After Versioned Delete Commit Preserves Live Doc Count")]
     public void WriterReopen_AfterVersionedDeleteCommit_PreservesLiveDocCount()
     {
         string path = SubDir("del-writer-reopen-live-count");
@@ -126,7 +129,7 @@ public sealed class FaultInjectionTests : IDisposable
     /// the <c>.seg</c> still has <c>DelGeneration = null</c> and the gen-versioned
     /// <c>.del</c> path is never probed).
     /// </summary>
-    [Fact]
+    [Fact(DisplayName = "Simulated Crash: Del Written Seg Not Updated Document Reappears As Live")]
     public void SimulatedCrash_DelWritten_SegNotUpdated_DocumentReappearsAsLive()
     {
         string path = SubDir("crash-del-before-seg");
@@ -170,7 +173,7 @@ public sealed class FaultInjectionTests : IDisposable
     /// without crashing; all documents reappear as live because
     /// <see cref="SegmentReader"/> only loads the live-docs file if it exists.
     /// </summary>
-    [Fact]
+    [Fact(DisplayName = "Simulated Crash: Seg References Del Gen Del File Missing Documents Return As Live")]
     public void SimulatedCrash_SegReferencesDelGen_DelFileMissing_DocumentsReturnAsLive()
     {
         string path = SubDir("crash-seg-del-missing");
@@ -216,7 +219,7 @@ public sealed class FaultInjectionTests : IDisposable
     /// <see cref="EndOfStreamException"/> (truncated before CRC), both of which
     /// derive from <see cref="IOException"/>.
     /// </summary>
-    [Fact]
+    [Fact(DisplayName = "Corrupt Del File: Throws Io Exception On Open")]
     public void CorruptDelFile_ThrowsIoException_OnOpen()
     {
         string path = SubDir("crash-corrupt-del");
@@ -247,7 +250,7 @@ public sealed class FaultInjectionTests : IDisposable
     /// rename is ignored during recovery. The searcher falls back to the previous
     /// committed generation.
     /// </summary>
-    [Fact]
+    [Fact(DisplayName = "Partial Commit Rename: Tmp File Present Falls Back To Previous Generation")]
     public void PartialCommitRename_TmpFilePresent_FallsBackToPreviousGeneration()
     {
         string path = SubDir("crash-partial-rename");
@@ -273,7 +276,7 @@ public sealed class FaultInjectionTests : IDisposable
     /// This is the "fail closed" contract: data written in durable mode must be
     /// readable after a process restart.
     /// </summary>
-    [Fact]
+    [Fact(DisplayName = "Durable Commit: Data Survives Writer Restart")]
     public void DurableCommit_DataSurvivesWriterRestart()
     {
         string path = SubDir("durable-restart");
@@ -299,7 +302,7 @@ public sealed class FaultInjectionTests : IDisposable
     /// indexed deletion is performed must still be loaded by <see cref="SegmentReader"/>
     /// so that pre-existing live-docs state is respected on recovery.
     /// </summary>
-    [Fact]
+    [Fact(DisplayName = "Legacy Unversioned Del File: Loaded By Segment Reader")]
     public void LegacyUnversionedDelFile_LoadedBySegmentReader()
     {
         string path = SubDir("legacy-del");

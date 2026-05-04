@@ -11,6 +11,9 @@ using Xunit.Abstractions;
 
 namespace Rowles.LeanLucene.Tests.Search;
 
+/// <summary>
+/// Contains unit tests for Sorted Search.
+/// </summary>
 [Trait("Category", "Search")]
 [Trait("Category", "Sorting")]
 public sealed class SortedSearchTests : IClassFixture<TestDirectoryFixture>
@@ -31,7 +34,10 @@ public sealed class SortedSearchTests : IClassFixture<TestDirectoryFixture>
         return path;
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Search: Sort By Doc ID Returns In Doc ID Order scenario.
+    /// </summary>
+    [Fact(DisplayName = "Search: Sort By Doc ID Returns In Doc ID Order")]
     public void Search_SortByDocId_ReturnsInDocIdOrder()
     {
         // Arrange
@@ -56,7 +62,10 @@ public sealed class SortedSearchTests : IClassFixture<TestDirectoryFixture>
             Assert.True(results.ScoreDocs[i].DocId > results.ScoreDocs[i - 1].DocId);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Search: Sort By Numeric Field Returns Sorted By Value scenario.
+    /// </summary>
+    [Fact(DisplayName = "Search: Sort By Numeric Field Returns Sorted By Value")]
     public void Search_SortByNumericField_ReturnsSortedByValue()
     {
         // Arrange
@@ -91,7 +100,10 @@ public sealed class SortedSearchTests : IClassFixture<TestDirectoryFixture>
                 $"Expected {sortedPrices[i]} >= {sortedPrices[i - 1]} at position {i}");
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Search: Sort By Numeric Descending Returns Highest First scenario.
+    /// </summary>
+    [Fact(DisplayName = "Search: Sort By Numeric Descending Returns Highest First")]
     public void Search_SortByNumericDescending_ReturnsHighestFirst()
     {
         // Arrange
@@ -118,7 +130,10 @@ public sealed class SortedSearchTests : IClassFixture<TestDirectoryFixture>
         Assert.Equal("5", stored0["rank"][0]);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Search: Sort By Score Same As Default Search scenario.
+    /// </summary>
+    [Fact(DisplayName = "Search: Sort By Score Same As Default Search")]
     public void Search_SortByScore_SameAsDefaultSearch()
     {
         // Arrange

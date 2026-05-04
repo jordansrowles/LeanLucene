@@ -11,6 +11,9 @@ using Xunit.Abstractions;
 
 namespace Rowles.LeanLucene.Tests.Search;
 
+/// <summary>
+/// Contains unit tests for Search.
+/// </summary>
 [Trait("Category", "Search")]
 public sealed class SearchTests : IClassFixture<TestDirectoryFixture>
 {
@@ -30,7 +33,10 @@ public sealed class SearchTests : IClassFixture<TestDirectoryFixture>
         return path;
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Term Query: Exact Match Returns Correct Doc IDs scenario.
+    /// </summary>
+    [Fact(DisplayName = "Term Query: Exact Match Returns Correct Doc IDs")]
     public void TermQuery_ExactMatch_ReturnsCorrectDocIds()
     {
         var dir = new MMapDirectory(SubDir("term_exact"));
@@ -52,7 +58,10 @@ public sealed class SearchTests : IClassFixture<TestDirectoryFixture>
         Assert.Equal(new[] { 2, 4 }, docIds);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Term Query: No Match Returns Empty Results scenario.
+    /// </summary>
+    [Fact(DisplayName = "Term Query: No Match Returns Empty Results")]
     public void TermQuery_NoMatch_ReturnsEmptyResults()
     {
         var dir = new MMapDirectory(SubDir("term_nomatch"));
@@ -71,7 +80,10 @@ public sealed class SearchTests : IClassFixture<TestDirectoryFixture>
         Assert.Equal(0, results.TotalHits);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Boolean Query: Must And Requires Both Terms scenario.
+    /// </summary>
+    [Fact(DisplayName = "Boolean Query: Must And Requires Both Terms")]
     public void BooleanQuery_MustAnd_RequiresBothTerms()
     {
         var dir = new MMapDirectory(SubDir("bool_must"));
@@ -95,7 +107,12 @@ public sealed class SearchTests : IClassFixture<TestDirectoryFixture>
         Assert.Equal(2, results.TotalHits);
     }
 
-    [Theory]
+    /// <summary>
+    /// Verifies the Boolean Query: Must Pattern Clause Matches Analysed Term scenario.
+    /// </summary>
+    /// <param name="queryType">The queryType value for the test case.</param>
+    /// <param name="pattern">The pattern value for the test case.</param>
+    [Theory(DisplayName = "Boolean Query: Must Pattern Clause Matches Analysed Term")]
     [InlineData("prefix", "wor")]
     [InlineData("wildcard", "wor*")]
     [InlineData("wildcard", "*or*")]
@@ -122,7 +139,10 @@ public sealed class SearchTests : IClassFixture<TestDirectoryFixture>
         Assert.Equal(1, results.TotalHits);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Stored Parameter: False Indexes Without Storing Field Values scenario.
+    /// </summary>
+    [Fact(DisplayName = "Stored Parameter: False Indexes Without Storing Field Values")]
     public void StoredParameter_False_IndexesWithoutStoringFieldValues()
     {
         var dir = new MMapDirectory(SubDir("stored_false"));
@@ -143,7 +163,10 @@ public sealed class SearchTests : IClassFixture<TestDirectoryFixture>
         Assert.False(stored.ContainsKey("id"));
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Stored Field: Stores Value Without Indexing scenario.
+    /// </summary>
+    [Fact(DisplayName = "Stored Field: Stores Value Without Indexing")]
     public void StoredField_StoresValueWithoutIndexing()
     {
         var dir = new MMapDirectory(SubDir("stored_only"));
@@ -165,7 +188,10 @@ public sealed class SearchTests : IClassFixture<TestDirectoryFixture>
         Assert.Equal(0, storedOnlyResults.TotalHits);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Boolean Query: Should Or Returns Union scenario.
+    /// </summary>
+    [Fact(DisplayName = "Boolean Query: Should Or Returns Union")]
     public void BooleanQuery_ShouldOr_ReturnsUnion()
     {
         var dir = new MMapDirectory(SubDir("bool_should"));
@@ -189,7 +215,10 @@ public sealed class SearchTests : IClassFixture<TestDirectoryFixture>
         Assert.Equal(4, results.TotalHits);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Boolean Query: Must Not Excludes Documents scenario.
+    /// </summary>
+    [Fact(DisplayName = "Boolean Query: Must Not Excludes Documents")]
     public void BooleanQuery_MustNot_ExcludesDocuments()
     {
         var dir = new MMapDirectory(SubDir("bool_mustnot"));
@@ -213,7 +242,10 @@ public sealed class SearchTests : IClassFixture<TestDirectoryFixture>
         Assert.Equal(2, results.TotalHits);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Scorer: BM25 Higher Term Frequency Ranks Higher scenario.
+    /// </summary>
+    [Fact(DisplayName = "Scorer: BM25 Higher Term Frequency Ranks Higher")]
     public void Scorer_Bm25_HigherTermFrequencyRanksHigher()
     {
         var dir = new MMapDirectory(SubDir("bm25_tf"));
@@ -237,7 +269,10 @@ public sealed class SearchTests : IClassFixture<TestDirectoryFixture>
         Assert.Equal(1, results.ScoreDocs[0].DocId);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Index Searcher: Parallel Segments All Segments Contribute Results scenario.
+    /// </summary>
+    [Fact(DisplayName = "Index Searcher: Parallel Segments All Segments Contribute Results")]
     public void IndexSearcher_ParallelSegments_AllSegmentsContributeResults()
     {
         var dir = new MMapDirectory(SubDir("parallel_seg"));
@@ -262,7 +297,10 @@ public sealed class SearchTests : IClassFixture<TestDirectoryFixture>
         }
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Segment Reader: Missing Norms File Throws Invalid Data Exception On Open scenario.
+    /// </summary>
+    [Fact(DisplayName = "Segment Reader: Missing Norms File Throws Invalid Data Exception On Open")]
     public void SegmentReader_MissingNormsFile_ThrowsInvalidDataExceptionOnOpen()
     {
         var dirPath = SubDir("segment_integrity");
@@ -283,7 +321,10 @@ public sealed class SearchTests : IClassFixture<TestDirectoryFixture>
         Assert.True(ex is InvalidDataException or FileNotFoundException);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Range Query: Numeric Field Returns In Range Documents scenario.
+    /// </summary>
+    [Fact(DisplayName = "Range Query: Numeric Field Returns In Range Documents")]
     [Trait("Category", "Advanced")]
     public void RangeQuery_NumericField_ReturnsInRangeDocuments()
     {
@@ -304,7 +345,10 @@ public sealed class SearchTests : IClassFixture<TestDirectoryFixture>
         Assert.Equal(2, results.TotalHits);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Phrase Query: Ordered Terms Matches Exact Phrase scenario.
+    /// </summary>
+    [Fact(DisplayName = "Phrase Query: Ordered Terms Matches Exact Phrase")]
     [Trait("Category", "Advanced")]
     public void PhraseQuery_OrderedTerms_MatchesExactPhrase()
     {
@@ -327,7 +371,10 @@ public sealed class SearchTests : IClassFixture<TestDirectoryFixture>
         Assert.Equal(0, results.ScoreDocs[0].DocId);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Index Stats: Cross Segment Scores Are Comparable scenario.
+    /// </summary>
+    [Fact(DisplayName = "Index Stats: Cross Segment Scores Are Comparable")]
     [Trait("Category", "Advanced")]
     public void IndexStats_CrossSegmentScores_AreComparable()
     {
@@ -360,7 +407,10 @@ public sealed class SearchTests : IClassFixture<TestDirectoryFixture>
         Assert.Equal(0, results.ScoreDocs[0].DocId);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Vector Query: Cosine Similarity Top K Returned scenario.
+    /// </summary>
+    [Fact(DisplayName = "Vector Query: Cosine Similarity Top K Returned")]
     [Trait("Category", "Phase2")]
     public void VectorQuery_CosineSimilarity_TopKReturned()
     {
@@ -395,7 +445,10 @@ public sealed class SearchTests : IClassFixture<TestDirectoryFixture>
         Assert.Contains(2, topDocIds);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Vector Query: Cosine Similarity Scores Descending scenario.
+    /// </summary>
+    [Fact(DisplayName = "Vector Query: Cosine Similarity Scores Descending")]
     [Trait("Category", "Phase2")]
     public void VectorQuery_CosineSimilarity_ScoresDescending()
     {
@@ -420,7 +473,10 @@ public sealed class SearchTests : IClassFixture<TestDirectoryFixture>
         Assert.Equal(1, results.ScoreDocs[0].DocId); // exact match
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Cosine Similarity: Identical Vectors Returns One scenario.
+    /// </summary>
+    [Fact(DisplayName = "Cosine Similarity: Identical Vectors Returns One")]
     [Trait("Category", "Phase2")]
     public void CosineSimilarity_IdenticalVectors_ReturnsOne()
     {
@@ -429,7 +485,10 @@ public sealed class SearchTests : IClassFixture<TestDirectoryFixture>
         Assert.InRange(sim, 0.999f, 1.001f);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Cosine Similarity: Orthogonal Vectors Returns Zero scenario.
+    /// </summary>
+    [Fact(DisplayName = "Cosine Similarity: Orthogonal Vectors Returns Zero")]
     [Trait("Category", "Phase2")]
     public void CosineSimilarity_OrthogonalVectors_ReturnsZero()
     {
@@ -439,14 +498,20 @@ public sealed class SearchTests : IClassFixture<TestDirectoryFixture>
         Assert.InRange(sim, -0.001f, 0.001f);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Cosine Similarity: Empty Vectors Returns Zero scenario.
+    /// </summary>
+    [Fact(DisplayName = "Cosine Similarity: Empty Vectors Returns Zero")]
     [Trait("Category", "Phase2")]
     public void CosineSimilarity_EmptyVectors_ReturnsZero()
     {
         Assert.Equal(0f, VectorQuery.CosineSimilarity([], []));
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Index Stats: Computes Per Field Average Length scenario.
+    /// </summary>
+    [Fact(DisplayName = "Index Stats: Computes Per Field Average Length")]
     [Trait("Category", "Phase2")]
     public void IndexStats_ComputesPerFieldAverageLength()
     {
@@ -475,7 +540,10 @@ public sealed class SearchTests : IClassFixture<TestDirectoryFixture>
         Assert.InRange(avgLen, 1.0f, 4.0f);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the BM25: Norms Integration Shorter Doc Ranks Higher For Same Term Freq scenario.
+    /// </summary>
+    [Fact(DisplayName = "BM25: Norms Integration Shorter Doc Ranks Higher For Same Term Freq")]
     [Trait("Category", "Phase2")]
     public void Bm25_NormsIntegration_ShorterDocRanksHigherForSameTermFreq()
     {
@@ -502,7 +570,10 @@ public sealed class SearchTests : IClassFixture<TestDirectoryFixture>
         Assert.Equal(0, results.ScoreDocs[0].DocId);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Numeric Field: Range Query Via Numeric Index scenario.
+    /// </summary>
+    [Fact(DisplayName = "Numeric Field: Range Query Via Numeric Index")]
     [Trait("Category", "Phase2")]
     public void NumericField_RangeQuery_ViaNumericIndex()
     {
@@ -524,7 +595,10 @@ public sealed class SearchTests : IClassFixture<TestDirectoryFixture>
         Assert.Equal(3, results.TotalHits);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Atomic Commit: Write Then Rename Produces Commit File scenario.
+    /// </summary>
+    [Fact(DisplayName = "Atomic Commit: Write Then Rename Produces Commit File")]
     [Trait("Category", "Phase2")]
     public void AtomicCommit_WriteThenRename_ProducesCommitFile()
     {
@@ -542,7 +616,10 @@ public sealed class SearchTests : IClassFixture<TestDirectoryFixture>
         Assert.False(File.Exists(System.IO.Path.Combine(dirPath, "segments_1.tmp")));
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Top Docs Collector: Top N Does Not Sort Full Result Set scenario.
+    /// </summary>
+    [Fact(DisplayName = "Top Docs Collector: Top N Does Not Sort Full Result Set")]
     [Trait("Category", "Phase2")]
     public void TopDocsCollector_TopN_DoesNotSortFullResultSet()
     {
@@ -565,7 +642,10 @@ public sealed class SearchTests : IClassFixture<TestDirectoryFixture>
         Assert.Equal(5, results.ScoreDocs.Length);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Segment Merger: Below Threshold No Merge scenario.
+    /// </summary>
+    [Fact(DisplayName = "Segment Merger: Below Threshold No Merge")]
     [Trait("Category", "Phase2")]
     public void SegmentMerger_BelowThreshold_NoMerge()
     {
@@ -582,7 +662,10 @@ public sealed class SearchTests : IClassFixture<TestDirectoryFixture>
         Assert.Equal(5, result.Count);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Phrase Query: Multi Segment Matches Across Segments scenario.
+    /// </summary>
+    [Fact(DisplayName = "Phrase Query: Multi Segment Matches Across Segments")]
     public void PhraseQuery_MultiSegment_MatchesAcrossSegments()
     {
         var dir = new MMapDirectory(SubDir("phrase_multiseg"));

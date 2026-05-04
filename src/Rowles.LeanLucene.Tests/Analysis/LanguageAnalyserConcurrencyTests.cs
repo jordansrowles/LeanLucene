@@ -4,10 +4,16 @@ using Xunit;
 
 namespace Rowles.LeanLucene.Tests.Analysis;
 
+/// <summary>
+/// Contains unit tests for Language Analyser Concurrency.
+/// </summary>
 [Trait("Category", "Analysis")]
 public sealed class LanguageAnalyserConcurrencyTests
 {
-    [Fact]
+    /// <summary>
+    /// Verifies the Analyse: Concurrent Calls Match Single Threaded Baseline scenario.
+    /// </summary>
+    [Fact(DisplayName = "Analyse: Concurrent Calls Match Single Threaded Baseline")]
     public void Analyse_ConcurrentCalls_MatchSingleThreadedBaseline()
     {
         var analyser = AnalyserFactory.Create("en");

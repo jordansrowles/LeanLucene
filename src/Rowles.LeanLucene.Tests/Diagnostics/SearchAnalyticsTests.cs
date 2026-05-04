@@ -9,13 +9,19 @@ using Rowles.LeanLucene.Tests.Fixtures;
 
 namespace Rowles.LeanLucene.Tests.Diagnostics;
 
+/// <summary>
+/// Contains unit tests for Search Analytics.
+/// </summary>
 public sealed class SearchAnalyticsTests : IClassFixture<TestDirectoryFixture>
 {
     private readonly string _path;
 
     public SearchAnalyticsTests(TestDirectoryFixture fixture) => _path = fixture.Path;
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Search Events: Are Captured scenario.
+    /// </summary>
+    [Fact(DisplayName = "Search Events: Are Captured")]
     public void SearchEvents_AreCaptured()
     {
         // Arrange
@@ -45,7 +51,10 @@ public sealed class SearchAnalyticsTests : IClassFixture<TestDirectoryFixture>
         Assert.All(events, e => Assert.Equal("TermQuery", e.QueryType));
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Ring Buffer: Drops Oldest When Full scenario.
+    /// </summary>
+    [Fact(DisplayName = "Ring Buffer: Drops Oldest When Full")]
     public void RingBuffer_DropsOldestWhenFull()
     {
         // Arrange
@@ -75,7 +84,10 @@ public sealed class SearchAnalyticsTests : IClassFixture<TestDirectoryFixture>
         Assert.True(events.Count <= 2);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Export JSON: Produces Valid JSON Array scenario.
+    /// </summary>
+    [Fact(DisplayName = "Export JSON: Produces Valid JSON Array")]
     public void ExportJson_ProducesValidJsonArray()
     {
         // Arrange

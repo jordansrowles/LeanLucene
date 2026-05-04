@@ -8,13 +8,19 @@ using Rowles.LeanLucene.Tests.Fixtures;
 
 namespace Rowles.LeanLucene.Tests.Analysis;
 
+/// <summary>
+/// Contains unit tests for Token Budget.
+/// </summary>
 public sealed class TokenBudgetTests : IClassFixture<TestDirectoryFixture>
 {
     private readonly string _path;
 
     public TokenBudgetTests(TestDirectoryFixture fixture) => _path = fixture.Path;
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Truncate: Limits Tokens To Configured Budget scenario.
+    /// </summary>
+    [Fact(DisplayName = "Truncate: Limits Tokens To Configured Budget")]
     public void Truncate_LimitsTokensToConfiguredBudget()
     {
         // Arrange
@@ -45,7 +51,10 @@ public sealed class TokenBudgetTests : IClassFixture<TestDirectoryFixture>
         Assert.Equal(1, hitsOne.TotalHits);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Reject: Throws When Budget Exceeded scenario.
+    /// </summary>
+    [Fact(DisplayName = "Reject: Throws When Budget Exceeded")]
     public void Reject_ThrowsWhenBudgetExceeded()
     {
         // Arrange
@@ -69,7 +78,10 @@ public sealed class TokenBudgetTests : IClassFixture<TestDirectoryFixture>
         Assert.True(ex.TokenCount > 2);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Warn: Allows All Tokens Through Without Throwing scenario.
+    /// </summary>
+    [Fact(DisplayName = "Warn: Allows All Tokens Through Without Throwing")]
     public void Warn_AllowsAllTokensThroughWithoutThrowing()
     {
         // Arrange
@@ -98,7 +110,10 @@ public sealed class TokenBudgetTests : IClassFixture<TestDirectoryFixture>
         Assert.Equal(1, hits.TotalHits);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Zero Budget: Means Unlimited scenario.
+    /// </summary>
+    [Fact(DisplayName = "Zero Budget: Means Unlimited")]
     public void ZeroBudget_MeansUnlimited()
     {
         // Arrange

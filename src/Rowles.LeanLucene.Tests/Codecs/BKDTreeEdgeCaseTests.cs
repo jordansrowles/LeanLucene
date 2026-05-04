@@ -37,7 +37,10 @@ public sealed class BKDTreeEdgeCaseTests : IClassFixture<TestDirectoryFixture>
 
     // ── All same value ──────────────────────────────────────────────────────
 
-    [Fact]
+    /// <summary>
+    /// Verifies the All Same Value: Range Query Finds All scenario.
+    /// </summary>
+    [Fact(DisplayName = "All Same Value: Range Query Finds All")]
     public void AllSameValue_RangeQueryFindsAll()
     {
         // Arrange
@@ -82,7 +85,10 @@ public sealed class BKDTreeEdgeCaseTests : IClassFixture<TestDirectoryFixture>
 
     // ── Empty range ─────────────────────────────────────────────────────────
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Empty Range: Returns No Results scenario.
+    /// </summary>
+    [Fact(DisplayName = "Empty Range: Returns No Results")]
     public void EmptyRange_ReturnsNoResults()
     {
         // Arrange
@@ -123,7 +129,10 @@ public sealed class BKDTreeEdgeCaseTests : IClassFixture<TestDirectoryFixture>
 
     // ── Single point range ──────────────────────────────────────────────────
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Single Point Range: Finds Exact Match scenario.
+    /// </summary>
+    [Fact(DisplayName = "Single Point Range: Finds Exact Match")]
     public void SinglePointRange_FindsExactMatch()
     {
         // Arrange
@@ -171,7 +180,10 @@ public sealed class BKDTreeEdgeCaseTests : IClassFixture<TestDirectoryFixture>
 
     // ── Negative values ─────────────────────────────────────────────────────
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Negative Values: Handled Correctly scenario.
+    /// </summary>
+    [Fact(DisplayName = "Negative Values: Handled Correctly")]
     public void NegativeValues_HandledCorrectly()
     {
         // Arrange
@@ -224,7 +236,10 @@ public sealed class BKDTreeEdgeCaseTests : IClassFixture<TestDirectoryFixture>
 
     // ── Mixed precision values ──────────────────────────────────────────────
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Mixed Precision Values: Range Query Correct scenario.
+    /// </summary>
+    [Fact(DisplayName = "Mixed Precision Values: Range Query Correct")]
     public void MixedPrecisionValues_RangeQueryCorrect()
     {
         // Arrange
@@ -268,7 +283,10 @@ public sealed class BKDTreeEdgeCaseTests : IClassFixture<TestDirectoryFixture>
 
     // ── Boundary inclusive behavior ─────────────────────────────────────────
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Range Boundaries: Are Inclusive scenario.
+    /// </summary>
+    [Fact(DisplayName = "Range Boundaries: Are Inclusive")]
     public void RangeBoundaries_AreInclusive()
     {
         // Arrange

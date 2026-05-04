@@ -9,6 +9,9 @@ using Rowles.LeanLucene.Tests.Fixtures;
 
 namespace Rowles.LeanLucene.Tests.Search.Suggestions;
 
+/// <summary>
+/// Contains unit tests for Did You Mean.
+/// </summary>
 public sealed class DidYouMeanTests : IClassFixture<TestDirectoryFixture>
 {
     private readonly string _path;
@@ -22,7 +25,10 @@ public sealed class DidYouMeanTests : IClassFixture<TestDirectoryFixture>
         return dir;
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Suggest: Returns Closest Term By Edit Distance scenario.
+    /// </summary>
+    [Fact(DisplayName = "Suggest: Returns Closest Term By Edit Distance")]
     public void Suggest_ReturnsClosestTermByEditDistance()
     {
         var mmap = new MMapDirectory(SubDir(nameof(Suggest_ReturnsClosestTermByEditDistance)));
@@ -45,7 +51,10 @@ public sealed class DidYouMeanTests : IClassFixture<TestDirectoryFixture>
         Assert.Contains(suggestions, s => s.Term == "hello");
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Suggest: Excludes Exact Match scenario.
+    /// </summary>
+    [Fact(DisplayName = "Suggest: Excludes Exact Match")]
     public void Suggest_ExcludesExactMatch()
     {
         var mmap = new MMapDirectory(SubDir(nameof(Suggest_ExcludesExactMatch)));
@@ -64,7 +73,10 @@ public sealed class DidYouMeanTests : IClassFixture<TestDirectoryFixture>
         Assert.DoesNotContain(suggestions, s => s.Term == "hello");
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Suggest: Respects Top N scenario.
+    /// </summary>
+    [Fact(DisplayName = "Suggest: Respects Top N")]
     public void Suggest_RespectsTopN()
     {
         var mmap = new MMapDirectory(SubDir(nameof(Suggest_RespectsTopN)));
@@ -86,7 +98,10 @@ public sealed class DidYouMeanTests : IClassFixture<TestDirectoryFixture>
         Assert.True(suggestions.Count <= 3);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Suggest: Returns Empty For No Matches scenario.
+    /// </summary>
+    [Fact(DisplayName = "Suggest: Returns Empty For No Matches")]
     public void Suggest_ReturnsEmptyForNoMatches()
     {
         var mmap = new MMapDirectory(SubDir(nameof(Suggest_ReturnsEmptyForNoMatches)));
@@ -107,7 +122,10 @@ public sealed class DidYouMeanTests : IClassFixture<TestDirectoryFixture>
 
     // ── New game-plan tests ─────────────────────────────────────────────
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Suggest: Search Typo Inserted Letter scenario.
+    /// </summary>
+    [Fact(DisplayName = "Suggest: Search Typo Inserted Letter")]
     public void Suggest_SearchTypo_InsertedLetter()
     {
         // "serch" → suggests "search" (edit distance 1: insert 'a')
@@ -131,7 +149,10 @@ public sealed class DidYouMeanTests : IClassFixture<TestDirectoryFixture>
         Assert.Contains(suggestions, s => s.Term == "search");
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Suggest: Vector Typo Inserted Letter scenario.
+    /// </summary>
+    [Fact(DisplayName = "Suggest: Vector Typo Inserted Letter")]
     public void Suggest_VectorTypo_InsertedLetter()
     {
         // "vectr" → suggests "vector" (edit distance 1: insert 'o')
@@ -155,7 +176,10 @@ public sealed class DidYouMeanTests : IClassFixture<TestDirectoryFixture>
         Assert.Contains(suggestions, s => s.Term == "vector");
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Suggest: Language Typo Edit Distance 2 scenario.
+    /// </summary>
+    [Fact(DisplayName = "Suggest: Language Typo Edit Distance 2")]
     public void Suggest_LanguageTypo_EditDistance2()
     {
         // "languge" → suggests "language" (edit distance 2)
@@ -179,7 +203,10 @@ public sealed class DidYouMeanTests : IClassFixture<TestDirectoryFixture>
         Assert.Contains(suggestions, s => s.Term == "language");
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Suggest: Gibberish Returns Empty scenario.
+    /// </summary>
+    [Fact(DisplayName = "Suggest: Gibberish Returns Empty")]
     public void Suggest_Gibberish_ReturnsEmpty()
     {
         var mmap = new MMapDirectory(SubDir(nameof(Suggest_Gibberish_ReturnsEmpty)));
@@ -201,7 +228,10 @@ public sealed class DidYouMeanTests : IClassFixture<TestDirectoryFixture>
         Assert.Empty(suggestions);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Suggest: Higher Doc Frequency Ranks Higher scenario.
+    /// </summary>
+    [Fact(DisplayName = "Suggest: Higher Doc Frequency Ranks Higher")]
     public void Suggest_HigherDocFrequency_RanksHigher()
     {
         // "helt" is edit distance 1 from both "help" and "held"

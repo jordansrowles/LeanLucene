@@ -15,7 +15,10 @@ public sealed class BlockJoinBenchmarkReproTests : IClassFixture<TestDirectoryFi
 
     public BlockJoinBenchmarkReproTests(TestDirectoryFixture fixture) => _path = fixture.Path;
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Block Join Query: Flush During Block Indexing Does Not Crash scenario.
+    /// </summary>
+    [Fact(DisplayName = "Block Join Query: Flush During Block Indexing Does Not Crash")]
     public void BlockJoinQuery_FlushDuringBlockIndexing_DoesNotCrash()
     {
         var dir = Path.Combine(_path, nameof(BlockJoinQuery_FlushDuringBlockIndexing_DoesNotCrash));

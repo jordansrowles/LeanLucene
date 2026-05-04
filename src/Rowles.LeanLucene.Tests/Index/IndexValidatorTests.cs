@@ -6,6 +6,9 @@ using Rowles.LeanLucene.Tests.Fixtures;
 
 namespace Rowles.LeanLucene.Tests.Index;
 
+/// <summary>
+/// Contains unit tests for Index Validator.
+/// </summary>
 [Trait("Category", "Index")]
 [Trait("Category", "Validation")]
 public sealed class IndexValidatorTests : IClassFixture<TestDirectoryFixture>
@@ -20,7 +23,10 @@ public sealed class IndexValidatorTests : IClassFixture<TestDirectoryFixture>
         return path;
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Validate: Empty Directory Reports No Commit File scenario.
+    /// </summary>
+    [Fact(DisplayName = "Validate: Empty Directory Reports No Commit File")]
     public void Validate_EmptyDirectory_ReportsNoCommitFile()
     {
         var dir = new MMapDirectory(SubDir("val_empty"));
@@ -29,7 +35,10 @@ public sealed class IndexValidatorTests : IClassFixture<TestDirectoryFixture>
         Assert.Single(result.Issues);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Validate: Valid Index Is Healthy scenario.
+    /// </summary>
+    [Fact(DisplayName = "Validate: Valid Index Is Healthy")]
     public void Validate_ValidIndex_IsHealthy()
     {
         var dir = new MMapDirectory(SubDir("val_valid"));
@@ -46,7 +55,10 @@ public sealed class IndexValidatorTests : IClassFixture<TestDirectoryFixture>
         Assert.True(result.DocumentsChecked >= 1);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Validate: Multiple Segments Checks All scenario.
+    /// </summary>
+    [Fact(DisplayName = "Validate: Multiple Segments Checks All")]
     public void Validate_MultipleSegments_ChecksAll()
     {
         var dir = new MMapDirectory(SubDir("val_multiseg"));
@@ -64,7 +76,10 @@ public sealed class IndexValidatorTests : IClassFixture<TestDirectoryFixture>
         Assert.True(result.IsHealthy, string.Join(", ", result.Issues));
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Validate: Missing Segment File Reports Issue scenario.
+    /// </summary>
+    [Fact(DisplayName = "Validate: Missing Segment File Reports Issue")]
     public void Validate_MissingSegmentFile_ReportsIssue()
     {
         var dir = new MMapDirectory(SubDir("val_missing"));

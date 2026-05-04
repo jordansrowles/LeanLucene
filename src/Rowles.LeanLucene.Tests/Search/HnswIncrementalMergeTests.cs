@@ -34,7 +34,10 @@ public sealed class HnswIncrementalMergeTests : IClassFixture<TestDirectoryFixtu
 
     private static int SegmentOrdinal(string segmentId) => int.Parse(segmentId.AsSpan("seg_".Length));
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Merge: Preserves HNSW Search Across Segments scenario.
+    /// </summary>
+    [Fact(DisplayName = "Merge: Preserves HNSW Search Across Segments")]
     public void Merge_PreservesHnswSearchAcrossSegments()
     {
         var dir = SubDir("hnsw_merge");

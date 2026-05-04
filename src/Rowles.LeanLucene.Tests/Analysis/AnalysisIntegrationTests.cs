@@ -41,7 +41,10 @@ public sealed class AnalysisIntegrationTests : IClassFixture<TestDirectoryFixtur
 
     // ── NGramTokeniser end-to-end───────────────────────────────────────────
 
-    [Fact]
+    /// <summary>
+    /// Verifies the NGram Tokeniser: Index Partial Word Search Finds Document scenario.
+    /// </summary>
+    [Fact(DisplayName = "NGram Tokeniser: Index Partial Word Search Finds Document")]
     public void NGramTokeniser_Index_PartialWordSearchFindsDocument()
     {
         var analyser = new Analyser(new NGramTokeniser(2, 3));
@@ -69,7 +72,10 @@ public sealed class AnalysisIntegrationTests : IClassFixture<TestDirectoryFixtur
         Assert.Equal(1, results2.TotalHits);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the NGram Tokeniser: Bigram On Index Matches Expected Docs scenario.
+    /// </summary>
+    [Fact(DisplayName = "NGram Tokeniser: Bigram On Index Matches Expected Docs")]
     public void NGramTokeniser_BigramOnIndex_MatchesExpectedDocs()
     {
         var analyser = new Analyser(new NGramTokeniser(2, 2));
@@ -103,7 +109,10 @@ public sealed class AnalysisIntegrationTests : IClassFixture<TestDirectoryFixtur
 
     // ── EdgeNGramTokeniser end-to-end ───────────────────────────────────────
 
-    [Fact]
+    /// <summary>
+    /// Verifies the EdgeNGram Tokeniser: Prefix Autocomplete Term Query Finds Doc scenario.
+    /// </summary>
+    [Fact(DisplayName = "EdgeNGram Tokeniser: Prefix Autocomplete Term Query Finds Doc")]
     public void EdgeNGramTokeniser_PrefixAutocomplete_TermQueryFindsDoc()
     {
         var analyser = new Analyser(new EdgeNGramTokeniser(1, 4));
@@ -131,7 +140,10 @@ public sealed class AnalysisIntegrationTests : IClassFixture<TestDirectoryFixtur
         Assert.Equal(1, results2.TotalHits);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the EdgeNGram Tokeniser: Non Edge Substring Does Not Match scenario.
+    /// </summary>
+    [Fact(DisplayName = "EdgeNGram Tokeniser: Non Edge Substring Does Not Match")]
     public void EdgeNGramTokeniser_NonEdgeSubstring_DoesNotMatch()
     {
         var analyser = new Analyser(new EdgeNGramTokeniser(2, 3));
@@ -156,7 +168,10 @@ public sealed class AnalysisIntegrationTests : IClassFixture<TestDirectoryFixtur
 
     // ── AccentFoldingFilter end-to-end ──────────────────────────────────────
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Accent Folding Filter: Index Accented Search Unaccented Finds Doc scenario.
+    /// </summary>
+    [Fact(DisplayName = "Accent Folding Filter: Index Accented Search Unaccented Finds Doc")]
     public void AccentFoldingFilter_IndexAccented_SearchUnaccented_FindsDoc()
     {
         var analyser = new Analyser(
@@ -185,7 +200,10 @@ public sealed class AnalysisIntegrationTests : IClassFixture<TestDirectoryFixtur
         }
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Accent Folding Filter: Index Unaccented Search Unaccented Still Works scenario.
+    /// </summary>
+    [Fact(DisplayName = "Accent Folding Filter: Index Unaccented Search Unaccented Still Works")]
     public void AccentFoldingFilter_IndexUnaccented_SearchUnaccented_StillWorks()
     {
         var analyser = new Analyser(

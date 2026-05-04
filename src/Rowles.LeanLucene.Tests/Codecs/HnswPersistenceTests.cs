@@ -13,6 +13,9 @@ using Rowles.LeanLucene.Tests.Fixtures;
 
 namespace Rowles.LeanLucene.Tests.Codecs;
 
+/// <summary>
+/// Contains unit tests for HNSW Persistence.
+/// </summary>
 [Trait("Category", "Phase2")]
 public sealed class HnswPersistenceTests : IClassFixture<TestDirectoryFixture>
 {
@@ -52,7 +55,10 @@ public sealed class HnswPersistenceTests : IClassFixture<TestDirectoryFixture>
         return vectors;
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Roundtrip: Preserves Adjacency scenario.
+    /// </summary>
+    [Fact(DisplayName = "Roundtrip: Preserves Adjacency")]
     public void Roundtrip_PreservesAdjacency()
     {
         var vectors = BuildRandomVectors(count: 100, dim: 16, seed: 1234);
@@ -90,7 +96,10 @@ public sealed class HnswPersistenceTests : IClassFixture<TestDirectoryFixture>
         }
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Roundtrip: Search Results Identical scenario.
+    /// </summary>
+    [Fact(DisplayName = "Roundtrip: Search Results Identical")]
     public void Roundtrip_SearchResultsIdentical()
     {
         var vectors = BuildRandomVectors(count: 200, dim: 32, seed: 7);

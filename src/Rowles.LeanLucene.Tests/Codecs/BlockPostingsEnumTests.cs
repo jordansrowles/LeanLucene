@@ -3,6 +3,9 @@ using Rowles.LeanLucene.Store;
 
 namespace Rowles.LeanLucene.Tests.Codecs;
 
+/// <summary>
+/// Contains unit tests for Block Postings Enum.
+/// </summary>
 public sealed class BlockPostingsEnumTests : IDisposable
 {
     private readonly string _tempDir;
@@ -34,7 +37,11 @@ public sealed class BlockPostingsEnumTests : IDisposable
         return (docPath, meta);
     }
 
-    [Theory]
+    /// <summary>
+    /// Verifies the Next Doc: Returns All Doc IDs scenario.
+    /// </summary>
+    /// <param name="count">The count value for the test case.</param>
+    [Theory(DisplayName = "Next Doc: Returns All Doc IDs")]
     [InlineData(1)]
     [InlineData(5)]
     [InlineData(127)]
@@ -65,7 +72,11 @@ public sealed class BlockPostingsEnumTests : IDisposable
         Assert.Equal(docIds, result.ToArray());
     }
 
-    [Theory]
+    /// <summary>
+    /// Verifies the Freq: Round Trips scenario.
+    /// </summary>
+    /// <param name="count">The count value for the test case.</param>
+    [Theory(DisplayName = "Freq: Round Trips")]
     [InlineData(1)]
     [InlineData(128)]
     [InlineData(200)]
@@ -91,7 +102,10 @@ public sealed class BlockPostingsEnumTests : IDisposable
         Assert.Equal(freqs, resultFreqs.ToArray());
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Advance: Skips To Target scenario.
+    /// </summary>
+    [Fact(DisplayName = "Advance: Skips To Target")]
     public void Advance_SkipsToTarget()
     {
         int count = 500;
@@ -121,7 +135,10 @@ public sealed class BlockPostingsEnumTests : IDisposable
         Assert.Equal(BlockPostingsEnum.NoMoreDocs, doc);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Advance: Within Current Block scenario.
+    /// </summary>
+    [Fact(DisplayName = "Advance: Within Current Block")]
     public void Advance_WithinCurrentBlock()
     {
         int count = 128; // exactly one block
@@ -150,7 +167,10 @@ public sealed class BlockPostingsEnumTests : IDisposable
         Assert.Equal(1270, doc);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Advance: Across Multiple Blocks scenario.
+    /// </summary>
+    [Fact(DisplayName = "Advance: Across Multiple Blocks")]
     public void Advance_AcrossMultipleBlocks()
     {
         int count = 10_000;
@@ -174,7 +194,10 @@ public sealed class BlockPostingsEnumTests : IDisposable
         Assert.Equal(BlockPostingsEnum.NoMoreDocs, pe.Advance(10000));
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Empty Postings: Immediately Exhausted scenario.
+    /// </summary>
+    [Fact(DisplayName = "Empty Postings: Immediately Exhausted")]
     public void EmptyPostings_ImmediatelyExhausted()
     {
         // Create a posting with 0 docs (write header only)
@@ -194,7 +217,10 @@ public sealed class BlockPostingsEnumTests : IDisposable
         Assert.True(pe.IsExhausted);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Large Scale: 100 K All Docs Returned scenario.
+    /// </summary>
+    [Fact(DisplayName = "Large Scale: 100 K All Docs Returned")]
     public void LargeScale_100K_AllDocsReturned()
     {
         int count = 100_000;
@@ -225,7 +251,10 @@ public sealed class BlockPostingsEnumTests : IDisposable
         Assert.Equal(count, resultCount);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Advance: To Exact Block Boundary scenario.
+    /// </summary>
+    [Fact(DisplayName = "Advance: To Exact Block Boundary")]
     public void Advance_ToExactBlockBoundary()
     {
         // 256 docs = exactly 2 blocks, advance to first doc of second block
@@ -249,7 +278,10 @@ public sealed class BlockPostingsEnumTests : IDisposable
         Assert.Equal(1, pe.Freq);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Singleton: Doc Freq One Round Trips scenario.
+    /// </summary>
+    [Fact(DisplayName = "Singleton: Doc Freq One Round Trips")]
     public void Singleton_DocFreqOne_RoundTrips()
     {
         var (docPath, meta) = WritePostings([42], [3]);
@@ -265,7 +297,11 @@ public sealed class BlockPostingsEnumTests : IDisposable
         Assert.Equal(BlockPostingsEnum.NoMoreDocs, pe.NextDoc());
     }
 
-    [Theory]
+    /// <summary>
+    /// Verifies the Advance: Binary Search Skip Correct At All Scales scenario.
+    /// </summary>
+    /// <param name="count">The count value for the test case.</param>
+    [Theory(DisplayName = "Advance: Binary Search Skip Correct At All Scales")]
     [InlineData(128)]    // 1 full block, no skip binary search
     [InlineData(256)]    // 2 blocks
     [InlineData(1024)]   // 8 blocks
@@ -309,7 +345,10 @@ public sealed class BlockPostingsEnumTests : IDisposable
         Assert.Equal(BlockPostingsEnum.NoMoreDocs, pe.Advance(count * 3 + 1));
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Advance: Sequential Skips Across Many Blocks scenario.
+    /// </summary>
+    [Fact(DisplayName = "Advance: Sequential Skips Across Many Blocks")]
     public void Advance_SequentialSkips_AcrossManyBlocks()
     {
         // Simulates BooleanQuery follower advancement pattern:
@@ -336,7 +375,10 @@ public sealed class BlockPostingsEnumTests : IDisposable
         }
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Mixed Frequencies: Large Values scenario.
+    /// </summary>
+    [Fact(DisplayName = "Mixed Frequencies: Large Values")]
     public void MixedFrequencies_LargeValues()
     {
         int count = 300;

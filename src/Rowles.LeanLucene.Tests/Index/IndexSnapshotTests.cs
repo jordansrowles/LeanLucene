@@ -9,6 +9,9 @@ using Rowles.LeanLucene.Store;
 
 namespace Rowles.LeanLucene.Tests.Index;
 
+/// <summary>
+/// Contains unit tests for Index Snapshot.
+/// </summary>
 [Trait("Category", "Index")]
 [Trait("Category", "Snapshot")]
 public sealed class IndexSnapshotTests : IDisposable
@@ -23,7 +26,10 @@ public sealed class IndexSnapshotTests : IDisposable
             Directory.Delete(_dir, recursive: true);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Create Snapshot: Returns Committed Segments scenario.
+    /// </summary>
+    [Fact(DisplayName = "Create Snapshot: Returns Committed Segments")]
     public void CreateSnapshot_ReturnsCommittedSegments()
     {
         var directory = new MMapDirectory(_dir);
@@ -43,7 +49,10 @@ public sealed class IndexSnapshotTests : IDisposable
         writer.ReleaseSnapshot(snapshot);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Snapshot: Preserves Old Segments After New Commit scenario.
+    /// </summary>
+    [Fact(DisplayName = "Snapshot: Preserves Old Segments After New Commit")]
     public void Snapshot_PreservesOldSegmentsAfterNewCommit()
     {
         var directory = new MMapDirectory(_dir);
@@ -70,7 +79,10 @@ public sealed class IndexSnapshotTests : IDisposable
         writer.ReleaseSnapshot(snapshot);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Snapshot: Can Be Used To Open Searcher scenario.
+    /// </summary>
+    [Fact(DisplayName = "Snapshot: Can Be Used To Open Searcher")]
     public void Snapshot_CanBeUsedToOpenSearcher()
     {
         var directory = new MMapDirectory(_dir);
@@ -95,7 +107,10 @@ public sealed class IndexSnapshotTests : IDisposable
         writer.ReleaseSnapshot(snapshot);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Held Snapshot: Protects Commit Files And Segments During Background Merge scenario.
+    /// </summary>
+    [Fact(DisplayName = "Held Snapshot: Protects Commit Files And Segments During Background Merge")]
     public void HeldSnapshot_ProtectsCommitFilesAndSegmentsDuringBackgroundMerge()
     {
         var directory = new MMapDirectory(_dir);
@@ -122,7 +137,10 @@ public sealed class IndexSnapshotTests : IDisposable
         writer.ReleaseSnapshot(snapshot);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Held Snapshot: Searcher Still Works After Multiple Later Commits scenario.
+    /// </summary>
+    [Fact(DisplayName = "Held Snapshot: Searcher Still Works After Multiple Later Commits")]
     public void HeldSnapshot_SearcherStillWorksAfterMultipleLaterCommits()
     {
         var directory = new MMapDirectory(_dir);
@@ -161,7 +179,10 @@ public sealed class IndexSnapshotTests : IDisposable
         }
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Releasing Snapshot: Allows Old Commit Files To Be Pruned By Later Commit scenario.
+    /// </summary>
+    [Fact(DisplayName = "Releasing Snapshot: Allows Old Commit Files To Be Pruned By Later Commit")]
     public void ReleasingSnapshot_AllowsOldCommitFilesToBePrunedByLaterCommit()
     {
         var directory = new MMapDirectory(_dir);
@@ -191,7 +212,10 @@ public sealed class IndexSnapshotTests : IDisposable
         Assert.False(File.Exists(Path.Combine(_dir, "stats_1.json")));
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Releasing One Snapshot: Does Not Unprotect Segments Held By Another Snapshot scenario.
+    /// </summary>
+    [Fact(DisplayName = "Releasing One Snapshot: Does Not Unprotect Segments Held By Another Snapshot")]
     public void ReleasingOneSnapshot_DoesNotUnprotectSegmentsHeldByAnotherSnapshot()
     {
         var directory = new MMapDirectory(_dir);
@@ -225,7 +249,10 @@ public sealed class IndexSnapshotTests : IDisposable
         writer.ReleaseSnapshot(firstSnapshot);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Release Snapshot: Allows Repeated Release scenario.
+    /// </summary>
+    [Fact(DisplayName = "Release Snapshot: Allows Repeated Release")]
     public void ReleaseSnapshot_AllowsRepeatedRelease()
     {
         var directory = new MMapDirectory(_dir);

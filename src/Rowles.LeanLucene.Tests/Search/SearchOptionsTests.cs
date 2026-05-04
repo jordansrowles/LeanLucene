@@ -8,6 +8,9 @@ using Rowles.LeanLucene.Tests.Fixtures;
 
 namespace Rowles.LeanLucene.Tests.Search;
 
+/// <summary>
+/// Contains unit tests for Search Options.
+/// </summary>
 [Trait("Category", "Search")]
 public sealed class SearchOptionsTests : IClassFixture<TestDirectoryFixture>
 {
@@ -39,7 +42,10 @@ public sealed class SearchOptionsTests : IClassFixture<TestDirectoryFixture>
         return dir;
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Default: Has No Limits scenario.
+    /// </summary>
+    [Fact(DisplayName = "Default: Has No Limits")]
     public void Default_HasNoLimits()
     {
         var options = SearchOptions.Default;
@@ -50,7 +56,10 @@ public sealed class SearchOptionsTests : IClassFixture<TestDirectoryFixture>
         Assert.Equal(CancellationToken.None, options.CancellationToken);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the With Budget: Sets Max Result Bytes scenario.
+    /// </summary>
+    [Fact(DisplayName = "With Budget: Sets Max Result Bytes")]
     public void WithBudget_SetsMaxResultBytes()
     {
         var options = SearchOptions.WithBudget(1024);
@@ -58,7 +67,10 @@ public sealed class SearchOptionsTests : IClassFixture<TestDirectoryFixture>
         Assert.Equal(1024, options.MaxResultBytes);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the With Timeout: Sets Timeout scenario.
+    /// </summary>
+    [Fact(DisplayName = "With Timeout: Sets Timeout")]
     public void WithTimeout_SetsTimeout()
     {
         var timeout = TimeSpan.FromSeconds(5);
@@ -68,7 +80,10 @@ public sealed class SearchOptionsTests : IClassFixture<TestDirectoryFixture>
         Assert.Equal(timeout, options.Timeout);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the With Budget And Timeout: Sets Both scenario.
+    /// </summary>
+    [Fact(DisplayName = "With Budget And Timeout: Sets Both")]
     public void WithBudgetAndTimeout_SetsBoth()
     {
         var options = SearchOptions.WithBudgetAndTimeout(2048, TimeSpan.FromSeconds(2));
@@ -77,7 +92,10 @@ public sealed class SearchOptionsTests : IClassFixture<TestDirectoryFixture>
         Assert.Equal(TimeSpan.FromSeconds(2), options.Timeout);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Init: Allows Custom Combination scenario.
+    /// </summary>
+    [Fact(DisplayName = "Init: Allows Custom Combination")]
     public void Init_AllowsCustomCombination()
     {
         var options = new SearchOptions
@@ -92,7 +110,10 @@ public sealed class SearchOptionsTests : IClassFixture<TestDirectoryFixture>
         Assert.Equal(TimeSpan.FromSeconds(1), options.Timeout);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Default: Is Singleton scenario.
+    /// </summary>
+    [Fact(DisplayName = "Default: Is Singleton")]
     public void Default_IsSingleton()
     {
         var first = SearchOptions.Default;
@@ -101,7 +122,10 @@ public sealed class SearchOptionsTests : IClassFixture<TestDirectoryFixture>
         Assert.True(ReferenceEquals(first, second));
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Search: With Unbounded Options Matches Plain Search scenario.
+    /// </summary>
+    [Fact(DisplayName = "Search: With Unbounded Options Matches Plain Search")]
     public void Search_WithUnboundedOptions_MatchesPlainSearch()
     {
         var dir = IndexSampleDocs("opts_match", 50);
@@ -116,7 +140,10 @@ public sealed class SearchOptionsTests : IClassFixture<TestDirectoryFixture>
         Assert.Equal(plain.ScoreDocs.Length, bounded.ScoreDocs.Length);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Search: With Impossible Budget Throws scenario.
+    /// </summary>
+    [Fact(DisplayName = "Search: With Impossible Budget Throws")]
     public void Search_WithImpossibleBudget_Throws()
     {
         var dir = IndexSampleDocs("opts_budget", 5);
@@ -128,7 +155,10 @@ public sealed class SearchOptionsTests : IClassFixture<TestDirectoryFixture>
         Assert.Throws<ArgumentException>(() => searcher.Search(query, topN: 100, opts));
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Search: With Budget Large Enough For Top N Does Not Stop After Many Hits scenario.
+    /// </summary>
+    [Fact(DisplayName = "Search: With Budget Large Enough For Top N Does Not Stop After Many Hits")]
     public void Search_WithBudgetLargeEnoughForTopN_DoesNotStopAfterManyHits()
     {
         var dir = IndexSampleDocs("opts_budget_many_hits", 200);
@@ -144,7 +174,10 @@ public sealed class SearchOptionsTests : IClassFixture<TestDirectoryFixture>
         Assert.Single(result.ScoreDocs);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Search: With Cancelled Token Returns Partial scenario.
+    /// </summary>
+    [Fact(DisplayName = "Search: With Cancelled Token Returns Partial")]
     public void Search_WithCancelledToken_ReturnsPartial()
     {
         var dir = IndexSampleDocs("opts_cancel", 20);
@@ -160,7 +193,10 @@ public sealed class SearchOptionsTests : IClassFixture<TestDirectoryFixture>
         Assert.True(result.IsPartial);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Search Streaming: Yields Results scenario.
+    /// </summary>
+    [Fact(DisplayName = "Search Streaming: Yields Results")]
     public void SearchStreaming_YieldsResults()
     {
         var dir = IndexSampleDocs("opts_stream", 30);
@@ -172,7 +208,10 @@ public sealed class SearchOptionsTests : IClassFixture<TestDirectoryFixture>
         Assert.NotEmpty(emitted);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Search Streaming: With Cancelled Token Yields Nothing scenario.
+    /// </summary>
+    [Fact(DisplayName = "Search Streaming: With Cancelled Token Yields Nothing")]
     public void SearchStreaming_WithCancelledToken_YieldsNothing()
     {
         var dir = IndexSampleDocs("opts_stream_cancel", 30);
@@ -190,7 +229,10 @@ public sealed class SearchOptionsTests : IClassFixture<TestDirectoryFixture>
         Assert.Empty(cancelled);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Top Docs: Is Partial Defaults To False scenario.
+    /// </summary>
+    [Fact(DisplayName = "Top Docs: Is Partial Defaults To False")]
     public void TopDocs_IsPartial_DefaultsToFalse()
     {
         var docs = new TopDocs(0, []);
@@ -198,7 +240,10 @@ public sealed class SearchOptionsTests : IClassFixture<TestDirectoryFixture>
         Assert.False(docs.IsPartial);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Top Docs: With Is Partial True Preserves Flag scenario.
+    /// </summary>
+    [Fact(DisplayName = "Top Docs: With Is Partial True Preserves Flag")]
     public void TopDocs_WithIsPartialTrue_PreservesFlag()
     {
         var docs = new TopDocs(0, [], isPartial: true);

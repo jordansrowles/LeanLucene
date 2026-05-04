@@ -7,6 +7,9 @@ using Rowles.LeanLucene.Tests.Fixtures;
 
 namespace Rowles.LeanLucene.Tests.Index;
 
+/// <summary>
+/// Contains unit tests for Write Lock.
+/// </summary>
 [Trait("Category", "Index")]
 [Trait("Category", "WriteLock")]
 public sealed class WriteLockTests : IClassFixture<TestDirectoryFixture>
@@ -21,7 +24,10 @@ public sealed class WriteLockTests : IClassFixture<TestDirectoryFixture>
         return path;
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Write Lock: Acquired On Construction scenario.
+    /// </summary>
+    [Fact(DisplayName = "Write Lock: Acquired On Construction")]
     public void WriteLock_AcquiredOnConstruction()
     {
         var dir = new MMapDirectory(SubDir("lock_acquired"));
@@ -29,7 +35,10 @@ public sealed class WriteLockTests : IClassFixture<TestDirectoryFixture>
         Assert.True(File.Exists(Path.Combine(dir.DirectoryPath, "write.lock")));
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Write Lock: Released On Dispose scenario.
+    /// </summary>
+    [Fact(DisplayName = "Write Lock: Released On Dispose")]
     public void WriteLock_ReleasedOnDispose()
     {
         var dir = new MMapDirectory(SubDir("lock_released"));
@@ -41,7 +50,10 @@ public sealed class WriteLockTests : IClassFixture<TestDirectoryFixture>
         Assert.False(File.Exists(Path.Combine(dir.DirectoryPath, "write.lock")));
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Write Lock: Second Writer Same Directory Throws Write Lock Exception scenario.
+    /// </summary>
+    [Fact(DisplayName = "Write Lock: Second Writer Same Directory Throws Write Lock Exception")]
     public void WriteLock_SecondWriter_SameDirectory_ThrowsWriteLockException()
     {
         var dir = new MMapDirectory(SubDir("lock_conflict"));
@@ -51,7 +63,10 @@ public sealed class WriteLockTests : IClassFixture<TestDirectoryFixture>
             new IndexWriter(dir, new IndexWriterConfig()));
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Write Lock: Failed Second Writer Does Not Release First Writer Lock scenario.
+    /// </summary>
+    [Fact(DisplayName = "Write Lock: Failed Second Writer Does Not Release First Writer Lock")]
     public void WriteLock_FailedSecondWriter_DoesNotReleaseFirstWriterLock()
     {
         var dir = new MMapDirectory(SubDir("lock_failed_second_writer"));
@@ -67,7 +82,10 @@ public sealed class WriteLockTests : IClassFixture<TestDirectoryFixture>
         Assert.Throws<WriteLockException>(() => new IndexWriter(dir, new IndexWriterConfig()));
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Write Lock: Stale Lock File Without Handle Does Not Block Writer scenario.
+    /// </summary>
+    [Fact(DisplayName = "Write Lock: Stale Lock File Without Handle Does Not Block Writer")]
     public void WriteLock_StaleLockFileWithoutHandle_DoesNotBlockWriter()
     {
         var dir = new MMapDirectory(SubDir("lock_stale_file"));
@@ -83,7 +101,10 @@ public sealed class WriteLockTests : IClassFixture<TestDirectoryFixture>
         Assert.Equal(1, searcher.Search(new TermQuery("body", "stale"), 10).TotalHits);
     }
 
-    [Fact(Timeout = 10_000)]
+    /// <summary>
+    /// Verifies the Write Lock: Concurrent Writer Construction Allows Exactly One Writer scenario.
+    /// </summary>
+    [Fact(DisplayName = "Write Lock: Concurrent Writer Construction Allows Exactly One Writer", Timeout = 10_000)]
     public async Task WriteLock_ConcurrentWriterConstruction_AllowsExactlyOneWriter()
     {
         var dir = new MMapDirectory(SubDir("lock_concurrent_construction"));
@@ -119,7 +140,10 @@ public sealed class WriteLockTests : IClassFixture<TestDirectoryFixture>
         }
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Write Lock: After First Writer Disposed Second Writer Succeeds scenario.
+    /// </summary>
+    [Fact(DisplayName = "Write Lock: After First Writer Disposed Second Writer Succeeds")]
     public void WriteLock_AfterFirstWriterDisposed_SecondWriterSucceeds()
     {
         var dir = new MMapDirectory(SubDir("lock_reacquire"));

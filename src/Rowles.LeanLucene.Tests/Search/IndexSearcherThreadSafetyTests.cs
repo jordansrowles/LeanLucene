@@ -9,6 +9,9 @@ using Rowles.LeanLucene.Store;
 
 namespace Rowles.LeanLucene.Tests.Search;
 
+/// <summary>
+/// Contains unit tests for Index Searcher Thread Safety.
+/// </summary>
 [Trait("Category", "ThreadSafety")]
 public sealed class IndexSearcherThreadSafetyTests : IDisposable
 {
@@ -22,7 +25,10 @@ public sealed class IndexSearcherThreadSafetyTests : IDisposable
             Directory.Delete(_dir, recursive: true);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Parallel Term Queries: Across Threads Produce Identical Results scenario.
+    /// </summary>
+    [Fact(DisplayName = "Parallel Term Queries: Across Threads Produce Identical Results")]
     public void ParallelTermQueries_AcrossThreads_ProduceIdenticalResults()
     {
         const int docCount = 200;
@@ -77,7 +83,10 @@ public sealed class IndexSearcherThreadSafetyTests : IDisposable
         Assert.Empty(errors);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Parallel Phrase Queries: Across Threads Produce Identical Results scenario.
+    /// </summary>
+    [Fact(DisplayName = "Parallel Phrase Queries: Across Threads Produce Identical Results")]
     public void ParallelPhraseQueries_AcrossThreads_ProduceIdenticalResults()
     {
         const int docCount = 100;

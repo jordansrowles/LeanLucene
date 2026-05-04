@@ -3,13 +3,19 @@ using Rowles.LeanLucene.Diagnostics;
 
 namespace Rowles.LeanLucene.Tests.Diagnostics;
 
+/// <summary>
+/// Contains unit tests for Meter Metrics Collector.
+/// </summary>
 public sealed class MeterMetricsCollectorTests : IDisposable
 {
     private readonly MeterMetricsCollector _collector = new();
 
     public void Dispose() => _collector.Dispose();
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Record Search Latency: Updates Snapshot scenario.
+    /// </summary>
+    [Fact(DisplayName = "Record Search Latency: Updates Snapshot")]
     public void RecordSearchLatency_UpdatesSnapshot()
     {
         _collector.RecordSearchLatency(TimeSpan.FromMilliseconds(10));
@@ -22,7 +28,10 @@ public sealed class MeterMetricsCollectorTests : IDisposable
         Assert.Equal(20.0, snap.SearchAvgMs, 1);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Record Cache Hit Miss: Updates Snapshot scenario.
+    /// </summary>
+    [Fact(DisplayName = "Record Cache Hit Miss: Updates Snapshot")]
     public void RecordCacheHitMiss_UpdatesSnapshot()
     {
         _collector.RecordCacheHit();
@@ -35,7 +44,10 @@ public sealed class MeterMetricsCollectorTests : IDisposable
         Assert.InRange(snap.CacheHitRate, 0.66, 0.68);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Record Flush: Updates Snapshot scenario.
+    /// </summary>
+    [Fact(DisplayName = "Record Flush: Updates Snapshot")]
     public void RecordFlush_UpdatesSnapshot()
     {
         _collector.RecordFlush(TimeSpan.FromMilliseconds(50));
@@ -46,7 +58,10 @@ public sealed class MeterMetricsCollectorTests : IDisposable
         Assert.Equal(70, snap.FlushTotalMs);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Record Merge: Updates Snapshot scenario.
+    /// </summary>
+    [Fact(DisplayName = "Record Merge: Updates Snapshot")]
     public void RecordMerge_UpdatesSnapshot()
     {
         _collector.RecordMerge(TimeSpan.FromMilliseconds(100), 3);
@@ -58,7 +73,10 @@ public sealed class MeterMetricsCollectorTests : IDisposable
         Assert.Equal(300, snap.MergeTotalMs);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Record Commit: Updates Snapshot scenario.
+    /// </summary>
+    [Fact(DisplayName = "Record Commit: Updates Snapshot")]
     public void RecordCommit_UpdatesSnapshot()
     {
         _collector.RecordCommit(TimeSpan.FromMilliseconds(40));
@@ -68,7 +86,10 @@ public sealed class MeterMetricsCollectorTests : IDisposable
         Assert.Equal(40, snap.CommitTotalMs);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Latency Histogram: Buckets Correctly scenario.
+    /// </summary>
+    [Fact(DisplayName = "Latency Histogram: Buckets Correctly")]
     public void LatencyHistogram_BucketsCorrectly()
     {
         _collector.RecordSearchLatency(TimeSpan.FromMilliseconds(0.5));  // bucket 0 (<1ms)
@@ -87,7 +108,10 @@ public sealed class MeterMetricsCollectorTests : IDisposable
         Assert.Equal(1, snap.LatencyHistogram[7]);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Meter Listener: Receives Search Duration Measurement scenario.
+    /// </summary>
+    [Fact(DisplayName = "Meter Listener: Receives Search Duration Measurement")]
     public void MeterListener_ReceivesSearchDurationMeasurement()
     {
         var measurements = new List<double>();
@@ -112,7 +136,10 @@ public sealed class MeterMetricsCollectorTests : IDisposable
         Assert.Contains(75.0, measurements);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Meter Listener: Receives Counter Increments scenario.
+    /// </summary>
+    [Fact(DisplayName = "Meter Listener: Receives Counter Increments")]
     public void MeterListener_ReceivesCounterIncrements()
     {
         long hitTotal = 0;
@@ -134,7 +161,10 @@ public sealed class MeterMetricsCollectorTests : IDisposable
         Assert.Equal(3, hitTotal);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Dispose: Does Not Throw scenario.
+    /// </summary>
+    [Fact(DisplayName = "Dispose: Does Not Throw")]
     public void Dispose_DoesNotThrow()
     {
         var c = new MeterMetricsCollector();
@@ -142,7 +172,10 @@ public sealed class MeterMetricsCollectorTests : IDisposable
         Assert.Null(ex);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Dispose: Is Idempotent scenario.
+    /// </summary>
+    [Fact(DisplayName = "Dispose: Is Idempotent")]
     public void Dispose_IsIdempotent()
     {
         var c = new MeterMetricsCollector();

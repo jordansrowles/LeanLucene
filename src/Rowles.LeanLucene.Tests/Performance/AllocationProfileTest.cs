@@ -13,6 +13,9 @@ using Rowles.LeanLucene.Store;
 
 namespace Rowles.LeanLucene.Tests.Performance;
 
+/// <summary>
+/// Contains unit tests for Allocation Profile.
+/// </summary>
 [Trait("Category", "Performance")]
 public class AllocationProfileTest : IDisposable
 {
@@ -47,7 +50,10 @@ public class AllocationProfileTest : IDisposable
         if (Directory.Exists(_path)) Directory.Delete(_path, true);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Term Query: Allocation Per Query Under 5 KB scenario.
+    /// </summary>
+    [Fact(DisplayName = "Term Query: Allocation Per Query Under 5 KB")]
     public void TermQuery_AllocationPerQuery_Under5KB()
     {
         for (int w = 0; w < 50; w++) _searcher.Search(new TermQuery("body", "search"), 25);
@@ -66,7 +72,10 @@ public class AllocationProfileTest : IDisposable
         Assert.True(perQuery < 5120, $"TermQuery allocates {perQuery} B/query (expected < 5120)");
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Boolean Query: Allocation Per Query Under 20 KB scenario.
+    /// </summary>
+    [Fact(DisplayName = "Boolean Query: Allocation Per Query Under 20 KB")]
     public void BooleanQuery_AllocationPerQuery_Under20KB()
     {
         var warmBq = new BooleanQuery();
@@ -94,7 +103,10 @@ public class AllocationProfileTest : IDisposable
         Assert.True(perQuery < 20480, $"BooleanQuery allocates {perQuery} B/query (expected < 20480)");
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Phrase Query: Allocation Per Query Under 20 KB scenario.
+    /// </summary>
+    [Fact(DisplayName = "Phrase Query: Allocation Per Query Under 20 KB")]
     public void PhraseQuery_AllocationPerQuery_Under20KB()
     {
         for (int w = 0; w < 50; w++) _searcher.Search(new PhraseQuery("body", "dotnet", "segment"), 25);
@@ -113,7 +125,10 @@ public class AllocationProfileTest : IDisposable
         Assert.True(perQuery < 20480, $"PhraseQuery allocates {perQuery} B/query (expected < 20480)");
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Wildcard Query: Allocation Per Query Under 100 KB scenario.
+    /// </summary>
+    [Fact(DisplayName = "Wildcard Query: Allocation Per Query Under 100 KB")]
     public void WildcardQuery_AllocationPerQuery_Under100KB()
     {
         for (int w = 0; w < 50; w++) _searcher.Search(new WildcardQuery("body", "search*"), 25);
@@ -132,7 +147,10 @@ public class AllocationProfileTest : IDisposable
         Assert.True(perQuery < 102400, $"WildcardQuery allocates {perQuery} B/query (expected < 100KB)");
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Fuzzy Query: Allocation Per Query Under 100 KB scenario.
+    /// </summary>
+    [Fact(DisplayName = "Fuzzy Query: Allocation Per Query Under 100 KB")]
     public void FuzzyQuery_AllocationPerQuery_Under100KB()
     {
         for (int w = 0; w < 50; w++) _searcher.Search(new FuzzyQuery("body", "serch"), 25);
@@ -151,7 +169,10 @@ public class AllocationProfileTest : IDisposable
         Assert.True(perQuery < 102400, $"FuzzyQuery allocates {perQuery} B/query (expected < 100KB)");
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Indexing 10 K: Allocation Under 50 MB scenario.
+    /// </summary>
+    [Fact(DisplayName = "Indexing 10 K: Allocation Under 50 MB")]
     public void Indexing10K_AllocationUnder50MB()
     {
         var testPath = Path.Combine(Path.GetTempPath(), $"leanlucene-idx-alloc-{Guid.NewGuid():N}");

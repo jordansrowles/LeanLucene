@@ -14,6 +14,9 @@ using Xunit.Abstractions;
 
 namespace Rowles.LeanLucene.Tests.Codecs;
 
+/// <summary>
+/// Contains unit tests for Codecs.
+/// </summary>
 [Trait("Category", "Codecs")]
 public sealed class CodecsTests : IClassFixture<TestDirectoryFixture>
 {
@@ -26,7 +29,10 @@ public sealed class CodecsTests : IClassFixture<TestDirectoryFixture>
         _output = output;
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Dic File: Round-trip All Terms Recoverable scenario.
+    /// </summary>
+    [Fact(DisplayName = "Dic File: Round-trip All Terms Recoverable")]
     public void DicFile_RoundTrip_AllTermsRecoverable()
     {
         var filePath = System.IO.Path.Combine(_fixture.Path, "roundtrip");
@@ -53,7 +59,10 @@ public sealed class CodecsTests : IClassFixture<TestDirectoryFixture>
         }
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Dic File: Skip Index Bounds Cold Read Latency scenario.
+    /// </summary>
+    [Fact(DisplayName = "Dic File: Skip Index Bounds Cold Read Latency")]
     [Trait("Category", "Advanced")]
     public void DicFile_SkipIndex_BoundsColdReadLatency()
     {
@@ -74,7 +83,10 @@ public sealed class CodecsTests : IClassFixture<TestDirectoryFixture>
         Assert.True(reader.TryGetPostingsOffset(target, out _));
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Pos File: Delta Encoding Ids Restored Correctly scenario.
+    /// </summary>
+    [Fact(DisplayName = "Pos File: Delta Encoding Ids Restored Correctly")]
     public void PosFile_DeltaEncoding_IdsRestoredCorrectly()
     {
         var filePath = System.IO.Path.Combine(_fixture.Path, "posfile_delta");
@@ -86,7 +98,10 @@ public sealed class CodecsTests : IClassFixture<TestDirectoryFixture>
         Assert.Equal(docIds, readIds);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Pos File: Delta Decoding Overflow Throws Invalid Data Exception scenario.
+    /// </summary>
+    [Fact(DisplayName = "Pos File: Delta Decoding Overflow Throws Invalid Data Exception")]
     public void PosFile_DeltaDecodingOverflow_ThrowsInvalidDataException()
     {
         var filePath = System.IO.Path.Combine(_fixture.Path, "posfile_overflow.pos");
@@ -103,7 +118,10 @@ public sealed class CodecsTests : IClassFixture<TestDirectoryFixture>
         Assert.Throws<InvalidDataException>(() => PostingsReader.ReadDocIds(filePath, "overflow"));
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Pos File: Simple 8 b Compression Output Smaller Than Raw scenario.
+    /// </summary>
+    [Fact(DisplayName = "Pos File: Simple 8 b Compression Output Smaller Than Raw")]
     [Trait("Category", "Advanced")]
     public void PosFile_Simple8bCompression_OutputSmallerThanRaw()
     {
@@ -118,7 +136,10 @@ public sealed class CodecsTests : IClassFixture<TestDirectoryFixture>
             $"Compressed {compressedSize} bytes should be less than raw {rawSize} bytes");
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Nrm File: Round-trip Quantised Values Restored scenario.
+    /// </summary>
+    [Fact(DisplayName = "Nrm File: Round-trip Quantised Values Restored")]
     public void NrmFile_RoundTrip_QuantisedValuesRestored()
     {
         var filePath = System.IO.Path.Combine(_fixture.Path, "nrmfile");
@@ -144,7 +165,10 @@ public sealed class CodecsTests : IClassFixture<TestDirectoryFixture>
         }
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Fdt File: Stored Fields Exact Retrieval By Doc ID scenario.
+    /// </summary>
+    [Fact(DisplayName = "Fdt File: Stored Fields Exact Retrieval By Doc ID")]
     public void FdtFile_StoredFields_ExactRetrievalByDocId()
     {
         var filePath = System.IO.Path.Combine(_fixture.Path, "fdtfile");
@@ -165,7 +189,10 @@ public sealed class CodecsTests : IClassFixture<TestDirectoryFixture>
         }
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Del File: Serialise Deserialise Bitset Preserved scenario.
+    /// </summary>
+    [Fact(DisplayName = "Del File: Serialise Deserialise Bitset Preserved")]
     public void DelFile_Serialise_Deserialise_BitsetPreserved()
     {
         var filePath = System.IO.Path.Combine(_fixture.Path, "delfile.del");
@@ -186,7 +213,10 @@ public sealed class CodecsTests : IClassFixture<TestDirectoryFixture>
             Assert.Equal(liveDocs.IsLive(i), restored.IsLive(i));
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Vec File: Round-trip Float Vectors Restored Exactly scenario.
+    /// </summary>
+    [Fact(DisplayName = "Vec File: Round-trip Float Vectors Restored Exactly")]
     [Trait("Category", "Advanced")]
     public void VecFile_RoundTrip_FloatVectorsRestoredExactly()
     {

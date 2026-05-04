@@ -32,13 +32,19 @@ public class CommitDurabilityTests : IDisposable
         try { Directory.Delete(_dir, true); } catch { }
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Durable Commits: Defaults To True scenario.
+    /// </summary>
+    [Fact(DisplayName = "Durable Commits: Defaults To True")]
     public void DurableCommits_DefaultsToTrue()
     {
         Assert.True(new IndexWriterConfig().DurableCommits);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Durable Commit: Round-trip Preserves All Documents scenario.
+    /// </summary>
+    [Fact(DisplayName = "Durable Commit: Round-trip Preserves All Documents")]
     public void DurableCommit_RoundTrip_PreservesAllDocuments()
     {
         // Arrange — write three commits with durability ON
@@ -65,7 +71,10 @@ public class CommitDurabilityTests : IDisposable
         }
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Durable Commit: All Referenced Segment Files Present After Dispose scenario.
+    /// </summary>
+    [Fact(DisplayName = "Durable Commit: All Referenced Segment Files Present After Dispose")]
     public void DurableCommit_AllReferencedSegmentFilesPresentAfterDispose()
     {
         var config = new IndexWriterConfig { DurableCommits = true };
@@ -97,7 +106,10 @@ public class CommitDurabilityTests : IDisposable
         }
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Durable Commits Disabled: Still Works scenario.
+    /// </summary>
+    [Fact(DisplayName = "Durable Commits Disabled: Still Works")]
     public void DurableCommitsDisabled_StillWorks()
     {
         // Arrange — ensure the opt-out path remains functional

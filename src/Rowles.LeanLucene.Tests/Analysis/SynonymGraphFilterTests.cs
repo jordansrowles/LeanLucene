@@ -4,9 +4,15 @@ using Rowles.LeanLucene.Analysis.Filters;
 
 namespace Rowles.LeanLucene.Tests.Analysis;
 
+/// <summary>
+/// Contains unit tests for Synonym Graph Filter.
+/// </summary>
 public class SynonymGraphFilterTests
 {
-    [Fact]
+    /// <summary>
+    /// Verifies the Single Token Synonym: Expands Correctly scenario.
+    /// </summary>
+    [Fact(DisplayName = "Single Token Synonym: Expands Correctly")]
     public void SingleTokenSynonym_ExpandsCorrectly()
     {
         var map = new SynonymMap();
@@ -32,7 +38,10 @@ public class SynonymGraphFilterTests
         Assert.Equal(5, tokens[1].EndOffset);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Multi Token Synonym: Longest Match scenario.
+    /// </summary>
+    [Fact(DisplayName = "Multi Token Synonym: Longest Match")]
     public void MultiTokenSynonym_LongestMatch()
     {
         var map = new SynonymMap();
@@ -57,7 +66,10 @@ public class SynonymGraphFilterTests
         Assert.Contains("park", texts);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the No Match: Passes Through scenario.
+    /// </summary>
+    [Fact(DisplayName = "No Match: Passes Through")]
     public void NoMatch_PassesThrough()
     {
         var map = new SynonymMap();
@@ -77,7 +89,10 @@ public class SynonymGraphFilterTests
         Assert.Equal("fox", tokens[1].Text);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Empty Token List: No Error scenario.
+    /// </summary>
+    [Fact(DisplayName = "Empty Token List: No Error")]
     public void EmptyTokenList_NoError()
     {
         var map = new SynonymMap();
@@ -91,7 +106,10 @@ public class SynonymGraphFilterTests
         Assert.Empty(tokens);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Case Insensitive: Matches Lowercase scenario.
+    /// </summary>
+    [Fact(DisplayName = "Case Insensitive: Matches Lowercase")]
     public void CaseInsensitive_MatchesLowercase()
     {
         var map = new SynonymMap();
@@ -110,7 +128,10 @@ public class SynonymGraphFilterTests
         Assert.Equal("fast", tokens[1].Text);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Multiple Synonyms In Sequence scenario.
+    /// </summary>
+    [Fact(DisplayName = "Multiple Synonyms In Sequence")]
     public void MultipleSynonymsInSequence()
     {
         var map = new SynonymMap();
@@ -131,7 +152,10 @@ public class SynonymGraphFilterTests
         Assert.Contains("feline", texts);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Synonym Map: Trie Structure Partial Match Not Expanded scenario.
+    /// </summary>
+    [Fact(DisplayName = "Synonym Map: Trie Structure Partial Match Not Expanded")]
     public void SynonymMap_TrieStructure_PartialMatchNotExpanded()
     {
         var map = new SynonymMap();
@@ -152,7 +176,10 @@ public class SynonymGraphFilterTests
         Assert.Equal("cold", tokens[1].Text);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Original Tokens Preserved: With Synonyms scenario.
+    /// </summary>
+    [Fact(DisplayName = "Original Tokens Preserved: With Synonyms")]
     public void OriginalTokensPreserved_WithSynonyms()
     {
         var map = new SynonymMap();

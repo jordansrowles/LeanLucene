@@ -5,6 +5,9 @@ using Rowles.LeanLucene.Store;
 
 namespace Rowles.LeanLucene.Tests.Codecs;
 
+/// <summary>
+/// Contains unit tests for Field Length.
+/// </summary>
 public class FieldLengthTests : IDisposable
 {
     private readonly string _dir;
@@ -21,7 +24,10 @@ public class FieldLengthTests : IDisposable
         catch { /* mmap handles may linger on Windows */ }
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Round-trip: Single Field Exact Counts scenario.
+    /// </summary>
+    [Fact(DisplayName = "Round-trip: Single Field Exact Counts")]
     public void RoundTrip_SingleField_ExactCounts()
     {
         var path = Path.Combine(_dir, "test.fln");
@@ -38,7 +44,10 @@ public class FieldLengthTests : IDisposable
         Assert.Equal(data["body"], loaded["body"]);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Round-trip: Multiple Fields scenario.
+    /// </summary>
+    [Fact(DisplayName = "Round-trip: Multiple Fields")]
     public void RoundTrip_MultipleFields()
     {
         var path = Path.Combine(_dir, "multi.fln");
@@ -57,14 +66,20 @@ public class FieldLengthTests : IDisposable
         Assert.Equal(data["body"], loaded["body"]);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Try Read: Missing File Returns Null scenario.
+    /// </summary>
+    [Fact(DisplayName = "Try Read: Missing File Returns Null")]
     public void TryRead_MissingFile_ReturnsNull()
     {
         var result = FieldLengthReader.TryRead(Path.Combine(_dir, "nonexistent.fln"));
         Assert.Null(result);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Clamp To Ushort Max scenario.
+    /// </summary>
+    [Fact(DisplayName = "Clamp To Ushort Max")]
     public void ClampToUshortMax()
     {
         var path = Path.Combine(_dir, "clamp.fln");
@@ -81,7 +96,10 @@ public class FieldLengthTests : IDisposable
         Assert.Equal(65535, loaded["field"][1]);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Index Writer: Writes Fln File scenario.
+    /// </summary>
+    [Fact(DisplayName = "Index Writer: Writes Fln File")]
     public void IndexWriter_Writes_FlnFile()
     {
         using var writer = new IndexWriter(new MMapDirectory(_dir), new IndexWriterConfig());
@@ -95,7 +113,10 @@ public class FieldLengthTests : IDisposable
         Assert.NotEmpty(flnFiles);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Segment Reader: Uses Exact Lengths When Fln Exists scenario.
+    /// </summary>
+    [Fact(DisplayName = "Segment Reader: Uses Exact Lengths When Fln Exists")]
     public void SegmentReader_UsesExactLengths_WhenFlnExists()
     {
         using var writer = new IndexWriter(new MMapDirectory(_dir), new IndexWriterConfig());
@@ -120,7 +141,10 @@ public class FieldLengthTests : IDisposable
         Assert.True(results.TotalHits >= 1);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Backward Compat: No Fln File Falls Back To Norms scenario.
+    /// </summary>
+    [Fact(DisplayName = "Backward Compat: No Fln File Falls Back To Norms")]
     public void BackwardCompat_NoFlnFile_FallsBackToNorms()
     {
         // Index, then delete .fln files to simulate old index format
@@ -141,7 +165,10 @@ public class FieldLengthTests : IDisposable
         Assert.True(results.TotalHits >= 1);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Exact Lengths: More Accurate Than Quantised Norms scenario.
+    /// </summary>
+    [Fact(DisplayName = "Exact Lengths: More Accurate Than Quantised Norms")]
     public void ExactLengths_MoreAccurate_ThanQuantisedNorms()
     {
         // Write a doc where norms quantisation would lose precision

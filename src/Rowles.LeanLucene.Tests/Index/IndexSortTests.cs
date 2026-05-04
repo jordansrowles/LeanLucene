@@ -9,13 +9,19 @@ using Rowles.LeanLucene.Tests.Fixtures;
 
 namespace Rowles.LeanLucene.Tests.Index;
 
+/// <summary>
+/// Contains unit tests for Index Sort.
+/// </summary>
 public sealed class IndexSortTests : IClassFixture<TestDirectoryFixture>
 {
     private readonly string _path;
 
     public IndexSortTests(TestDirectoryFixture fixture) => _path = fixture.Path;
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Numeric Sort: Documents Returned In Sorted Order scenario.
+    /// </summary>
+    [Fact(DisplayName = "Numeric Sort: Documents Returned In Sorted Order")]
     public void NumericSort_DocumentsReturnedInSortedOrder()
     {
         var dir = Path.Combine(_path, nameof(NumericSort_DocumentsReturnedInSortedOrder));
@@ -44,7 +50,10 @@ public sealed class IndexSortTests : IClassFixture<TestDirectoryFixture>
         Assert.Equal([10.0, 20.0, 30.0], prices);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the String Sort: Documents Returned In Sorted Order scenario.
+    /// </summary>
+    [Fact(DisplayName = "String Sort: Documents Returned In Sorted Order")]
     public void StringSort_DocumentsReturnedInSortedOrder()
     {
         var dir = Path.Combine(_path, nameof(StringSort_DocumentsReturnedInSortedOrder));
@@ -74,7 +83,10 @@ public sealed class IndexSortTests : IClassFixture<TestDirectoryFixture>
         Assert.Equal(["fruit", "fruit", "nut", "nut"], categories);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Descending Sort: Documents Returned In Reverse Order scenario.
+    /// </summary>
+    [Fact(DisplayName = "Descending Sort: Documents Returned In Reverse Order")]
     public void DescendingSort_DocumentsReturnedInReverseOrder()
     {
         var dir = Path.Combine(_path, nameof(DescendingSort_DocumentsReturnedInReverseOrder));
@@ -103,7 +115,10 @@ public sealed class IndexSortTests : IClassFixture<TestDirectoryFixture>
         Assert.Equal([50.0, 25.0, 10.0], prices);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Index Sort: Segment Info Persists Sort Metadata scenario.
+    /// </summary>
+    [Fact(DisplayName = "Index Sort: Segment Info Persists Sort Metadata")]
     public void IndexSort_SegmentInfoPersistsSortMetadata()
     {
         var dir = Path.Combine(_path, nameof(IndexSort_SegmentInfoPersistsSortMetadata));
@@ -129,7 +144,10 @@ public sealed class IndexSortTests : IClassFixture<TestDirectoryFixture>
         Assert.Equal("Numeric:price:False", segInfo.IndexSortFields[0]);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Index Sort: Early Termination Matches Sort Order scenario.
+    /// </summary>
+    [Fact(DisplayName = "Index Sort: Early Termination Matches Sort Order")]
     public void IndexSort_EarlyTermination_MatchesSortOrder()
     {
         var dir = Path.Combine(_path, nameof(IndexSort_EarlyTermination_MatchesSortOrder));
@@ -156,7 +174,10 @@ public sealed class IndexSortTests : IClassFixture<TestDirectoryFixture>
         Assert.Equal([1.0, 2.0, 3.0, 4.0, 5.0], prices);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Index Sort: Text Search Still Works scenario.
+    /// </summary>
+    [Fact(DisplayName = "Index Sort: Text Search Still Works")]
     public void IndexSort_TextSearchStillWorks()
     {
         var dir = Path.Combine(_path, nameof(IndexSort_TextSearchStillWorks));
@@ -181,13 +202,19 @@ public sealed class IndexSortTests : IClassFixture<TestDirectoryFixture>
         Assert.Equal(2, results.TotalHits);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Index Sort: Constructor Rejects Score Type scenario.
+    /// </summary>
+    [Fact(DisplayName = "Index Sort: Constructor Rejects Score Type")]
     public void IndexSort_Constructor_RejectsScoreType()
     {
         Assert.Throws<ArgumentException>(() => new IndexSort(SortField.Score));
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Index Sort: Constructor Rejects Empty scenario.
+    /// </summary>
+    [Fact(DisplayName = "Index Sort: Constructor Rejects Empty")]
     public void IndexSort_Constructor_RejectsEmpty()
     {
         Assert.Throws<ArgumentException>(() => new IndexSort());

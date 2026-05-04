@@ -9,13 +9,19 @@ using Rowles.LeanLucene.Tests.Fixtures;
 
 namespace Rowles.LeanLucene.Tests.Diagnostics;
 
+/// <summary>
+/// Contains unit tests for Slow Query Log.
+/// </summary>
 public sealed class SlowQueryLogTests : IClassFixture<TestDirectoryFixture>
 {
     private readonly string _path;
 
     public SlowQueryLogTests(TestDirectoryFixture fixture) => _path = fixture.Path;
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Queries Exceeding Threshold: Are Logged scenario.
+    /// </summary>
+    [Fact(DisplayName = "Queries Exceeding Threshold: Are Logged")]
     public void QueriesExceedingThreshold_AreLogged()
     {
         // Arrange
@@ -46,7 +52,10 @@ public sealed class SlowQueryLogTests : IClassFixture<TestDirectoryFixture>
         Assert.Contains("ElapsedMs", output);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Queries Below Threshold: Are Not Logged scenario.
+    /// </summary>
+    [Fact(DisplayName = "Queries Below Threshold: Are Not Logged")]
     public void QueriesBelowThreshold_AreNotLogged()
     {
         // Arrange

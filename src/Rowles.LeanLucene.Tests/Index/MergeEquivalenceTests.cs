@@ -34,7 +34,10 @@ public sealed class MergeEquivalenceTests : IClassFixture<TestDirectoryFixture>
 
     // ---- term query ----
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Term Query: Unmerged Vs Merged Same Hit Count scenario.
+    /// </summary>
+    [Fact(DisplayName = "Term Query: Unmerged Vs Merged Same Hit Count")]
     public void TermQuery_UnmergedVsMerged_SameHitCount()
     {
         const int docCount = 24;
@@ -53,7 +56,10 @@ public sealed class MergeEquivalenceTests : IClassFixture<TestDirectoryFixture>
 
     // ---- numeric range query ----
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Numeric Range Query: Unmerged Vs Merged Same Hit Count scenario.
+    /// </summary>
+    [Fact(DisplayName = "Numeric Range Query: Unmerged Vs Merged Same Hit Count")]
     public void NumericRangeQuery_UnmergedVsMerged_SameHitCount()
     {
         const int docCount = 30;
@@ -67,7 +73,10 @@ public sealed class MergeEquivalenceTests : IClassFixture<TestDirectoryFixture>
 
     // ---- boolean query ----
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Boolean And Query: Unmerged Vs Merged Same Hit Count scenario.
+    /// </summary>
+    [Fact(DisplayName = "Boolean And Query: Unmerged Vs Merged Same Hit Count")]
     public void BooleanAndQuery_UnmergedVsMerged_SameHitCount()
     {
         const int docCount = 20;
@@ -84,7 +93,10 @@ public sealed class MergeEquivalenceTests : IClassFixture<TestDirectoryFixture>
 
     // ---- facet correctness after merge ----
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Facets: Unmerged Vs Merged Same Bucket Counts scenario.
+    /// </summary>
+    [Fact(DisplayName = "Facets: Unmerged Vs Merged Same Bucket Counts")]
     public void Facets_UnmergedVsMerged_SameBucketCounts()
     {
         const int docCount = 18;
@@ -101,7 +113,10 @@ public sealed class MergeEquivalenceTests : IClassFixture<TestDirectoryFixture>
 
     // ---- aggregation correctness after merge ----
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Aggregations: Unmerged Vs Merged Same Sum And Count scenario.
+    /// </summary>
+    [Fact(DisplayName = "Aggregations: Unmerged Vs Merged Same Sum And Count")]
     public void Aggregations_UnmergedVsMerged_SameSumAndCount()
     {
         const int docCount = 20;
@@ -116,7 +131,10 @@ public sealed class MergeEquivalenceTests : IClassFixture<TestDirectoryFixture>
 
     // ---- collapse after merge ----
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Collapse: Unmerged Vs Merged Same Group Count scenario.
+    /// </summary>
+    [Fact(DisplayName = "Collapse: Unmerged Vs Merged Same Group Count")]
     public void Collapse_UnmergedVsMerged_SameGroupCount()
     {
         const int docCount = 15;
@@ -130,7 +148,10 @@ public sealed class MergeEquivalenceTests : IClassFixture<TestDirectoryFixture>
 
     // ---- deletions survive merge ----
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Deleted Documents: Are Still Excluded After Merge scenario.
+    /// </summary>
+    [Fact(DisplayName = "Deleted Documents: Are Still Excluded After Merge")]
     public void DeletedDocuments_AreStillExcludedAfterMerge()
     {
         var dir = SubDir("del-merge");

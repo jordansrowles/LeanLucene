@@ -31,7 +31,10 @@ public sealed class FSTBuilderTests
 
     // ── Tests ────────────────────────────────────────────────────────────────
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Build: Empty FST Produces Valid Output scenario.
+    /// </summary>
+    [Fact(DisplayName = "Build: Empty FST Produces Valid Output")]
     public void Build_EmptyFST_ProducesValidOutput()
     {
         var builder = new FSTBuilder();
@@ -48,7 +51,10 @@ public sealed class FSTBuilderTests
         Assert.Equal((byte)'1', data[3]);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Build: Single Key Round Trips scenario.
+    /// </summary>
+    [Fact(DisplayName = "Build: Single Key Round Trips")]
     public void Build_SingleKey_RoundTrips()
     {
         var builder = new FSTBuilder();
@@ -60,7 +66,10 @@ public sealed class FSTBuilderTests
         Assert.Equal(1, builder.Count);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Build: Multiple Keys Count Is Correct scenario.
+    /// </summary>
+    [Fact(DisplayName = "Build: Multiple Keys Count Is Correct")]
     public void Build_MultipleKeys_CountIsCorrect()
     {
         var builder = new FSTBuilder();
@@ -76,7 +85,10 @@ public sealed class FSTBuilderTests
         Assert.NotNull(data);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Build: Unsorted Keys Throws scenario.
+    /// </summary>
+    [Fact(DisplayName = "Build: Unsorted Keys Throws")]
     public void Build_UnsortedKeys_Throws()
     {
         var builder = new FSTBuilder();
@@ -86,7 +98,10 @@ public sealed class FSTBuilderTests
         Assert.Contains("sorted order", ex.Message, StringComparison.OrdinalIgnoreCase);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Build: Duplicate Keys Throws scenario.
+    /// </summary>
+    [Fact(DisplayName = "Build: Duplicate Keys Throws")]
     public void Build_DuplicateKeys_Throws()
     {
         var builder = new FSTBuilder();
@@ -96,7 +111,10 @@ public sealed class FSTBuilderTests
         Assert.Contains("Duplicate", ex.Message, StringComparison.OrdinalIgnoreCase);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Build: Output Distribution No Data Loss scenario.
+    /// </summary>
+    [Fact(DisplayName = "Build: Output Distribution No Data Loss")]
     public void Build_OutputDistribution_NoDataLoss()
     {
         // Two keys sharing prefix "ab" with different outputs.
@@ -112,7 +130,10 @@ public sealed class FSTBuilderTests
         Assert.True(data.Length > 4);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Build: Suffix Sharing Compresses Output scenario.
+    /// </summary>
+    [Fact(DisplayName = "Build: Suffix Sharing Compresses Output")]
     public void Build_SuffixSharing_CompressesOutput()
     {
         // Keys with shared suffixes should produce a smaller FST than
@@ -139,7 +160,10 @@ public sealed class FSTBuilderTests
         Assert.Equal(4, builder.Count);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Build: Large Scale 10 K Terms scenario.
+    /// </summary>
+    [Fact(DisplayName = "Build: Large Scale 10 K Terms")]
     public void Build_LargeScale_10KTerms()
     {
         // Generate 10K sorted random-ish keys
@@ -168,7 +192,10 @@ public sealed class FSTBuilderTests
             $"FST ({data.Length}B) should compress better than raw keys ({rawKeyBytes}B) due to prefix/suffix sharing.");
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Build: Single Byte Keys scenario.
+    /// </summary>
+    [Fact(DisplayName = "Build: Single Byte Keys")]
     public void Build_SingleByteKeys()
     {
         var builder = new FSTBuilder();
@@ -182,7 +209,10 @@ public sealed class FSTBuilderTests
         Assert.True(data.Length > 4);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Build: Empty Key scenario.
+    /// </summary>
+    [Fact(DisplayName = "Build: Empty Key")]
     public void Build_EmptyKey()
     {
         // Empty byte sequence is a valid key (represents the empty string term)
@@ -194,7 +224,10 @@ public sealed class FSTBuilderTests
         Assert.NotNull(data);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Build: Long Keys scenario.
+    /// </summary>
+    [Fact(DisplayName = "Build: Long Keys")]
     public void Build_LongKeys()
     {
         // Keys longer than 256 bytes
@@ -211,7 +244,10 @@ public sealed class FSTBuilderTests
         Assert.True(data.Length > 4);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Build: Binary Keys scenario.
+    /// </summary>
+    [Fact(DisplayName = "Build: Binary Keys")]
     public void Build_BinaryKeys()
     {
         // Keys containing 0x00 and 0xFF bytes
@@ -230,7 +266,10 @@ public sealed class FSTBuilderTests
 
     // ── Additional edge-case tests ──────────────────────────────────────────
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Build: Cannot Add After Finish scenario.
+    /// </summary>
+    [Fact(DisplayName = "Build: Cannot Add After Finish")]
     public void Build_CannotAddAfterFinish()
     {
         var builder = new FSTBuilder();
@@ -241,7 +280,10 @@ public sealed class FSTBuilderTests
             builder.Add(Utf8("b"), 2L));
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Build: Cannot Finish Twice scenario.
+    /// </summary>
+    [Fact(DisplayName = "Build: Cannot Finish Twice")]
     public void Build_CannotFinishTwice()
     {
         var builder = new FSTBuilder();
@@ -250,7 +292,10 @@ public sealed class FSTBuilderTests
         Assert.Throws<InvalidOperationException>(() => builder.Finish());
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Build: Shared Prefixes Compresses Output scenario.
+    /// </summary>
+    [Fact(DisplayName = "Build: Shared Prefixes Compresses Output")]
     public void Build_SharedPrefixes_CompressesOutput()
     {
         // Many keys sharing the prefix "prefix_" should benefit from prefix sharing
@@ -268,7 +313,10 @@ public sealed class FSTBuilderTests
             $"FST ({data.Length}B) should be smaller than raw keys ({rawSize}B) with prefix sharing.");
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Build: Zero Outputs Succeeds scenario.
+    /// </summary>
+    [Fact(DisplayName = "Build: Zero Outputs Succeeds")]
     public void Build_ZeroOutputs_Succeeds()
     {
         // All outputs are zero — should still build correctly
@@ -282,7 +330,10 @@ public sealed class FSTBuilderTests
         Assert.NotNull(data);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Build: Large Output Values Succeeds scenario.
+    /// </summary>
+    [Fact(DisplayName = "Build: Large Output Values Succeeds")]
     public void Build_LargeOutputValues_Succeeds()
     {
         // Outputs that require full 10-byte VarInt encoding
@@ -295,7 +346,10 @@ public sealed class FSTBuilderTests
         Assert.NotNull(data);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Build: Header Contains Magic scenario.
+    /// </summary>
+    [Fact(DisplayName = "Build: Header Contains Magic")]
     public void Build_HeaderContainsMagic()
     {
         var (data, _) = BuildFst(("hello", 1L));
@@ -304,7 +358,10 @@ public sealed class FSTBuilderTests
         Assert.Equal("FST1", Encoding.ASCII.GetString(data, 0, 4));
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Build: Monotonically Increasing Outputs Succeeds scenario.
+    /// </summary>
+    [Fact(DisplayName = "Build: Monotonically Increasing Outputs Succeeds")]
     public void Build_MonotonicallyIncreasingOutputs_Succeeds()
     {
         // Simulates real postings offsets — strictly increasing
@@ -324,7 +381,10 @@ public sealed class FSTBuilderTests
         Assert.NotNull(data);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Build: VarInt Round Trips scenario.
+    /// </summary>
+    [Fact(DisplayName = "Build: VarInt Round Trips")]
     public void Build_VarInt_RoundTrips()
     {
         // Directly test VarInt encoding/decoding for critical values
@@ -347,7 +407,10 @@ public sealed class FSTBuilderTests
         }
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Build: Small Initial Capacity Grows Correctly scenario.
+    /// </summary>
+    [Fact(DisplayName = "Build: Small Initial Capacity Grows Correctly")]
     public void Build_SmallInitialCapacity_GrowsCorrectly()
     {
         // Use a tiny initial capacity to exercise buffer growth

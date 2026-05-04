@@ -6,9 +6,15 @@ using Xunit;
 
 namespace Rowles.LeanLucene.Tests.Analysis;
 
+/// <summary>
+/// Contains unit tests for Language Analyser.
+/// </summary>
 public sealed class LanguageAnalyserTests
 {
-    [Fact]
+    /// <summary>
+    /// Verifies the Factory Create: English Stems And Removes Stop Words scenario.
+    /// </summary>
+    [Fact(DisplayName = "Factory Create: English Stems And Removes Stop Words")]
     public void FactoryCreate_English_StemsAndRemovesStopWords()
     {
         var analyser = AnalyserFactory.Create("en");
@@ -22,7 +28,10 @@ public sealed class LanguageAnalyserTests
         Assert.Contains("jump", texts); // "jumped" -> "jump"
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the French Analyser: Stems And Removes Stop Words scenario.
+    /// </summary>
+    [Fact(DisplayName = "French Analyser: Stems And Removes Stop Words")]
     public void FrenchAnalyser_StemsAndRemovesStopWords()
     {
         var analyser = AnalyserFactory.Create("fr");
@@ -35,7 +44,10 @@ public sealed class LanguageAnalyserTests
         Assert.True(texts.Count > 0, "Should have non-stop-word tokens");
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the German Analyser: Normalises Umlauts And Stems scenario.
+    /// </summary>
+    [Fact(DisplayName = "German Analyser: Normalises Umlauts And Stems")]
     public void GermanAnalyser_NormalisesUmlautsAndStems()
     {
         var analyser = AnalyserFactory.Create("de");
@@ -49,7 +61,10 @@ public sealed class LanguageAnalyserTests
         Assert.True(texts.Any(t => t.StartsWith("haus")), "Should normalise 'Häuser' to stem starting with 'haus'");
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Russian Analyser: Removes Stop Words And Stems scenario.
+    /// </summary>
+    [Fact(DisplayName = "Russian Analyser: Removes Stop Words And Stems")]
     public void RussianAnalyser_RemovesStopWordsAndStems()
     {
         var analyser = AnalyserFactory.Create("ru");
@@ -61,7 +76,10 @@ public sealed class LanguageAnalyserTests
         Assert.True(texts.Count > 0, "Should have non-stop-word tokens");
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Chinese Analyser: Produces Bigrams scenario.
+    /// </summary>
+    [Fact(DisplayName = "Chinese Analyser: Produces Bigrams")]
     public void ChineseAnalyser_ProducesBigrams()
     {
         var analyser = AnalyserFactory.Create("zh");
@@ -77,7 +95,10 @@ public sealed class LanguageAnalyserTests
         Assert.Equal("和国", tokens[5].Text);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Chinese Analyser: Mixed CJK And Latin scenario.
+    /// </summary>
+    [Fact(DisplayName = "Chinese Analyser: Mixed CJK And Latin")]
     public void ChineseAnalyser_MixedCJKAndLatin()
     {
         var analyser = AnalyserFactory.Create("zh");
@@ -89,13 +110,19 @@ public sealed class LanguageAnalyserTests
         Assert.Contains("world", texts);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Analyser Factory: Unsupported Language Throws scenario.
+    /// </summary>
+    [Fact(DisplayName = "Analyser Factory: Unsupported Language Throws")]
     public void AnalyserFactory_UnsupportedLanguage_Throws()
     {
         Assert.Throws<NotSupportedException>(() => AnalyserFactory.Create("xx"));
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Analyser Factory: Supported Languages Contains Expected scenario.
+    /// </summary>
+    [Fact(DisplayName = "Analyser Factory: Supported Languages Contains Expected")]
     public void AnalyserFactory_SupportedLanguages_ContainsExpected()
     {
         var supported = AnalyserFactory.SupportedLanguages;
@@ -106,7 +133,10 @@ public sealed class LanguageAnalyserTests
         Assert.Contains("zh", supported);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the CJK Bigram Tokeniser: Single Character Emits Unigram scenario.
+    /// </summary>
+    [Fact(DisplayName = "CJK Bigram Tokeniser: Single Character Emits Unigram")]
     public void CJKBigramTokeniser_SingleCharacter_EmitsUnigram()
     {
         var tokeniser = new CJKBigramTokeniser();
@@ -116,7 +146,10 @@ public sealed class LanguageAnalyserTests
         Assert.Equal("猫", tokens[0].Text);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Stop Words: For Language Returns Correct Lists scenario.
+    /// </summary>
+    [Fact(DisplayName = "Stop Words: For Language Returns Correct Lists")]
     public void StopWords_ForLanguage_ReturnsCorrectLists()
     {
         Assert.NotNull(StopWords.ForLanguage("en"));
@@ -127,7 +160,10 @@ public sealed class LanguageAnalyserTests
         Assert.Null(StopWords.ForLanguage("xx"));
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the English Stemmer: Known Words scenario.
+    /// </summary>
+    [Fact(DisplayName = "English Stemmer: Known Words")]
     public void EnglishStemmer_KnownWords()
     {
         var stemmer = new EnglishStemmer();
@@ -135,7 +171,10 @@ public sealed class LanguageAnalyserTests
         Assert.Equal("run", stemmer.Stem("running"));
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the German Stemmer: Known Words scenario.
+    /// </summary>
+    [Fact(DisplayName = "German Stemmer: Known Words")]
     public void GermanStemmer_KnownWords()
     {
         var stemmer = new GermanStemmer();
@@ -143,7 +182,10 @@ public sealed class LanguageAnalyserTests
         Assert.Equal("haus", stemmer.Stem("häuser"));
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the French Stemmer: Known Words scenario.
+    /// </summary>
+    [Fact(DisplayName = "French Stemmer: Known Words")]
     public void FrenchStemmer_KnownWords()
     {
         var stemmer = new FrenchStemmer();

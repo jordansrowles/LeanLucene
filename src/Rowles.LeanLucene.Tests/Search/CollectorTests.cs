@@ -5,11 +5,17 @@ using Rowles.LeanLucene.Search.Highlighting;
 
 namespace Rowles.LeanLucene.Tests.Search;
 
+/// <summary>
+/// Contains unit tests for Collector.
+/// </summary>
 [Trait("Category", "Search")]
 [Trait("Category", "Collector")]
 public class CollectorTests
 {
-    [Fact]
+    /// <summary>
+    /// Verifies the Count Collector: Tracks Hit Count scenario.
+    /// </summary>
+    [Fact(DisplayName = "Count Collector: Tracks Hit Count")]
     public void CountCollector_TracksHitCount()
     {
         // Arrange
@@ -24,7 +30,10 @@ public class CollectorTests
         Assert.Equal(3, collector.TotalHits);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Top N Collector Wrapper: Collects And Returns Sorted scenario.
+    /// </summary>
+    [Fact(DisplayName = "Top N Collector Wrapper: Collects And Returns Sorted")]
     public void TopNCollectorWrapper_CollectsAndReturnsSorted()
     {
         // Arrange
@@ -44,7 +53,10 @@ public class CollectorTests
         Assert.Equal(2.0f, topDocs.ScoreDocs[1].Score);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Count Collector: Zero Docs Returns Zero scenario.
+    /// </summary>
+    [Fact(DisplayName = "Count Collector: Zero Docs Returns Zero")]
     public void CountCollector_ZeroDocs_ReturnsZero()
     {
         var collector = new CountCollector();

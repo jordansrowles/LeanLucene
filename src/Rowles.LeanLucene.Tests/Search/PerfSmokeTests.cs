@@ -12,6 +12,9 @@ using Xunit.Abstractions;
 
 namespace Rowles.LeanLucene.Tests.Search;
 
+/// <summary>
+/// Contains unit tests for Perf Smoke.
+/// </summary>
 [Trait("Category", "Perf")]
 public sealed class PerfSmokeTests : IClassFixture<TestDirectoryFixture>
 {
@@ -31,7 +34,10 @@ public sealed class PerfSmokeTests : IClassFixture<TestDirectoryFixture>
         return path;
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Term Query: Perf Smoke Measures Latency And Allocations scenario.
+    /// </summary>
+    [Fact(DisplayName = "Term Query: Perf Smoke Measures Latency And Allocations")]
     public void TermQuery_PerfSmoke_MeasuresLatencyAndAllocations()
     {
         const int docCount = 500;

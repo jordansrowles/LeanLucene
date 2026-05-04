@@ -3,12 +3,20 @@ using Rowles.LeanLucene.Analysis.Analysers;
 
 namespace Rowles.LeanLucene.Tests.Analysis;
 
+/// <summary>
+/// Unit tests for the <see cref="AccentFoldingFilter"/> class.
+/// Verifies that accented characters are correctly folded to their ASCII equivalents.
+/// </summary>
 [Trait("Category", "Analysis")]
 public class AccentFoldingFilterTests
 {
     private readonly AccentFoldingFilter _filter = new();
 
-    [Fact]
+    /// <summary>
+    /// Tests that a list containing accented tokens is transformed so each token's text
+    /// becomes its ASCII-folding equivalent.
+    /// </summary>
+    [Fact(DisplayName = "Apply: Accented tokens are folded to their ASCII equivalents")]
     public void Apply_AccentedTokens_FoldsToAscii()
     {
         // Arrange
@@ -28,7 +36,11 @@ public class AccentFoldingFilterTests
         Assert.Equal("resume", tokens[2].Text);
     }
 
-    [Fact]
+    /// <summary>
+    /// Tests that tokens already containing only ASCII characters are left unchanged,
+    /// and the original string reference is preserved (no unnecessary new allocations).
+    /// </summary>
+    [Fact(DisplayName = "Apply: ASCII-only tokens remain unchanged and keep original reference")]
     public void Apply_AsciiTokens_UnchangedReferences()
     {
         // Arrange
@@ -42,7 +54,10 @@ public class AccentFoldingFilterTests
         Assert.Same(original, tokens[0].Text);
     }
 
-    [Fact]
+    /// <summary>
+    /// Tests that passing an empty token list does not cause any errors or modifications.
+    /// </summary>
+    [Fact(DisplayName = "Apply: Empty token list causes no error and stays empty")]
     public void Apply_EmptyList_NoError()
     {
         var tokens = new List<Token>();
@@ -50,7 +65,13 @@ public class AccentFoldingFilterTests
         Assert.Empty(tokens);
     }
 
-    [Theory]
+    /// <summary>
+    /// Verifies the static <see cref="AccentFoldingFilter.Fold"/> method
+    /// correctly transforms various diacritic‑heavy strings into their plain ASCII forms.
+    /// </summary>
+    /// <param name="input">The string with diacritics.</param>
+    /// <param name="expected">The expected ASCII–folded result.</param>
+    [Theory(DisplayName = "Fold: Various diacritics are folded correctly")]
     [InlineData("über", "uber")]
     [InlineData("señor", "senor")]
     [InlineData("Ångström", "Angstrom")]

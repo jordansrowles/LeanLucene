@@ -31,7 +31,10 @@ public sealed class PhraseQueryScaleTests : IClassFixture<TestDirectoryFixture>
 
     private string SubDir(string name) => Path.Combine(_fixture.Path, name);
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Phrase Query: 1000 Docs Returns Correct Results scenario.
+    /// </summary>
+    [Fact(DisplayName = "Phrase Query: 1000 Docs Returns Correct Results")]
     public void PhraseQuery_1000Docs_ReturnsCorrectResults()
     {
         const int docCount = 1000;
@@ -69,7 +72,10 @@ public sealed class PhraseQueryScaleTests : IClassFixture<TestDirectoryFixture>
         Assert.Equal(expectedHits, results.TotalHits);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Phrase Query: 5000 Docs Returns Correct Results scenario.
+    /// </summary>
+    [Fact(DisplayName = "Phrase Query: 5000 Docs Returns Correct Results")]
     public void PhraseQuery_5000Docs_ReturnsCorrectResults()
     {
         const int docCount = 5000;
@@ -107,7 +113,10 @@ public sealed class PhraseQueryScaleTests : IClassFixture<TestDirectoryFixture>
         Assert.Equal(expectedHits, results.TotalHits);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Phrase Query: 2 Word Phrase 1500 Docs Matches Correctly scenario.
+    /// </summary>
+    [Fact(DisplayName = "Phrase Query: 2 Word Phrase 1500 Docs Matches Correctly")]
     public void PhraseQuery_2WordPhrase_1500Docs_MatchesCorrectly()
     {
         const int docCount = 1500;
@@ -144,7 +153,10 @@ public sealed class PhraseQueryScaleTests : IClassFixture<TestDirectoryFixture>
         Assert.Equal(expectedHits, results.TotalHits);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Slop Phrase: 1000 Docs Matches Within Slop scenario.
+    /// </summary>
+    [Fact(DisplayName = "Slop Phrase: 1000 Docs Matches Within Slop")]
     public void SlopPhrase_1000Docs_MatchesWithinSlop()
     {
         const int docCount = 1000;
@@ -182,7 +194,10 @@ public sealed class PhraseQueryScaleTests : IClassFixture<TestDirectoryFixture>
         Assert.Equal(expectedHits, results.TotalHits);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Phrase Query: Multi Segment 1000 Docs Per Segment scenario.
+    /// </summary>
+    [Fact(DisplayName = "Phrase Query: Multi Segment 1000 Docs Per Segment")]
     public void PhraseQuery_MultiSegment_1000DocsPerSegment()
     {
         const int docsPerSegment = 1000;

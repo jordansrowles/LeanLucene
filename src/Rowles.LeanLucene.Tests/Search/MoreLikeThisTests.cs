@@ -5,6 +5,9 @@ using Rowles.LeanLucene.Store;
 
 namespace Rowles.LeanLucene.Tests.Search;
 
+/// <summary>
+/// Contains unit tests for More Like This.
+/// </summary>
 public class MoreLikeThisTests : IDisposable
 {
     private readonly string _dir;
@@ -49,7 +52,10 @@ public class MoreLikeThisTests : IDisposable
         writer.Commit();
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the More Like This: Returns Related Documents scenario.
+    /// </summary>
+    [Fact(DisplayName = "More Like This: Returns Related Documents")]
     public void MoreLikeThis_ReturnsRelatedDocuments()
     {
         IndexCorpus();
@@ -61,7 +67,10 @@ public class MoreLikeThisTests : IDisposable
         Assert.True(results.TotalHits > 0, "Should find at least one similar document");
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the More Like This: Excludes Source Doc When More Results scenario.
+    /// </summary>
+    [Fact(DisplayName = "More Like This: Excludes Source Doc When More Results")]
     public void MoreLikeThis_ExcludesSourceDoc_WhenMoreResults()
     {
         IndexCorpus();
@@ -73,7 +82,10 @@ public class MoreLikeThisTests : IDisposable
         Assert.True(results.TotalHits > 0);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the More Like This: Respects Max Query Terms scenario.
+    /// </summary>
+    [Fact(DisplayName = "More Like This: Respects Max Query Terms")]
     public void MoreLikeThis_RespectsMaxQueryTerms()
     {
         IndexCorpus();
@@ -88,7 +100,10 @@ public class MoreLikeThisTests : IDisposable
         Assert.True(results.TotalHits >= 0);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the More Like This: Respects Min Word Length scenario.
+    /// </summary>
+    [Fact(DisplayName = "More Like This: Respects Min Word Length")]
     public void MoreLikeThis_RespectsMinWordLength()
     {
         IndexCorpus();
@@ -101,7 +116,10 @@ public class MoreLikeThisTests : IDisposable
         Assert.Equal(0, results.TotalHits);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the More Like This: Empty Result When No Term Vectors scenario.
+    /// </summary>
+    [Fact(DisplayName = "More Like This: Empty Result When No Term Vectors")]
     public void MoreLikeThis_EmptyResult_WhenNoTermVectors()
     {
         // StoreTermVectors defaults to false — no TV files written
@@ -118,7 +136,10 @@ public class MoreLikeThisTests : IDisposable
         Assert.Equal(0, results.TotalHits);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the More Like This: With Boost By Score Produces Results scenario.
+    /// </summary>
+    [Fact(DisplayName = "More Like This: With Boost By Score Produces Results")]
     public void MoreLikeThis_WithBoostByScore_ProducesResults()
     {
         IndexCorpus();
@@ -133,7 +154,10 @@ public class MoreLikeThisTests : IDisposable
         Assert.True(results.TotalHits > 0);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the More Like This: Via Query Object Works scenario.
+    /// </summary>
+    [Fact(DisplayName = "More Like This: Via Query Object Works")]
     public void MoreLikeThis_ViaQueryObject_Works()
     {
         IndexCorpus();

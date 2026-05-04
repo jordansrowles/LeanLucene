@@ -9,13 +9,19 @@ using Rowles.LeanLucene.Tests.Fixtures;
 
 namespace Rowles.LeanLucene.Tests.Index;
 
+/// <summary>
+/// Contains unit tests for Block Document.
+/// </summary>
 public sealed class BlockDocumentTests : IClassFixture<TestDirectoryFixture>
 {
     private readonly string _path;
 
     public BlockDocumentTests(TestDirectoryFixture fixture) => _path = fixture.Path;
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Add Document Block: Writes Parent Bit Set scenario.
+    /// </summary>
+    [Fact(DisplayName = "Add Document Block: Writes Parent Bit Set")]
     public void AddDocumentBlock_WritesParentBitSet()
     {
         var dir = Path.Combine(_path, nameof(AddDocumentBlock_WritesParentBitSet));
@@ -45,7 +51,10 @@ public sealed class BlockDocumentTests : IClassFixture<TestDirectoryFixture>
         Assert.True(pbs.IsParent(2));
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Add Document Block: Children Searchable scenario.
+    /// </summary>
+    [Fact(DisplayName = "Add Document Block: Children Searchable")]
     public void AddDocumentBlock_ChildrenSearchable()
     {
         var dir = Path.Combine(_path, nameof(AddDocumentBlock_ChildrenSearchable));
@@ -68,7 +77,10 @@ public sealed class BlockDocumentTests : IClassFixture<TestDirectoryFixture>
         Assert.Equal(1, results.TotalHits);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Block Join Query: Returns Parent For Matching Child scenario.
+    /// </summary>
+    [Fact(DisplayName = "Block Join Query: Returns Parent For Matching Child")]
     public void BlockJoinQuery_ReturnsParentForMatchingChild()
     {
         var dir = Path.Combine(_path, nameof(BlockJoinQuery_ReturnsParentForMatchingChild));
@@ -109,7 +121,10 @@ public sealed class BlockDocumentTests : IClassFixture<TestDirectoryFixture>
         Assert.Contains("letters", stored["title"][0]);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Block Join Query: Multiple Blocks Correct Parent Mapping scenario.
+    /// </summary>
+    [Fact(DisplayName = "Block Join Query: Multiple Blocks Correct Parent Mapping")]
     public void BlockJoinQuery_MultipleBlocks_CorrectParentMapping()
     {
         var dir = Path.Combine(_path, nameof(BlockJoinQuery_MultipleBlocks_CorrectParentMapping));
@@ -146,7 +161,10 @@ public sealed class BlockDocumentTests : IClassFixture<TestDirectoryFixture>
         Assert.Equal(2, results.TotalHits);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Block Join Query: Parent Match Is Not Treated As Own Child scenario.
+    /// </summary>
+    [Fact(DisplayName = "Block Join Query: Parent Match Is Not Treated As Own Child")]
     public void BlockJoinQuery_ParentMatch_IsNotTreatedAsOwnChild()
     {
         var dir = Path.Combine(_path, nameof(BlockJoinQuery_ParentMatch_IsNotTreatedAsOwnChild));
@@ -170,7 +188,10 @@ public sealed class BlockDocumentTests : IClassFixture<TestDirectoryFixture>
         Assert.Equal(0, results.TotalHits);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Add Document Block: Requires At Least Two Docs scenario.
+    /// </summary>
+    [Fact(DisplayName = "Add Document Block: Requires At Least Two Docs")]
     public void AddDocumentBlock_RequiresAtLeastTwoDocs()
     {
         var dir = Path.Combine(_path, nameof(AddDocumentBlock_RequiresAtLeastTwoDocs));
@@ -181,7 +202,10 @@ public sealed class BlockDocumentTests : IClassFixture<TestDirectoryFixture>
         Assert.Throws<ArgumentException>(() => writer.AddDocumentBlock([MakeParent("solo")]));
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Parent Bit Set: Next Parent Finds Correct Parent scenario.
+    /// </summary>
+    [Fact(DisplayName = "Parent Bit Set: Next Parent Finds Correct Parent")]
     public void ParentBitSet_NextParent_FindsCorrectParent()
     {
         var pbs = new ParentBitSet(10);
@@ -194,7 +218,10 @@ public sealed class BlockDocumentTests : IClassFixture<TestDirectoryFixture>
         Assert.Equal(-1, pbs.NextParent(8));
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Parent Bit Set: Prev Parent Finds Correct Parent scenario.
+    /// </summary>
+    [Fact(DisplayName = "Parent Bit Set: Prev Parent Finds Correct Parent")]
     public void ParentBitSet_PrevParent_FindsCorrectParent()
     {
         var pbs = new ParentBitSet(10);
@@ -206,7 +233,10 @@ public sealed class BlockDocumentTests : IClassFixture<TestDirectoryFixture>
         Assert.Equal(7, pbs.PrevParent(8));
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Parent Bit Set: Round-trip scenario.
+    /// </summary>
+    [Fact(DisplayName = "Parent Bit Set: Round-trip")]
     public void ParentBitSet_RoundTrip()
     {
         var dir = Path.Combine(_path, nameof(ParentBitSet_RoundTrip));

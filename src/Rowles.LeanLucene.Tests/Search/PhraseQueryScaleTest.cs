@@ -12,6 +12,9 @@ using Xunit.Abstractions;
 
 namespace Rowles.LeanLucene.Tests.Search;
 
+/// <summary>
+/// Contains unit tests for Phrase Query Scale.
+/// </summary>
 public class PhraseQueryScaleTest(ITestOutputHelper output) : IDisposable
 {
     private readonly List<string> _paths = [];
@@ -22,7 +25,11 @@ public class PhraseQueryScaleTest(ITestOutputHelper output) : IDisposable
             if (Directory.Exists(p)) Directory.Delete(p, true);
     }
 
-    [Theory]
+    /// <summary>
+    /// Verifies the Phrase Query: Three Words Large Corpus Returns Results scenario.
+    /// </summary>
+    /// <param name="docCount">The docCount value for the test case.</param>
+    [Theory(DisplayName = "Phrase Query: Three Words Large Corpus Returns Results")]
     [InlineData(1000)]
     [InlineData(10000)]
     [InlineData(50000)]
@@ -70,7 +77,10 @@ public class PhraseQueryScaleTest(ITestOutputHelper output) : IDisposable
         searcher.Dispose();
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Backpressure Flush: Does Not Deadlock scenario.
+    /// </summary>
+    [Fact(DisplayName = "Backpressure Flush: Does Not Deadlock")]
     public void BackpressureFlush_DoesNotDeadlock()
     {
         var path = Path.Combine(Path.GetTempPath(), $"leanlucene-bp-{Guid.NewGuid():N}");

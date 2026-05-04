@@ -5,6 +5,9 @@ using Rowles.LeanLucene.Store;
 
 namespace Rowles.LeanLucene.Tests.Diagnostics;
 
+/// <summary>
+/// Contains unit tests for Index Size.
+/// </summary>
 public class IndexSizeTests : IDisposable
 {
     private readonly string _dir;
@@ -21,7 +24,10 @@ public class IndexSizeTests : IDisposable
         catch { }
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Calculate: Reports Non Zero Size scenario.
+    /// </summary>
+    [Fact(DisplayName = "Calculate: Reports Non Zero Size")]
     public void Calculate_ReportsNonZeroSize()
     {
         using var writer = new IndexWriter(new MMapDirectory(_dir), new IndexWriterConfig());
@@ -38,7 +44,10 @@ public class IndexSizeTests : IDisposable
         Assert.True(report.CommitFileSizeBytes > 0);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Calculate: Segment Breakdown Has Files scenario.
+    /// </summary>
+    [Fact(DisplayName = "Calculate: Segment Breakdown Has Files")]
     public void Calculate_SegmentBreakdown_HasFiles()
     {
         using var writer = new IndexWriter(new MMapDirectory(_dir), new IndexWriterConfig());
@@ -58,7 +67,10 @@ public class IndexSizeTests : IDisposable
         Assert.True(seg.FileSizes.ContainsKey(".dic") || seg.FileSizes.ContainsKey(".seg"));
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Calculate: Total Equals Sum scenario.
+    /// </summary>
+    [Fact(DisplayName = "Calculate: Total Equals Sum")]
     public void Calculate_TotalEqualsSum()
     {
         using var writer = new IndexWriter(new MMapDirectory(_dir), new IndexWriterConfig());
@@ -78,7 +90,10 @@ public class IndexSizeTests : IDisposable
         Assert.Equal(report.TotalSizeBytes, segTotal + otherTotal);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Calculate: Formatted Size Is Readable scenario.
+    /// </summary>
+    [Fact(DisplayName = "Calculate: Formatted Size Is Readable")]
     public void Calculate_FormattedSize_IsReadable()
     {
         using var writer = new IndexWriter(new MMapDirectory(_dir), new IndexWriterConfig());
@@ -92,14 +107,20 @@ public class IndexSizeTests : IDisposable
         Assert.False(string.IsNullOrEmpty(report.TotalSizeFormatted));
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Calculate: Missing Directory Throws scenario.
+    /// </summary>
+    [Fact(DisplayName = "Calculate: Missing Directory Throws")]
     public void Calculate_MissingDirectory_Throws()
     {
         Assert.Throws<DirectoryNotFoundException>(
             () => IndexSizeCalculator.Calculate(Path.Combine(_dir, "nonexistent")));
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Searcher Get Index Size: Works scenario.
+    /// </summary>
+    [Fact(DisplayName = "Searcher Get Index Size: Works")]
     public void SearcherGetIndexSize_Works()
     {
         using var writer = new IndexWriter(new MMapDirectory(_dir), new IndexWriterConfig());

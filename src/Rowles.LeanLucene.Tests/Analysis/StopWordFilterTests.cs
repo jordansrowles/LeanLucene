@@ -3,12 +3,18 @@ using Rowles.LeanLucene.Analysis.Analysers;
 
 namespace Rowles.LeanLucene.Tests.Analysis;
 
+/// <summary>
+/// Contains unit tests for Stop Word Filter.
+/// </summary>
 [Trait("Category", "Analysis")]
 public class StopWordFilterTests
 {
     private readonly StopWordFilter _filter = new();
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Apply: All Stop Words Returns Empty List scenario.
+    /// </summary>
+    [Fact(DisplayName = "Apply: All Stop Words Returns Empty List")]
     public void Apply_AllStopWords_ReturnsEmptyList()
     {
         var tokens = new List<Token>
@@ -23,7 +29,10 @@ public class StopWordFilterTests
         Assert.Empty(tokens);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Apply: No Stop Words Returns All Tokens scenario.
+    /// </summary>
+    [Fact(DisplayName = "Apply: No Stop Words Returns All Tokens")]
     public void Apply_NoStopWords_ReturnsAllTokens()
     {
         var tokens = new List<Token>
@@ -37,7 +46,10 @@ public class StopWordFilterTests
         Assert.Equal(2, tokens.Count);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Apply: Mixed Tokens Removes Only Stop Words scenario.
+    /// </summary>
+    [Fact(DisplayName = "Apply: Mixed Tokens Removes Only Stop Words")]
     public void Apply_MixedTokens_RemovesOnlyStopWords()
     {
         var tokens = new List<Token>

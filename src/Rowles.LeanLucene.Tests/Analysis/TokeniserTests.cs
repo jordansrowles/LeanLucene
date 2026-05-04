@@ -4,12 +4,18 @@ using Rowles.LeanLucene.Analysis.Tokenisers;
 
 namespace Rowles.LeanLucene.Tests.Analysis;
 
+/// <summary>
+/// Contains unit tests for Tokeniser.
+/// </summary>
 [Trait("Category", "Analysis")]
 public class TokeniserTests
 {
     private readonly Tokeniser _tokeniser = new();
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Tokenise: Sentence With Words Returns Tokens With Correct Offsets scenario.
+    /// </summary>
+    [Fact(DisplayName = "Tokenise: Sentence With Words Returns Tokens With Correct Offsets")]
     public void Tokenise_SentenceWithWords_ReturnsTokensWithCorrectOffsets()
     {
         var tokens = _tokeniser.Tokenise("The quick brown fox");
@@ -33,7 +39,10 @@ public class TokeniserTests
         Assert.Equal(19, tokens[3].EndOffset);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Tokenise: Input With Punctuation Excludes Punctuation From Tokens scenario.
+    /// </summary>
+    [Fact(DisplayName = "Tokenise: Input With Punctuation Excludes Punctuation From Tokens")]
     public void Tokenise_InputWithPunctuation_ExcludesPunctuationFromTokens()
     {
         var tokens = _tokeniser.Tokenise("hello, world!");
@@ -43,7 +52,10 @@ public class TokeniserTests
         Assert.Equal("world", tokens[1].Text);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Tokenise: Empty Input Returns Empty List scenario.
+    /// </summary>
+    [Fact(DisplayName = "Tokenise: Empty Input Returns Empty List")]
     public void Tokenise_EmptyInput_ReturnsEmptyList()
     {
         var tokens = _tokeniser.Tokenise(ReadOnlySpan<char>.Empty);
@@ -51,7 +63,10 @@ public class TokeniserTests
         Assert.Empty(tokens);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Tokenise: Only Whitespace And Punctuation Returns Empty List scenario.
+    /// </summary>
+    [Fact(DisplayName = "Tokenise: Only Whitespace And Punctuation Returns Empty List")]
     public void Tokenise_OnlyWhitespaceAndPunctuation_ReturnsEmptyList()
     {
         var tokens = _tokeniser.Tokenise("  , . ! ");
@@ -59,7 +74,10 @@ public class TokeniserTests
         Assert.Empty(tokens);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Tokenise: Single Word Returns Single Token scenario.
+    /// </summary>
+    [Fact(DisplayName = "Tokenise: Single Word Returns Single Token")]
     public void Tokenise_SingleWord_ReturnsSingleToken()
     {
         var tokens = _tokeniser.Tokenise("hello");

@@ -10,7 +10,10 @@ namespace Rowles.LeanLucene.Tests.Search;
 /// </summary>
 public sealed class BlockMaxWandScorerTests
 {
-    [Fact]
+    /// <summary>
+    /// Verifies the Score: Single Term Returns All Docs scenario.
+    /// </summary>
+    [Fact(DisplayName = "Score: Single Term Returns All Docs")]
     public void Score_SingleTerm_ReturnsAllDocs()
     {
         // Arrange — write 5 docs via BlockPostingsWriter, read back through BlockMaxWandScorer
@@ -62,7 +65,10 @@ public sealed class BlockMaxWandScorerTests
         }
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Blocks Skipped: Is Non Negative scenario.
+    /// </summary>
+    [Fact(DisplayName = "Blocks Skipped: Is Non Negative")]
     public void BlocksSkipped_IsNonNegative()
     {
         // Arrange — write a posting list and score it; the counter must never go negative

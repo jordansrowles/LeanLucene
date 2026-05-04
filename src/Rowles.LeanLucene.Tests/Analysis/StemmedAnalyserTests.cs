@@ -3,12 +3,18 @@ using Rowles.LeanLucene.Analysis.Analysers;
 
 namespace Rowles.LeanLucene.Tests.Analysis;
 
+/// <summary>
+/// Contains unit tests for Stemmed Analyser.
+/// </summary>
 [Trait("Category", "Analysis")]
 public class StemmedAnalyserTests
 {
     private readonly StemmedAnalyser _analyser = new();
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Analyse: Stemmed Words Returns Stemmed Tokens scenario.
+    /// </summary>
+    [Fact(DisplayName = "Analyse: Stemmed Words Returns Stemmed Tokens")]
     public void Analyse_StemmedWords_ReturnsStemmedTokens()
     {
         // Arrange
@@ -24,7 +30,10 @@ public class StemmedAnalyserTests
         Assert.Equal("quickli", tokens[2].Text);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Analyse: Stop Words Removed Before Stemming scenario.
+    /// </summary>
+    [Fact(DisplayName = "Analyse: Stop Words Removed Before Stemming")]
     public void Analyse_StopWordsRemoved_BeforeStemming()
     {
         // Arrange
@@ -39,7 +48,10 @@ public class StemmedAnalyserTests
         Assert.Equal("run", tokens[1].Text);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Analyse: Empty Input Returns Empty List scenario.
+    /// </summary>
+    [Fact(DisplayName = "Analyse: Empty Input Returns Empty List")]
     public void Analyse_EmptyInput_ReturnsEmptyList()
     {
         var tokens = _analyser.Analyse(ReadOnlySpan<char>.Empty);

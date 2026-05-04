@@ -10,6 +10,9 @@ using Rowles.LeanLucene.Store;
 
 namespace Rowles.LeanLucene.Tests.Index;
 
+/// <summary>
+/// Contains unit tests for Crash Recovery.
+/// </summary>
 [Trait("Category", "Index")]
 public class CrashRecoveryTests : IDisposable
 {
@@ -26,7 +29,10 @@ public class CrashRecoveryTests : IDisposable
         try { Directory.Delete(_dir, true); } catch { }
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Empty Directory: Starts Clean Index scenario.
+    /// </summary>
+    [Fact(DisplayName = "Empty Directory: Starts Clean Index")]
     public void EmptyDirectory_StartsCleanIndex()
     {
         // Arrange — empty directory, no commit files
@@ -45,7 +51,10 @@ public class CrashRecoveryTests : IDisposable
         Assert.Equal(1, results.TotalHits);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Corrupt Latest Commit: Falls Back To Previous Generation scenario.
+    /// </summary>
+    [Fact(DisplayName = "Corrupt Latest Commit: Falls Back To Previous Generation")]
     public void CorruptLatestCommit_FallsBackToPreviousGeneration()
     {
         // Arrange — create 2 valid commits, keeping both generations
@@ -77,7 +86,10 @@ public class CrashRecoveryTests : IDisposable
         Assert.Equal(1, results.TotalHits);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Latest Commit With Mismatched Generation: Falls Back To Previous Generation scenario.
+    /// </summary>
+    [Fact(DisplayName = "Latest Commit With Mismatched Generation: Falls Back To Previous Generation")]
     public void LatestCommitWithMismatchedGeneration_FallsBackToPreviousGeneration()
     {
         var config = new IndexWriterConfig
@@ -109,7 +121,10 @@ public class CrashRecoveryTests : IDisposable
         Assert.Equal(0, searcher.Search(new TermQuery("body", "second"), 10).TotalHits);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Partial Temp Commit: Is Ignored And Stable Commit Remains Searchable scenario.
+    /// </summary>
+    [Fact(DisplayName = "Partial Temp Commit: Is Ignored And Stable Commit Remains Searchable")]
     public void PartialTempCommit_IsIgnoredAndStableCommitRemainsSearchable()
     {
         using (var writer = new IndexWriter(new MMapDirectory(_dir), new IndexWriterConfig()))
@@ -126,7 +141,10 @@ public class CrashRecoveryTests : IDisposable
         Assert.Equal(1, results.TotalHits);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Corrupt Stats File: Falls Back To Recomputed Search Stats scenario.
+    /// </summary>
+    [Fact(DisplayName = "Corrupt Stats File: Falls Back To Recomputed Search Stats")]
     public void CorruptStatsFile_FallsBackToRecomputedSearchStats()
     {
         using (var writer = new IndexWriter(new MMapDirectory(_dir), new IndexWriterConfig()))
@@ -144,7 +162,10 @@ public class CrashRecoveryTests : IDisposable
         Assert.Equal(1, searcher.Search(new TermQuery("body", "alpha"), 10).TotalHits);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Orphaned Segment Files: Cleaned Up On Startup scenario.
+    /// </summary>
+    [Fact(DisplayName = "Orphaned Segment Files: Cleaned Up On Startup")]
     public void OrphanedSegmentFiles_CleanedUpOnStartup()
     {
         // Arrange — create an index with 1 commit
@@ -172,7 +193,10 @@ public class CrashRecoveryTests : IDisposable
         Assert.False(File.Exists(Path.Combine(_dir, orphanId + ".pos")));
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Temp Files: Cleaned Up On Startup scenario.
+    /// </summary>
+    [Fact(DisplayName = "Temp Files: Cleaned Up On Startup")]
     public void TempFiles_CleanedUpOnStartup()
     {
         // Arrange — create an index, then leave temp files behind
@@ -197,7 +221,10 @@ public class CrashRecoveryTests : IDisposable
         Assert.False(File.Exists(Path.Combine(_dir, "data.tmp")));
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Delete Commit And Reopen: Deleted Document Remains Deleted scenario.
+    /// </summary>
+    [Fact(DisplayName = "Delete Commit And Reopen: Deleted Document Remains Deleted")]
     public void DeleteCommitAndReopen_DeletedDocumentRemainsDeleted()
     {
         using (var writer = new IndexWriter(new MMapDirectory(_dir), new IndexWriterConfig()))
@@ -217,7 +244,10 @@ public class CrashRecoveryTests : IDisposable
         Assert.Equal(1, searcher.Stats.LiveDocCount);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Latest Commit Missing Segment: Falls Back To Previous Generation scenario.
+    /// </summary>
+    [Fact(DisplayName = "Latest Commit Missing Segment: Falls Back To Previous Generation")]
     public void LatestCommitMissingSegment_FallsBackToPreviousGeneration()
     {
         // Arrange — create 2 commits, keeping both generations
@@ -252,7 +282,10 @@ public class CrashRecoveryTests : IDisposable
         Assert.Equal(1, results.TotalHits);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Latest Commit Missing Dictionary: Falls Back To Previous Generation scenario.
+    /// </summary>
+    [Fact(DisplayName = "Latest Commit Missing Dictionary: Falls Back To Previous Generation")]
     public void LatestCommitMissingDictionary_FallsBackToPreviousGeneration()
     {
         var config = new IndexWriterConfig
@@ -285,7 +318,10 @@ public class CrashRecoveryTests : IDisposable
         Assert.Equal(1, results.TotalHits);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Orphaned Sidecar Files: Cleaned Up On Startup scenario.
+    /// </summary>
+    [Fact(DisplayName = "Orphaned Sidecar Files: Cleaned Up On Startup")]
     public void OrphanedSidecarFiles_CleanedUpOnStartup()
     {
         var config = new IndexWriterConfig();
@@ -314,7 +350,10 @@ public class CrashRecoveryTests : IDisposable
         Assert.False(File.Exists(Path.Combine(_dir, orphanId + "_v_embedding.hnsw")));
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Recovery Result: Null For Empty Directory scenario.
+    /// </summary>
+    [Fact(DisplayName = "Recovery Result: Null For Empty Directory")]
     public void RecoveryResult_Null_ForEmptyDirectory()
     {
         var emptyDir = Path.Combine(Path.GetTempPath(), $"ll_empty_{Guid.NewGuid():N}");

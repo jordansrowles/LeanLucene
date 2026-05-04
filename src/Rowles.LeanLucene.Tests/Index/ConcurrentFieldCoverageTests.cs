@@ -23,7 +23,10 @@ public sealed class ConcurrentFieldCoverageTests : IDisposable
         try { Directory.Delete(_dir, recursive: true); } catch { }
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Add Documents Concurrent: Preserves Vectors scenario.
+    /// </summary>
+    [Fact(DisplayName = "Add Documents Concurrent: Preserves Vectors")]
     public void AddDocumentsConcurrent_PreservesVectors()
     {
         var directory = new MMapDirectory(_dir);
@@ -50,7 +53,10 @@ public sealed class ConcurrentFieldCoverageTests : IDisposable
         Assert.True(results.TotalHits > 0, "Expected vector hits but the concurrent path dropped vectors.");
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Add Document Lock Free: Preserves Vectors scenario.
+    /// </summary>
+    [Fact(DisplayName = "Add Document Lock Free: Preserves Vectors")]
     public void AddDocumentLockFree_PreservesVectors()
     {
         var directory = new MMapDirectory(_dir);
@@ -77,7 +83,10 @@ public sealed class ConcurrentFieldCoverageTests : IDisposable
         Assert.True(results.TotalHits > 0);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Add Documents Concurrent: Preserves Geo Points scenario.
+    /// </summary>
+    [Fact(DisplayName = "Add Documents Concurrent: Preserves Geo Points")]
     public void AddDocumentsConcurrent_PreservesGeoPoints()
     {
         var directory = new MMapDirectory(_dir);
@@ -103,7 +112,10 @@ public sealed class ConcurrentFieldCoverageTests : IDisposable
         Assert.Equal(2, results.TotalHits);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Add Documents Concurrent: Populates Sorted Doc Values For String Fields scenario.
+    /// </summary>
+    [Fact(DisplayName = "Add Documents Concurrent: Populates Sorted Doc Values For String Fields")]
     public void AddDocumentsConcurrent_PopulatesSortedDocValuesForStringFields()
     {
         var directory = new MMapDirectory(_dir);

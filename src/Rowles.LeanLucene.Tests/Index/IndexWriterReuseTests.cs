@@ -10,10 +10,16 @@ using Xunit.Abstractions;
 
 namespace Rowles.LeanLucene.Tests.Index;
 
+/// <summary>
+/// Contains unit tests for Index Writer Reuse.
+/// </summary>
 [Trait("Category", "Index")]
 public class IndexWriterReuseTests
 {
-    [Fact]
+    /// <summary>
+    /// Verifies the Multiple Flushes: Reuse Buffers Produce Correct Results scenario.
+    /// </summary>
+    [Fact(DisplayName = "Multiple Flushes: Reuse Buffers Produce Correct Results")]
     public void MultipleFlushes_ReuseBuffers_ProduceCorrectResults()
     {
         var dir = Path.Combine(Path.GetTempPath(), $"ll_reuse_{Guid.NewGuid():N}");
@@ -56,7 +62,10 @@ public class IndexWriterReuseTests
         }
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Phrase Query: After Multiple Flushes Finds Correct Phrases scenario.
+    /// </summary>
+    [Fact(DisplayName = "Phrase Query: After Multiple Flushes Finds Correct Phrases")]
     public void PhraseQuery_AfterMultipleFlushes_FindsCorrectPhrases()
     {
         var dir = Path.Combine(Path.GetTempPath(), $"ll_phrase_reuse_{Guid.NewGuid():N}");

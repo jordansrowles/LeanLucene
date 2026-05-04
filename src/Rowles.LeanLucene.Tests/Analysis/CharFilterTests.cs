@@ -5,6 +5,9 @@ using Rowles.LeanLucene.Store;
 
 namespace Rowles.LeanLucene.Tests.Analysis;
 
+/// <summary>
+/// Contains unit tests for Char Filter.
+/// </summary>
 public class CharFilterTests : IDisposable
 {
     private readonly string _dir;
@@ -21,7 +24,10 @@ public class CharFilterTests : IDisposable
         catch { }
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the HTML Strip Char Filter: Removes Tags scenario.
+    /// </summary>
+    [Fact(DisplayName = "HTML Strip Char Filter: Removes Tags")]
     public void HtmlStripCharFilter_RemovesTags()
     {
         var filter = new HtmlStripCharFilter();
@@ -31,7 +37,10 @@ public class CharFilterTests : IDisposable
         Assert.Contains("world", result);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the HTML Strip Char Filter: Removes Entities scenario.
+    /// </summary>
+    [Fact(DisplayName = "HTML Strip Char Filter: Removes Entities")]
     public void HtmlStripCharFilter_RemovesEntities()
     {
         var filter = new HtmlStripCharFilter();
@@ -39,7 +48,10 @@ public class CharFilterTests : IDisposable
         Assert.DoesNotContain("&amp;", result);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Pattern Replace Char Filter: Replaces Pattern scenario.
+    /// </summary>
+    [Fact(DisplayName = "Pattern Replace Char Filter: Replaces Pattern")]
     public void PatternReplaceCharFilter_ReplacesPattern()
     {
         var filter = new PatternReplaceCharFilter(@"\d+", "#");
@@ -47,7 +59,10 @@ public class CharFilterTests : IDisposable
         Assert.Equal("abc#def#", result);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Mapping Char Filter: Maps Characters scenario.
+    /// </summary>
+    [Fact(DisplayName = "Mapping Char Filter: Maps Characters")]
     public void MappingCharFilter_MapsCharacters()
     {
         var mappings = new Dictionary<string, string>
@@ -61,7 +76,10 @@ public class CharFilterTests : IDisposable
         Assert.Equal("\"Hello\"", result);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Mapping Char Filter: No Mapping Returns Input scenario.
+    /// </summary>
+    [Fact(DisplayName = "Mapping Char Filter: No Mapping Returns Input")]
     public void MappingCharFilter_NoMapping_ReturnsInput()
     {
         var mappings = new Dictionary<string, string>();
@@ -70,7 +88,10 @@ public class CharFilterTests : IDisposable
         Assert.Equal("unchanged", result);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the HTML Strip Char Filter: Integrated With Index Writer scenario.
+    /// </summary>
+    [Fact(DisplayName = "HTML Strip Char Filter: Integrated With Index Writer")]
     public void HtmlStripCharFilter_IntegratedWithIndexWriter()
     {
         var config = new IndexWriterConfig
@@ -96,7 +117,10 @@ public class CharFilterTests : IDisposable
         Assert.Equal(0, tagResults.TotalHits);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Pattern Replace: Integrated With Index Writer scenario.
+    /// </summary>
+    [Fact(DisplayName = "Pattern Replace: Integrated With Index Writer")]
     public void PatternReplace_IntegratedWithIndexWriter()
     {
         var config = new IndexWriterConfig
@@ -118,7 +142,10 @@ public class CharFilterTests : IDisposable
         Assert.True(results.TotalHits >= 1);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Multiple Char Filters: Chained In Order scenario.
+    /// </summary>
+    [Fact(DisplayName = "Multiple Char Filters: Chained In Order")]
     public void MultipleCharFilters_ChainedInOrder()
     {
         // First strip HTML, then replace digits

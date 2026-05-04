@@ -4,6 +4,9 @@ using Rowles.LeanLucene.Store;
 
 namespace Rowles.LeanLucene.Tests.Search;
 
+/// <summary>
+/// Contains unit tests for Collapsing.
+/// </summary>
 public class CollapsingTests : IDisposable
 {
     private readonly string _dir;
@@ -45,7 +48,10 @@ public class CollapsingTests : IDisposable
         writer.AddDocument(doc);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Collapse: Groups By Field Returns One Per Group scenario.
+    /// </summary>
+    [Fact(DisplayName = "Collapse: Groups By Field Returns One Per Group")]
     public void Collapse_GroupsByField_ReturnsOnePerGroup()
     {
         IndexArticles();
@@ -63,7 +69,10 @@ public class CollapsingTests : IDisposable
             "TotalHits should reflect number of groups");
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Collapse: Top Score Keeps Best Per Group scenario.
+    /// </summary>
+    [Fact(DisplayName = "Collapse: Top Score Keeps Best Per Group")]
     public void Collapse_TopScore_KeepsBestPerGroup()
     {
         IndexArticles();
@@ -77,7 +86,10 @@ public class CollapsingTests : IDisposable
         Assert.True(results.ScoreDocs.Length > 0);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Collapse: Respects Top N scenario.
+    /// </summary>
+    [Fact(DisplayName = "Collapse: Respects Top N")]
     public void Collapse_RespectsTopN()
     {
         IndexArticles();
@@ -90,7 +102,10 @@ public class CollapsingTests : IDisposable
         Assert.True(results.ScoreDocs.Length <= 2);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Collapse: No Matches Returns Empty scenario.
+    /// </summary>
+    [Fact(DisplayName = "Collapse: No Matches Returns Empty")]
     public void Collapse_NoMatches_ReturnsEmpty()
     {
         IndexArticles();
@@ -103,7 +118,10 @@ public class CollapsingTests : IDisposable
         Assert.Equal(0, results.TotalHits);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Collapse: Single Group Field Returns Single Result scenario.
+    /// </summary>
+    [Fact(DisplayName = "Collapse: Single Group Field Returns Single Result")]
     public void Collapse_SingleGroupField_ReturnsSingleResult()
     {
         // Index docs all with same category

@@ -14,7 +14,7 @@ public sealed class ImpactMetadataTests
     /// Writes 256 docs (2 full blocks of 128) with varying frequencies.
     /// Verifies the skip entries contain the correct MaxFreqInBlock for each block.
     /// </summary>
-    [Fact]
+    [Fact(DisplayName = "Skip Entries: Contain Max Freq")]
     public void SkipEntries_ContainMaxFreq()
     {
         // Arrange
@@ -65,7 +65,7 @@ public sealed class ImpactMetadataTests
     /// <summary>
     /// Writes 256 docs with norm values and verifies MaxNormInBlock is round-tripped.
     /// </summary>
-    [Fact]
+    [Fact(DisplayName = "Skip Entries: Contain Max Norm")]
     public void SkipEntries_ContainMaxNorm()
     {
         // Arrange
@@ -120,7 +120,7 @@ public sealed class ImpactMetadataTests
     /// Writes 512 docs (4 full blocks) where each block has a distinct max freq and
     /// max norm. Verifies all 4 skip entries round-trip correctly.
     /// </summary>
-    [Fact]
+    [Fact(DisplayName = "Impact Metadata: Round-trip Multiple Blocks")]
     public void ImpactMetadata_RoundTrip_MultipleBlocks()
     {
         // Arrange

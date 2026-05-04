@@ -37,7 +37,10 @@ public sealed class BoundaryAndStressTests : IClassFixture<TestDirectoryFixture>
 
     // ── Empty field value ───────────────────────────────────────────────────
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Empty Text Field: Index And Search No Crash Zero Hits scenario.
+    /// </summary>
+    [Fact(DisplayName = "Empty Text Field: Index And Search No Crash Zero Hits")]
     public void EmptyTextField_IndexAndSearch_NoCrashZeroHits()
     {
         var dir = new MMapDirectory(SubDir("empty_field"));
@@ -63,7 +66,10 @@ public sealed class BoundaryAndStressTests : IClassFixture<TestDirectoryFixture>
         Assert.Equal(1, titleResults.TotalHits);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Empty String Field: Stored Field Round-trip scenario.
+    /// </summary>
+    [Fact(DisplayName = "Empty String Field: Stored Field Round-trip")]
     public void EmptyStringField_StoredFieldRoundTrip()
     {
         var dir = new MMapDirectory(SubDir("empty_stored"));
@@ -91,7 +97,10 @@ public sealed class BoundaryAndStressTests : IClassFixture<TestDirectoryFixture>
 
     // ── Unicode / multi-byte UTF-8 stored fields ────────────────────────────
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Unicode Stored Fields: Emoji Round Trips scenario.
+    /// </summary>
+    [Fact(DisplayName = "Unicode Stored Fields: Emoji Round Trips")]
     public void UnicodeStoredFields_Emoji_RoundTrips()
     {
         var dir = new MMapDirectory(SubDir("unicode_emoji"));
@@ -115,7 +124,10 @@ public sealed class BoundaryAndStressTests : IClassFixture<TestDirectoryFixture>
         Assert.Equal(emojiContent, stored["content"][0]);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Unicode Stored Fields: CJK Round Trips scenario.
+    /// </summary>
+    [Fact(DisplayName = "Unicode Stored Fields: CJK Round Trips")]
     public void UnicodeStoredFields_CJK_RoundTrips()
     {
         var dir = new MMapDirectory(SubDir("unicode_cjk"));
@@ -139,7 +151,10 @@ public sealed class BoundaryAndStressTests : IClassFixture<TestDirectoryFixture>
         Assert.Equal(cjk, stored["text"][0]);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Unicode Stored Fields: Mixed Scripts Round Trips scenario.
+    /// </summary>
+    [Fact(DisplayName = "Unicode Stored Fields: Mixed Scripts Round Trips")]
     public void UnicodeStoredFields_MixedScripts_RoundTrips()
     {
         var dir = new MMapDirectory(SubDir("unicode_mixed"));
@@ -163,7 +178,10 @@ public sealed class BoundaryAndStressTests : IClassFixture<TestDirectoryFixture>
 
     // ── GetStoredFields out-of-range ────────────────────────────────────────
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Get Stored Fields: Out Of Range Doc ID Returns Empty Or Throws scenario.
+    /// </summary>
+    [Fact(DisplayName = "Get Stored Fields: Out Of Range Doc ID Returns Empty Or Throws")]
     public void GetStoredFields_OutOfRangeDocId_ReturnsEmptyOrThrows()
     {
         var dir = new MMapDirectory(SubDir("oor_stored"));
@@ -195,7 +213,10 @@ public sealed class BoundaryAndStressTests : IClassFixture<TestDirectoryFixture>
 
     // ── Very long document (heap fallback paths) ────────────────────────────
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Very Long Document: 5000 Tokens Index And Search Correctly scenario.
+    /// </summary>
+    [Fact(DisplayName = "Very Long Document: 5000 Tokens Index And Search Correctly")]
     public void VeryLongDocument_5000Tokens_IndexAndSearchCorrectly()
     {
         var dir = new MMapDirectory(SubDir("long_doc"));
@@ -222,7 +243,10 @@ public sealed class BoundaryAndStressTests : IClassFixture<TestDirectoryFixture>
 
     // ── Concurrent readers ──────────────────────────────────────────────────
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Concurrent Readers: No Exception All Return Results scenario.
+    /// </summary>
+    [Fact(DisplayName = "Concurrent Readers: No Exception All Return Results")]
     public void ConcurrentReaders_NoException_AllReturnResults()
     {
         var dir = new MMapDirectory(SubDir("concurrent_read"));
@@ -264,7 +288,10 @@ public sealed class BoundaryAndStressTests : IClassFixture<TestDirectoryFixture>
 
     // ── IndexWriterConfig boundary values ───────────────────────────────────
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Index Writer Config: Max Buffered Docs 1 Flushes Every Doc scenario.
+    /// </summary>
+    [Fact(DisplayName = "Index Writer Config: Max Buffered Docs 1 Flushes Every Doc")]
     public void IndexWriterConfig_MaxBufferedDocs1_FlushesEveryDoc()
     {
         var dir = new MMapDirectory(SubDir("config_maxbuf1"));

@@ -3,6 +3,9 @@ using Rowles.LeanLucene.Analysis.Analysers;
 
 namespace Rowles.LeanLucene.Tests.Analysis;
 
+/// <summary>
+/// Contains unit tests for Porter Stemmer Filter.
+/// </summary>
 [Trait("Category", "Analysis")]
 public sealed class PorterStemmerFilterTests
 {
@@ -15,7 +18,12 @@ public sealed class PorterStemmerFilterTests
         return tokens[0].Text;
     }
 
-    [Theory]
+    /// <summary>
+    /// Verifies the Stem: Classic Porter Test Vectors scenario.
+    /// </summary>
+    /// <param name="input">The input value for the test case.</param>
+    /// <param name="expected">The expected value for the test case.</param>
+    [Theory(DisplayName = "Stem: Classic Porter Test Vectors")]
     [InlineData("caresses", "caress")]
     [InlineData("ponies", "poni")]
     [InlineData("cats", "cat")]
@@ -29,7 +37,10 @@ public sealed class PorterStemmerFilterTests
         Assert.Equal(expected, Stem(input));
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Apply: Empty List No Changes scenario.
+    /// </summary>
+    [Fact(DisplayName = "Apply: Empty List No Changes")]
     public void Apply_EmptyList_NoChanges()
     {
         var tokens = new List<Token>();
@@ -37,7 +48,10 @@ public sealed class PorterStemmerFilterTests
         Assert.Empty(tokens);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Apply: Short Words Unchanged scenario.
+    /// </summary>
+    [Fact(DisplayName = "Apply: Short Words Unchanged")]
     public void Apply_ShortWords_Unchanged()
     {
         // Words with 2 or fewer chars should not be stemmed
@@ -45,7 +59,10 @@ public sealed class PorterStemmerFilterTests
         Assert.Equal("an", Stem("an"));
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Apply: Multiple Tokens All Stemmed scenario.
+    /// </summary>
+    [Fact(DisplayName = "Apply: Multiple Tokens All Stemmed")]
     public void Apply_MultipleTokens_AllStemmed()
     {
         var tokens = new List<Token>
@@ -61,7 +78,10 @@ public sealed class PorterStemmerFilterTests
         Assert.Equal("happili", tokens[2].Text);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Apply: Already Stemmed Token Unchanged scenario.
+    /// </summary>
+    [Fact(DisplayName = "Apply: Already Stemmed Token Unchanged")]
     public void Apply_AlreadyStemmed_TokenUnchanged()
     {
         var token = new Token("run", 0, 3);

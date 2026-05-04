@@ -28,7 +28,10 @@ public sealed class MergeMemoryTests : IClassFixture<TestDirectoryFixture>
         return path;
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Merge: Of Large Segments Allocates Far Less Than Total Doc Bytes scenario.
+    /// </summary>
+    [Fact(DisplayName = "Merge: Of Large Segments Allocates Far Less Than Total Doc Bytes")]
     public void Merge_OfLargeSegments_AllocatesFarLessThanTotalDocBytes()
     {
         const int docsPerSegment = 4_000;

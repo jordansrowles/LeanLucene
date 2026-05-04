@@ -11,6 +11,9 @@ using Xunit.Abstractions;
 
 namespace Rowles.LeanLucene.Tests.Search;
 
+/// <summary>
+/// Contains unit tests for Explain.
+/// </summary>
 [Trait("Category", "Search")]
 [Trait("Category", "Explain")]
 public sealed class ExplainTests : IClassFixture<TestDirectoryFixture>
@@ -31,7 +34,10 @@ public sealed class ExplainTests : IClassFixture<TestDirectoryFixture>
         return path;
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Explain: Matching Doc Returns Breakdown scenario.
+    /// </summary>
+    [Fact(DisplayName = "Explain: Matching Doc Returns Breakdown")]
     public void Explain_MatchingDoc_ReturnsBreakdown()
     {
         // Arrange
@@ -55,7 +61,10 @@ public sealed class ExplainTests : IClassFixture<TestDirectoryFixture>
         Assert.True(explanation.Details.Length >= 3);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Explain: Non Matching Doc Returns Null scenario.
+    /// </summary>
+    [Fact(DisplayName = "Explain: Non Matching Doc Returns Null")]
     public void Explain_NonMatchingDoc_ReturnsNull()
     {
         // Arrange
@@ -76,7 +85,10 @@ public sealed class ExplainTests : IClassFixture<TestDirectoryFixture>
         Assert.Null(explanation);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Explain: Invalid Doc ID Returns Null scenario.
+    /// </summary>
+    [Fact(DisplayName = "Explain: Invalid Doc ID Returns Null")]
     public void Explain_InvalidDocId_ReturnsNull()
     {
         // Arrange
@@ -96,7 +108,10 @@ public sealed class ExplainTests : IClassFixture<TestDirectoryFixture>
         Assert.Null(explanation);
     }
 
-    [Fact]
+    /// <summary>
+    /// Verifies the Explain: To String Produces Readable Output scenario.
+    /// </summary>
+    [Fact(DisplayName = "Explain: To String Produces Readable Output")]
     public void Explain_ToString_ProducesReadableOutput()
     {
         // Arrange
