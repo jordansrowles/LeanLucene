@@ -39,6 +39,12 @@ jobs:
       - name: Test
         run: dotnet test src/Rowles.LeanLucene.Tests/Rowles.LeanLucene.Tests.csproj -c Release --no-build --logger "trx;LogFileName=test-results.trx"
 
+      - name: Publish Native AOT smoke
+        run: dotnet publish src/examples/Rowles.LeanLucene.Example.NativeAot/Rowles.LeanLucene.Example.NativeAot.csproj -c Release -r linux-x64 --self-contained true -p:PublishAot=true -p:WarningsAsErrors=IL2026%3BIL3050%3BIL2070%3BIL2072%3BIL2075%3BIL2090
+
+      - name: Run Native AOT smoke
+        run: src/examples/Rowles.LeanLucene.Example.NativeAot/bin/Release/net10.0/linux-x64/publish/Rowles.LeanLucene.Example.NativeAot
+
       - name: Build docs
         shell: pwsh
         run: ./scripts/docs.ps1 -SkipBenchmarks

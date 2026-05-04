@@ -1,5 +1,5 @@
-﻿using System.Text.Json;
-using System.Text.Json.Serialization;
+using System.Text.Json;
+using Rowles.LeanLucene.Serialization;
 
 namespace Rowles.LeanLucene.Search.Scoring;
 
@@ -60,26 +60,20 @@ public sealed class IndexStats
 
     // --- Persistence ---
 
-    private static readonly JsonSerializerOptions s_jsonOptions = new()
-    {
-        WriteIndented = false,
-        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
-    };
-
     /// <summary>
     /// Serialises this <see cref="IndexStats"/> to a JSON file at the given path.
     /// Uses write-temp-then-rename for atomicity.
     /// </summary>
     public void WriteTo(string path)
     {
-        var dto = new StatsDto
+        var dto = new IndexStatsDto
         {
             TotalDocCount = TotalDocCount,
             LiveDocCount = LiveDocCount,
             AvgFieldLengths = _avgFieldLengths,
             FieldDocCounts = _fieldDocCounts,
         };
-        var json = JsonSerializer.Serialize(dto, s_jsonOptions);
+        var json = JsonSerializer.Serialize(dto, LeanLuceneJsonContext.Default.IndexStatsDto);
 
         // Use a unique tmp suffix so concurrent or rapidly-repeated writes
         // never collide on the same temp path. File.Move is atomic on a single
@@ -126,7 +120,7 @@ public sealed class IndexStats
         try
         {
             var json = File.ReadAllText(path);
-            var dto = JsonSerializer.Deserialize<StatsDto>(json, s_jsonOptions);
+            var dto = JsonSerializer.Deserialize(json, LeanLuceneJsonContext.Default.IndexStatsDto);
             if (dto is null) return null;
             return new IndexStats(
                 dto.TotalDocCount,
@@ -143,16 +137,4 @@ public sealed class IndexStats
     /// <summary>Builds the canonical stats file path for a given commit generation.</summary>
     public static string GetStatsPath(string directoryPath, int generation)
         => Path.Combine(directoryPath, $"stats_{generation}.json");
-
-    private sealed class StatsDto
-    {
-        [JsonPropertyName("totalDocCount")]
-        public int TotalDocCount { get; set; }
-        [JsonPropertyName("liveDocCount")]
-        public int LiveDocCount { get; set; }
-        [JsonPropertyName("avgFieldLengths")]
-        public Dictionary<string, float>? AvgFieldLengths { get; set; }
-        [JsonPropertyName("fieldDocCounts")]
-        public Dictionary<string, int>? FieldDocCounts { get; set; }
-    }
 }

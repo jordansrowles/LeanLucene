@@ -17,7 +17,7 @@ public sealed class PatternReplaceCharFilter : ICharFilter
     /// <param name="replacement">The replacement string for matched substrings.</param>
     public PatternReplaceCharFilter(string pattern, string replacement)
     {
-        _pattern = new Regex(pattern, RegexOptions.Compiled);
+        _pattern = new Regex(pattern);
         _replacement = replacement;
     }
 

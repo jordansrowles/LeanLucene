@@ -19,12 +19,12 @@ public sealed class RegexpQuery : Query
     /// <summary>Initialises a new <see cref="RegexpQuery"/> for the given field and pattern.</summary>
     /// <param name="field">The field to search.</param>
     /// <param name="pattern">The regular expression pattern to match against term text.</param>
-    /// <param name="options">Additional <see cref="RegexOptions"/> flags. <see cref="RegexOptions.Compiled"/> is always added.</param>
+    /// <param name="options">Additional <see cref="RegexOptions"/> flags. <see cref="RegexOptions.Compiled"/> is ignored for Native AOT compatibility.</param>
     public RegexpQuery(string field, string pattern, RegexOptions options = RegexOptions.None)
     {
         Field = field;
         Pattern = pattern;
-        CompiledRegex = new Regex(pattern, options | RegexOptions.Compiled, TimeSpan.FromSeconds(1));
+        CompiledRegex = new Regex(pattern, options & ~RegexOptions.Compiled, TimeSpan.FromSeconds(1));
     }
 
     /// <inheritdoc/>

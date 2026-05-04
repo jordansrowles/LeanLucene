@@ -4,6 +4,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- Native AOT compatibility metadata for the core package, with a dedicated `Rowles.LeanLucene.Example.NativeAot` smoke executable and local `scripts\aot-smoke.ps1` validation script.
+
+### Changed
+
+- Core JSON persistence now uses source-generated `System.Text.Json` metadata for commit files, segment metadata, index stats, segment stats, search analytics, and slow-query log entries.
+- Regex-based character filters and regexp queries no longer force compiled regular expressions, improving Native AOT compatibility.
+
 ## [1.2.0] - 2026-05-03
 
 ### Added

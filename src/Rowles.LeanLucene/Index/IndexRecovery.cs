@@ -1,4 +1,5 @@
-﻿using System.Text.Json;
+using System.Text.Json;
+using Rowles.LeanLucene.Serialization;
 
 namespace Rowles.LeanLucene.Index;
 
@@ -102,7 +103,7 @@ public static class IndexRecovery
             var json = CommitFileFormat.TryReadJson(commitFilePath);
             if (json is null)
                 return null; // CRC mismatch — torn write
-            var commitData = JsonSerializer.Deserialize<CommitData>(json);
+            var commitData = JsonSerializer.Deserialize(json, LeanLuceneJsonContext.Default.CommitData);
             if (commitData is null || commitData.Segments is null)
                 return null;
 
@@ -258,12 +259,5 @@ public static class IndexRecovery
 
         /// <summary>Gets a value indicating whether recovery fell back to an older commit generation.</summary>
         public bool WasFallback { get; init; }
-    }
-
-    private sealed class CommitData
-    {
-        public List<string> Segments { get; set; } = [];
-        public int Generation { get; set; }
-        public long ContentToken { get; set; }
     }
 }

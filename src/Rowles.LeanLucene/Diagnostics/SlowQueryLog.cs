@@ -1,4 +1,5 @@
-﻿using System.Text.Json;
+using System.Text.Json;
+using Rowles.LeanLucene.Serialization;
 
 namespace Rowles.LeanLucene.Diagnostics;
 
@@ -52,7 +53,7 @@ public sealed class SlowQueryLog : IDisposable
             TotalHits = totalHits
         };
 
-        string json = JsonSerializer.Serialize(entry, SlowQueryJsonContext.Default.SlowQueryEntry);
+        string json = JsonSerializer.Serialize(entry, LeanLuceneJsonContext.Default.SlowQueryEntry);
 
         lock (_lock)
         {

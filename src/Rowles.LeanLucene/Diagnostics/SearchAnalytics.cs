@@ -1,5 +1,6 @@
-﻿using System.Text.Json;
+using System.Text.Json;
 using System.Threading.Channels;
+using Rowles.LeanLucene.Serialization;
 
 namespace Rowles.LeanLucene.Diagnostics;
 
@@ -70,7 +71,7 @@ public sealed class SearchAnalytics
         foreach (var evt in DrainEvents())
         {
             if (!first) writer.Write(',');
-            writer.Write(JsonSerializer.Serialize(evt));
+            writer.Write(JsonSerializer.Serialize(evt, LeanLuceneJsonContext.Default.SearchEvent));
             first = false;
         }
         writer.Write(']');

@@ -1,4 +1,5 @@
-﻿using System.Text.Json;
+using System.Text.Json;
+using Rowles.LeanLucene.Serialization;
 using Rowles.LeanLucene.Analysis.Analysers;
 using Rowles.LeanLucene.Document;
 using Rowles.LeanLucene.Store;
@@ -419,18 +420,19 @@ public sealed partial class IndexWriter : IDisposable
         var segmentIds = new List<string>(_committedSegments.Count);
         foreach (var seg in _committedSegments)
             segmentIds.Add(seg.SegmentId);
-        var commitData = JsonSerializer.Serialize(new CommitData
+        var commitData = new CommitData
         {
             Segments = segmentIds,
             Generation = generation,
             ContentToken = _contentToken
-        });
+        };
+        var commitJson = JsonSerializer.Serialize(commitData, LeanLuceneJsonContext.Default.CommitData);
 
         // Append a CRC32 trailer so torn writes (where the JSON byte-tail survives but
         // the rename did not flush) can be detected on recovery. The trailer line is
         // optional on read, for backward compatibility with files written before this
         // line was added.
-        var fileContent = CommitFileFormat.Wrap(commitData);
+        var fileContent = CommitFileFormat.Wrap(commitJson);
 
         if (_config.DurableCommits)
         {
@@ -694,12 +696,5 @@ public sealed partial class IndexWriter : IDisposable
 
             _committedSegments.Add(seg);
         }
-    }
-
-    private sealed class CommitData
-    {
-        public List<string> Segments { get; set; } = [];
-        public int Generation { get; set; }
-        public long ContentToken { get; set; }
     }
 }

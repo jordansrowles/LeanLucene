@@ -1,16 +1,10 @@
-﻿using System.Text.Json;
-using System.Text.Json.Serialization;
+using System.Text.Json;
+using Rowles.LeanLucene.Serialization;
 
 namespace Rowles.LeanLucene.Search.Scoring;
 
 internal sealed class SegmentStats
 {
-    private static readonly JsonSerializerOptions s_jsonOptions = new()
-    {
-        WriteIndented = false,
-        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
-    };
-
     internal SegmentStats(
         int totalDocCount,
         int liveDocCount,
@@ -71,7 +65,7 @@ internal sealed class SegmentStats
             FieldDocCounts = FieldDocCounts,
         };
 
-        var json = JsonSerializer.Serialize(dto, s_jsonOptions);
+        var json = JsonSerializer.Serialize(dto, LeanLuceneJsonContext.Default.SegmentStatsDto);
         var tempPath = path + ".tmp";
         File.WriteAllText(tempPath, json);
         File.Move(tempPath, path, overwrite: true);
@@ -85,7 +79,7 @@ internal sealed class SegmentStats
         try
         {
             var json = File.ReadAllText(path);
-            var dto = JsonSerializer.Deserialize<SegmentStatsDto>(json, s_jsonOptions);
+            var dto = JsonSerializer.Deserialize(json, LeanLuceneJsonContext.Default.SegmentStatsDto);
             if (dto is null)
                 return null;
 
@@ -111,19 +105,4 @@ internal sealed class SegmentStats
 
     internal static string GetStatsPath(string directoryPath, string segmentId)
         => Path.Combine(directoryPath, $"{segmentId}.stats.json");
-
-    private sealed class SegmentStatsDto
-    {
-        [JsonPropertyName("totalDocCount")]
-        public int TotalDocCount { get; set; }
-
-        [JsonPropertyName("liveDocCount")]
-        public int LiveDocCount { get; set; }
-
-        [JsonPropertyName("fieldLengthSums")]
-        public Dictionary<string, long>? FieldLengthSums { get; set; }
-
-        [JsonPropertyName("fieldDocCounts")]
-        public Dictionary<string, int>? FieldDocCounts { get; set; }
-    }
 }

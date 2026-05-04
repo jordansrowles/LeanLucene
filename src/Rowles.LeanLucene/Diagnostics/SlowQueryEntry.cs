@@ -8,6 +8,3 @@ internal sealed class SlowQueryEntry
     public double ElapsedMs { get; init; }
     public int TotalHits { get; init; }
 }
-
-[System.Text.Json.Serialization.JsonSerializable(typeof(SlowQueryEntry))]
-internal sealed partial class SlowQueryJsonContext : System.Text.Json.Serialization.JsonSerializerContext;

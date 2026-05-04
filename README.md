@@ -1,6 +1,7 @@
 # Rowles.LeanLucene
 
-![NuGet Version](https://img.shields.io/nuget/v/LeanLucene?style=flat-square) [![Build](https://github.com/jordansrowles/LeanLucene/actions/workflows/build.yml/badge.svg)](https://github.com/jordansrowles/LeanLucene/actions/workflows/build.yml)
+![NuGet Version](https://img.shields.io/nuget/v/LeanLucene?link=https%3A%2F%2Fwww.nuget.org%2Fpackages%2FLeanLucene%2F)
+ [![Build](https://github.com/jordansrowles/LeanLucene/actions/workflows/build.yml/badge.svg)](https://github.com/jordansrowles/LeanLucene/actions/workflows/build.yml)  ![](https://img.shields.io/badge/AOT%20Compatible-8A2BE2)
 
 A .NET-native full-text search engine. Segment-centric indexing, memory-mapped reads, and atomic commit semantics. Targets `net10.0` and `net11.0`. The only external dependency for the core library is [NativeCompressions](https://www.nuget.org/packages/NativeCompressions) (LZ4 + Zstandard). Everything else uses BCL types.
 
@@ -13,6 +14,7 @@ A .NET-native full-text search engine. Segment-centric indexing, memory-mapped r
 | `Rowles.LeanLucene.Benchmarks` | BenchmarkDotNet suites, compared against Lucene.NET |
 | `Rowles.LeanLucene.Example.JsonApi` | ASP.NET Minimal API example |
 | `Rowles.LeanLucene.Example.Telemetry` | OpenTelemetry traces, metrics and structured logs example |
+| `Rowles.LeanLucene.Example.NativeAot` | Native AOT smoke executable |
 
 ## Building and Testing
 
@@ -20,6 +22,20 @@ A .NET-native full-text search engine. Segment-centric indexing, memory-mapped r
 dotnet build
 dotnet test
 ```
+
+## Native AOT
+
+`Rowles.LeanLucene` is marked AOT-compatible for `net10.0` and `net11.0`. The core library avoids reflection-based JSON metadata and is validated by a dedicated console smoke executable rather than the ASP.NET JSON API example.
+
+Run the local smoke check with:
+
+```powershell
+.\scripts\aot-smoke.ps1
+```
+
+This publishes `src\examples\Rowles.LeanLucene.Example.NativeAot\Rowles.LeanLucene.Example.NativeAot.csproj` for `win-x64` with `PublishAot=true`, then runs the native executable. The smoke executable indexes, commits, reopens, searches, reads stored fields, writes diagnostics, and exercises `FieldCompressionPolicy.None`, `FieldCompressionPolicy.Lz4`, and `FieldCompressionPolicy.Zstandard`.
+
+Compression support uses `NativeCompressions`, so Native AOT publishes can include RID-specific native sidecar binaries such as LZ4 and Zstandard libraries.
 
 ## Quick Start
 

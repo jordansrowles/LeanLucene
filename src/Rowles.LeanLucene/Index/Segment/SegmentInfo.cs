@@ -1,4 +1,5 @@
-﻿using System.Text.Json;
+using System.Text.Json;
+using Rowles.LeanLucene.Serialization;
 
 namespace Rowles.LeanLucene.Index.Segment;
 
@@ -42,7 +43,7 @@ public sealed class SegmentInfo
     /// <param name="filePath">The path of the <c>.seg</c> file to write.</param>
     public void WriteTo(string filePath)
     {
-        var json = JsonSerializer.Serialize(this);
+        var json = JsonSerializer.Serialize(this, LeanLuceneJsonContext.Default.SegmentInfo);
         File.WriteAllText(filePath, json);
     }
 
@@ -53,7 +54,7 @@ public sealed class SegmentInfo
     public static SegmentInfo ReadFrom(string filePath)
     {
         var json = File.ReadAllText(filePath);
-        return JsonSerializer.Deserialize<SegmentInfo>(json)
+        return JsonSerializer.Deserialize(json, LeanLuceneJsonContext.Default.SegmentInfo)
             ?? throw new InvalidDataException("Failed to deserialise segment info.");
     }
 }
