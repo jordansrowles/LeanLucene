@@ -1,60 +1,52 @@
-﻿using System.Buffers;
-
 namespace Rowles.LeanLucene.Analysis.Analysers;
 
 /// <summary>
 /// Analyser that splits text into letter-only tokens and lowercases them without stop-word removal.
+/// The returned token list is reused across calls; callers must not hold
+/// references to it beyond the current invocation.
+///
+/// Thread-safety: This class maintains instance-level buffers for performance.
+/// Each instance should be used by a single thread, or callers should create
+/// separate instances per thread.
 /// </summary>
 public sealed class SimpleAnalyser : IAnalyser
 {
     private readonly LetterTokeniser _tokeniser = new();
+    private readonly List<(int Start, int End)> _offsetBuf = new();
+    private readonly List<Token> _tokensBuf = new();
+    private readonly TokenTextCache _internCache;
+    private char[] _lowerBuf = new char[64];
+
+    /// <summary>
+    /// Initialises a new <see cref="SimpleAnalyser"/>.
+    /// </summary>
+    /// <param name="internCacheSize">Maximum number of token strings retained for reuse. Defaults to 4096.</param>
+    public SimpleAnalyser(int internCacheSize = 4096)
+    {
+        _internCache = new TokenTextCache(internCacheSize);
+    }
 
     /// <inheritdoc/>
     public List<Token> Analyse(ReadOnlySpan<char> input)
     {
-        var tokens = _tokeniser.Tokenise(input);
+        _tokeniser.TokeniseOffsets(input, _offsetBuf);
 
-        char[]? rented = null;
-        try
+        _tokensBuf.Clear();
+        if (_tokensBuf.Capacity < _offsetBuf.Count)
+            _tokensBuf.Capacity = _offsetBuf.Count;
+
+        for (int i = 0; i < _offsetBuf.Count; i++)
         {
-            for (int i = 0; i < tokens.Count; i++)
-            {
-                var token = tokens[i];
-                var span = token.Text.AsSpan();
-                int length = span.Length;
+            var (start, end) = _offsetBuf[i];
+            int length = end - start;
+            if (length > _lowerBuf.Length)
+                _lowerBuf = new char[Math.Max(_lowerBuf.Length * 2, length)];
 
-                Span<char> buffer = GetRentedBuffer(ref rented, Math.Max(length, 64)).AsSpan(0, length);
-
-                bool changed = false;
-                for (int j = 0; j < length; j++)
-                {
-                    char lower = char.ToLowerInvariant(span[j]);
-                    buffer[j] = lower;
-                    changed |= lower != span[j];
-                }
-
-                if (changed)
-                    tokens[i] = new Token(new string(buffer), token.StartOffset, token.EndOffset);
-            }
-        }
-        finally
-        {
-            if (rented is not null)
-                ArrayPool<char>.Shared.Return(rented);
+            input.Slice(start, length).ToLowerInvariant(_lowerBuf.AsSpan(0, length));
+            string text = _internCache.GetOrAdd(_lowerBuf.AsSpan(0, length));
+            _tokensBuf.Add(new Token(text, start, end));
         }
 
-        return tokens;
-    }
-
-    private static char[] GetRentedBuffer(ref char[]? rented, int length)
-    {
-        if (rented is not null && rented.Length >= length)
-            return rented;
-
-        if (rented is not null)
-            ArrayPool<char>.Shared.Return(rented);
-
-        rented = ArrayPool<char>.Shared.Rent(length);
-        return rented;
+        return _tokensBuf;
     }
 }

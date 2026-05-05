@@ -167,6 +167,9 @@ public sealed partial class IndexWriter
         IAnalyser threadLocalDefaultAnalyser = _defaultAnalyser switch
         {
             StandardAnalyser => new StandardAnalyser(_config.AnalyserInternCacheSize, _config.StopWords),
+            WhitespaceAnalyser => new WhitespaceAnalyser(_config.AnalyserInternCacheSize),
+            KeywordAnalyser => new KeywordAnalyser(_config.AnalyserInternCacheSize),
+            SimpleAnalyser => new SimpleAnalyser(_config.AnalyserInternCacheSize),
             StemmedAnalyser => new StemmedAnalyser(),
             _ => _defaultAnalyser
         };
@@ -177,6 +180,9 @@ public sealed partial class IndexWriter
             threadLocalFieldAnalysers[kvp.Key] = kvp.Value switch
             {
                 StandardAnalyser => new StandardAnalyser(),
+                WhitespaceAnalyser => new WhitespaceAnalyser(),
+                KeywordAnalyser => new KeywordAnalyser(),
+                SimpleAnalyser => new SimpleAnalyser(),
                 StemmedAnalyser => new StemmedAnalyser(),
                 _ => kvp.Value
             };
