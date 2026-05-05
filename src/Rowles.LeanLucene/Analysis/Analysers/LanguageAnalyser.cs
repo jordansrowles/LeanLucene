@@ -17,6 +17,7 @@ public sealed class LanguageAnalyser : IAnalyser
     private readonly ITokeniser _tokeniser;
     private readonly StopWordFilter _stopWordFilter;
     private readonly IStemmer? _stemmer;
+    private readonly KeywordMarkerFilter? _keywordMarker;
 
     /// <summary>
     /// Initialises a new <see cref="LanguageAnalyser"/> with the specified tokeniser, stop words, and optional stemmer.
@@ -24,12 +25,14 @@ public sealed class LanguageAnalyser : IAnalyser
     /// <param name="tokeniser">The tokeniser used to split input text into raw tokens.</param>
     /// <param name="stopWords">Stop words to remove, or <see langword="null"/> to use the default English list.</param>
     /// <param name="stemmer">Optional stemmer to reduce tokens to their root form, or <see langword="null"/> to skip stemming.</param>
+    /// <param name="keywordMarker">Optional keyword marker used to skip stemming for selected token text.</param>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="tokeniser"/> is <see langword="null"/>.</exception>
-    public LanguageAnalyser(ITokeniser tokeniser, IEnumerable<string>? stopWords, IStemmer? stemmer)
+    public LanguageAnalyser(ITokeniser tokeniser, IEnumerable<string>? stopWords, IStemmer? stemmer, KeywordMarkerFilter? keywordMarker = null)
     {
         _tokeniser = tokeniser ?? throw new ArgumentNullException(nameof(tokeniser));
         _stopWordFilter = new StopWordFilter(stopWords);
         _stemmer = stemmer;
+        _keywordMarker = keywordMarker;
     }
 
     /// <inheritdoc/>
@@ -59,7 +62,7 @@ public sealed class LanguageAnalyser : IAnalyser
                 if (_stopWordFilter.IsStopWord(text))
                     continue;
 
-                if (_stemmer is not null)
+                if (_stemmer is not null && (_keywordMarker is null || !_keywordMarker.IsKeyword(text)))
                     text = _stemmer.Stem(text);
 
                 result.Add(new Token(text, t.StartOffset, t.EndOffset));
