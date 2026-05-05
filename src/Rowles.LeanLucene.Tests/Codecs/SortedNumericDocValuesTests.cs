@@ -1,3 +1,4 @@
+using Rowles.LeanLucene.Codecs;
 using Rowles.LeanLucene.Codecs.DocValues;
 
 namespace Rowles.LeanLucene.Tests.Codecs;
@@ -52,5 +53,54 @@ public sealed class SortedNumericDocValuesTests : IDisposable
     {
         var result = SortedNumericDocValuesReader.Read(Path.Combine(_dir, "missing.dsn"));
         Assert.Empty(result);
+    }
+
+    /// <summary>
+    /// Verifies corrupt document offsets cannot silently skip stored values.
+    /// </summary>
+    [Fact(DisplayName = "Read: Invalid Initial Offset Throws")]
+    public void Read_InvalidInitialOffset_Throws()
+    {
+        const string fieldName = "score";
+        var path = Path.Combine(_dir, "corrupt.dsn");
+        IReadOnlyList<double>?[] scores =
+        [
+            [1, 2]
+        ];
+        var fields = new Dictionary<string, IReadOnlyList<double>?[]>
+        {
+            [fieldName] = scores
+        };
+
+        SortedNumericDocValuesWriter.Write(path, fields, 1);
+        OverwriteInt32(path, StartsOffset(fieldName), 1);
+
+        Assert.Throws<InvalidDataException>(() => SortedNumericDocValuesReader.Read(path));
+    }
+
+    private static int StartsOffset(string fieldName)
+    {
+        int byteCount = System.Text.Encoding.UTF8.GetByteCount(fieldName);
+        return CodecConstants.HeaderSize + sizeof(int) + VarIntLength(byteCount) + byteCount + sizeof(int);
+    }
+
+    private static int VarIntLength(int value)
+    {
+        uint remaining = (uint)value;
+        int length = 1;
+        while (remaining >= 0x80)
+        {
+            remaining >>= 7;
+            length++;
+        }
+
+        return length;
+    }
+
+    private static void OverwriteInt32(string path, int offset, int value)
+    {
+        var bytes = File.ReadAllBytes(path);
+        BitConverter.TryWriteBytes(bytes.AsSpan(offset, sizeof(int)), value);
+        File.WriteAllBytes(path, bytes);
     }
 }

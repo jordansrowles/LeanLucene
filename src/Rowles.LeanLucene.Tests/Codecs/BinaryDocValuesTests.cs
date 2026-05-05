@@ -1,3 +1,4 @@
+using Rowles.LeanLucene.Codecs;
 using Rowles.LeanLucene.Codecs.DocValues;
 
 namespace Rowles.LeanLucene.Tests.Codecs;
@@ -54,5 +55,54 @@ public sealed class BinaryDocValuesTests : IDisposable
     {
         var result = BinaryDocValuesReader.Read(Path.Combine(_dir, "missing.dvb"));
         Assert.Empty(result);
+    }
+
+    /// <summary>
+    /// Verifies corrupt document offsets are rejected before values are exposed.
+    /// </summary>
+    [Fact(DisplayName = "Read: Invalid Terminal Offset Throws")]
+    public void Read_InvalidTerminalOffset_Throws()
+    {
+        const string fieldName = "stored";
+        var path = Path.Combine(_dir, "corrupt.dvb");
+        IReadOnlyList<byte[]>?[] values =
+        [
+            [System.Text.Encoding.UTF8.GetBytes("alpha")]
+        ];
+        var fields = new Dictionary<string, IReadOnlyList<byte[]>?[]>
+        {
+            [fieldName] = values
+        };
+
+        BinaryDocValuesWriter.Write(path, fields, 1);
+        OverwriteInt32(path, StartsOffset(fieldName) + sizeof(int), 0);
+
+        Assert.Throws<InvalidDataException>(() => BinaryDocValuesReader.Read(path));
+    }
+
+    private static int StartsOffset(string fieldName)
+    {
+        int byteCount = System.Text.Encoding.UTF8.GetByteCount(fieldName);
+        return CodecConstants.HeaderSize + sizeof(int) + VarIntLength(byteCount) + byteCount + sizeof(int);
+    }
+
+    private static int VarIntLength(int value)
+    {
+        uint remaining = (uint)value;
+        int length = 1;
+        while (remaining >= 0x80)
+        {
+            remaining >>= 7;
+            length++;
+        }
+
+        return length;
+    }
+
+    private static void OverwriteInt32(string path, int offset, int value)
+    {
+        var bytes = File.ReadAllBytes(path);
+        BitConverter.TryWriteBytes(bytes.AsSpan(offset, sizeof(int)), value);
+        File.WriteAllBytes(path, bytes);
     }
 }

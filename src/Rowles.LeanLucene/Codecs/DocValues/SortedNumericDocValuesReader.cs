@@ -96,6 +96,9 @@ internal static class SortedNumericDocValuesReader
 
     private static void ValidateStarts(int[] starts, int totalValues, string fieldName)
     {
+        if (starts[0] != 0)
+            throw new InvalidDataException($"Invalid sorted-numeric DocValues offsets for field '{fieldName}'.");
+
         int previous = 0;
         for (int i = 0; i < starts.Length; i++)
         {

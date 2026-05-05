@@ -68,6 +68,9 @@ internal static class BinaryDocValuesReader
 
     private static void ValidateStarts(int[] starts, int totalValues, string fieldName)
     {
+        if (starts[0] != 0)
+            throw new InvalidDataException($"Invalid binary DocValues offsets for field '{fieldName}'.");
+
         int previous = 0;
         for (int i = 0; i < starts.Length; i++)
         {
@@ -76,6 +79,9 @@ internal static class BinaryDocValuesReader
                 throw new InvalidDataException($"Invalid binary DocValues offsets for field '{fieldName}'.");
             previous = current;
         }
+
+        if (starts[^1] != totalValues)
+            throw new InvalidDataException($"Invalid binary DocValues terminal offset for field '{fieldName}'.");
     }
 
     private static string ReadString(IndexInput input)
