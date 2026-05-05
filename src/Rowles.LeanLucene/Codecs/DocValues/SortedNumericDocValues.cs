@@ -1,3 +1,4 @@
+using System.Buffers;
 using Rowles.LeanLucene.Store;
 
 namespace Rowles.LeanLucene.Codecs.DocValues;
@@ -38,11 +39,25 @@ internal static class SortedNumericDocValuesWriter
             if ((uint)docId >= (uint)values.Length || values[docId] is not { Count: > 0 } source)
                 continue;
 
-            var copy = new double[source.Count];
-            for (int i = 0; i < source.Count; i++)
-                copy[i] = source[i];
-            Array.Sort(copy);
-            flattened.AddRange(copy);
+            if (IsSorted(source))
+            {
+                flattened.AddRange(source);
+                continue;
+            }
+
+            var copy = ArrayPool<double>.Shared.Rent(source.Count);
+            try
+            {
+                for (int i = 0; i < source.Count; i++)
+                    copy[i] = source[i];
+                Array.Sort(copy, 0, source.Count);
+                for (int i = 0; i < source.Count; i++)
+                    flattened.Add(copy[i]);
+            }
+            finally
+            {
+                ArrayPool<double>.Shared.Return(copy);
+            }
         }
         starts[docCount] = flattened.Count;
 
@@ -51,6 +66,17 @@ internal static class SortedNumericDocValuesWriter
 
         output.WriteInt32(flattened.Count);
         WritePackedDoubles(output, flattened);
+    }
+
+    private static bool IsSorted(IReadOnlyList<double> values)
+    {
+        for (int i = 1; i < values.Count; i++)
+        {
+            if (values[i - 1].CompareTo(values[i]) > 0)
+                return false;
+        }
+
+        return true;
     }
 
     private static void WritePackedDoubles(IndexOutput output, IReadOnlyList<double> values)
