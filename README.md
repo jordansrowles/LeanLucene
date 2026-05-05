@@ -126,10 +126,15 @@ Built-in analysers:
 - `StandardAnalyser` - configurable stop words and intern cache size
 - `StemmedAnalyser` - wraps any stemmer
 - `LanguageAnalyser` - language-specific pipelines
+- `WhitespaceAnalyser` - splits only on whitespace, preserving punctuation and case
+- `KeywordAnalyser` - treats the complete field value as a single token
+- `SimpleAnalyser` - letter-only tokenisation with lowercase normalisation
 
 Built-in stemmers: English, French, German, Spanish, Italian, Portuguese, Dutch, Russian, and Arabic.
 
-Built-in tokenisers: standard, N-gram, edge N-gram, CJK bigram.
+Built-in tokenisers: standard, whitespace, keyword, letter, N-gram, edge N-gram, CJK bigram.
+
+Built-in token filters include lowercase, stop-word removal, Porter stemming, accent folding, synonym graphs, length filtering, token truncation, unique-token filtering, elision removal, reverse-string filtering, keyword marking, decimal digit normalisation, shingles, and word delimiter splitting.
 
 Character filters can be added to `IndexWriterConfig.CharFilters` and run before tokenisation. Token budget enforcement is configured via `MaxTokensPerDocument` and `TokenBudgetPolicy` (Truncate or Throw).
 
@@ -307,7 +312,7 @@ Benchmark suites compare LeanLucene against Lucene.NET across indexing, search, 
 .\scripts\benchmark.ps1 -List
 ```
 
-Available suites: `index`, `query`, `analysis`, `boolean`, `phrase`, `prefix`, `fuzzy`, `wildcard`, `deletion`, `suggester`, `schemajson`, `compound`, `indexsort`, `blockjoin`, `gutenberg-analysis`, `gutenberg-index`, `gutenberg-search`, `tokenbudget`, `diagnostics`.
+Available suites: `index`, `query`, `analysis`, `analysis-parity`, `analysis-filters`, `boolean`, `phrase`, `prefix`, `fuzzy`, `wildcard`, `deletion`, `suggester`, `schemajson`, `compound`, `indexsort`, `blockjoin`, `gutenberg-analysis`, `gutenberg-index`, `gutenberg-search`, `tokenbudget`, `diagnostics`.
 
 Output is written to `bench/{machine}/{yyyy-MM-dd}/{HH-mm}/` with JSON, Markdown, HTML, a consolidated `report.json`, and a per-machine `index.json`.
 

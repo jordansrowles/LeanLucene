@@ -57,6 +57,12 @@ internal static class Program
         if (runAll || suites.Contains(BenchmarkSuite.Analysis))
             RunSuite<AnalysisBenchmarks>("analysis", runDir, benchmarkArgs, suiteSummaries, gcDump);
 
+        if (runAll || suites.Contains(BenchmarkSuite.AnalysisParity))
+            RunSuite<AnalyserParityBenchmarks>("analysis-parity", runDir, benchmarkArgs, suiteSummaries, gcDump);
+
+        if (runAll || suites.Contains(BenchmarkSuite.AnalysisFilters))
+            RunSuite<TokenFilterBenchmarks>("analysis-filters", runDir, benchmarkArgs, suiteSummaries, gcDump);
+
         if (runAll || suites.Contains(BenchmarkSuite.Boolean))
             RunSuite<BooleanQueryBenchmarks>("boolean", runDir, benchmarkArgs, suiteSummaries, gcDump);
 
@@ -199,6 +205,8 @@ internal static class Program
               index            IndexingBenchmarks -- bulk indexing throughput (vs Lucene.NET)
               query            TermQueryBenchmarks -- single-term search (vs Lucene.NET)
               analysis         AnalysisBenchmarks -- tokenisation pipeline throughput
+              analysis-parity  AnalyserParityBenchmarks -- lightweight analyser parity throughput
+              analysis-filters TokenFilterBenchmarks -- token filter allocation and throughput
               boolean          BooleanQueryBenchmarks -- Must/Should/MustNot queries
               phrase           PhraseQueryBenchmarks -- exact and slop phrase matching
               prefix           PrefixQueryBenchmarks -- prefix matching (vs Lucene.NET)
@@ -333,6 +341,12 @@ internal static class Program
             return BenchmarkSuite.Query;
         if (value.Equals("analysis", StringComparison.OrdinalIgnoreCase))
             return BenchmarkSuite.Analysis;
+        if (value.Equals("analysisparity", StringComparison.OrdinalIgnoreCase) ||
+            value.Equals("analysis-parity", StringComparison.OrdinalIgnoreCase))
+            return BenchmarkSuite.AnalysisParity;
+        if (value.Equals("analysisfilters", StringComparison.OrdinalIgnoreCase) ||
+            value.Equals("analysis-filters", StringComparison.OrdinalIgnoreCase))
+            return BenchmarkSuite.AnalysisFilters;
         if (value.Equals("boolean", StringComparison.OrdinalIgnoreCase))
             return BenchmarkSuite.Boolean;
         if (value.Equals("phrase", StringComparison.OrdinalIgnoreCase))
@@ -394,6 +408,8 @@ internal static class Program
         Index,
         Query,
         Analysis,
+        AnalysisParity,
+        AnalysisFilters,
         Boolean,
         Phrase,
         Prefix,
