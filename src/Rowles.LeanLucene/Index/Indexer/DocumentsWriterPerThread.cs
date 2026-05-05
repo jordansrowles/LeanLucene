@@ -16,6 +16,9 @@ internal sealed class DocumentsWriterPerThread
     internal readonly Dictionary<string, Dictionary<int, double>> NumericIndex = new();
     internal readonly Dictionary<string, List<double>> NumericDocValues = new(StringComparer.Ordinal);
     internal readonly Dictionary<string, List<string?>> SortedDocValues = new(StringComparer.Ordinal);
+    internal readonly Dictionary<string, Dictionary<int, List<string>>> SortedSetDocValues = new(StringComparer.Ordinal);
+    internal readonly Dictionary<string, Dictionary<int, List<double>>> SortedNumericDocValues = new(StringComparer.Ordinal);
+    internal readonly Dictionary<string, Dictionary<int, List<byte[]>>> BinaryDocValues = new(StringComparer.Ordinal);
     internal readonly Dictionary<string, Dictionary<int, ReadOnlyMemory<float>>> Vectors = new(StringComparer.Ordinal);
     internal readonly HashSet<string> FieldNames = new(StringComparer.Ordinal);
     // Per-field token counts: field → docId → count
@@ -52,6 +55,7 @@ internal sealed class DocumentsWriterPerThread
                     if (tf.IsStored)
                     {
                         AddStored(storedDoc, tf.Name, tf.Value);
+                        AddBinaryDocValue(tf.Name, localDocId, tf.Value);
                         _estimatedRamBytes += tf.Value.Length * 2 + 64;
                     }
                     break;
@@ -60,6 +64,7 @@ internal sealed class DocumentsWriterPerThread
                     if (sf.IsStored)
                     {
                         AddStored(storedDoc, sf.Name, sf.Value);
+                        AddBinaryDocValue(sf.Name, localDocId, sf.Value);
                         _estimatedRamBytes += sf.Value.Length * 2 + 64;
                     }
                     break;
@@ -67,12 +72,15 @@ internal sealed class DocumentsWriterPerThread
                     IndexNumericField(nf.Name, nf.Value, localDocId);
                     if (nf.IsStored)
                     {
-                        AddStored(storedDoc, nf.Name, nf.Value.ToString(System.Globalization.CultureInfo.InvariantCulture));
+                        var storedValue = nf.Value.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                        AddStored(storedDoc, nf.Name, storedValue);
+                        AddBinaryDocValue(nf.Name, localDocId, storedValue);
                         _estimatedRamBytes += 48;
                     }
                     break;
                 case StoredField sf:
                     AddStored(storedDoc, sf.Name, sf.Value);
+                    AddBinaryDocValue(sf.Name, localDocId, sf.Value);
                     _estimatedRamBytes += sf.Value.Length * 2 + 64;
                     break;
                 case VectorField vf:
@@ -84,6 +92,7 @@ internal sealed class DocumentsWriterPerThread
                     if (gf.IsStored)
                     {
                         AddStored(storedDoc, gf.Name, gf.Value);
+                        AddBinaryDocValue(gf.Name, localDocId, gf.Value);
                         _estimatedRamBytes += gf.Value.Length * 2 + 64;
                     }
                     break;
@@ -160,6 +169,7 @@ internal sealed class DocumentsWriterPerThread
         }
         while (dvList.Count <= docId) dvList.Add(null);
         dvList[docId] = value;
+        AddSortedSetDocValue(fieldName, docId, value);
         _estimatedRamBytes += value.Length * 2 + 16;
     }
 
@@ -178,9 +188,61 @@ internal sealed class DocumentsWriterPerThread
             dvList = new List<double>();
             NumericDocValues[fieldName] = dvList;
         }
-        while (dvList.Count < docId) dvList.Add(0);
-        dvList.Add(value);
+        while (dvList.Count <= docId) dvList.Add(0);
+        dvList[docId] = value;
+        AddSortedNumericDocValue(fieldName, docId, value);
         _estimatedRamBytes += 24;
+    }
+
+    private void AddSortedSetDocValue(string fieldName, int docId, string value)
+    {
+        if (!SortedSetDocValues.TryGetValue(fieldName, out var fieldMap))
+        {
+            fieldMap = new Dictionary<int, List<string>>();
+            SortedSetDocValues[fieldName] = fieldMap;
+        }
+
+        if (!fieldMap.TryGetValue(docId, out var values))
+        {
+            values = [];
+            fieldMap[docId] = values;
+        }
+
+        values.Add(value);
+    }
+
+    private void AddSortedNumericDocValue(string fieldName, int docId, double value)
+    {
+        if (!SortedNumericDocValues.TryGetValue(fieldName, out var fieldMap))
+        {
+            fieldMap = new Dictionary<int, List<double>>();
+            SortedNumericDocValues[fieldName] = fieldMap;
+        }
+
+        if (!fieldMap.TryGetValue(docId, out var values))
+        {
+            values = [];
+            fieldMap[docId] = values;
+        }
+
+        values.Add(value);
+    }
+
+    private void AddBinaryDocValue(string fieldName, int docId, string value)
+    {
+        if (!BinaryDocValues.TryGetValue(fieldName, out var fieldMap))
+        {
+            fieldMap = new Dictionary<int, List<byte[]>>();
+            BinaryDocValues[fieldName] = fieldMap;
+        }
+
+        if (!fieldMap.TryGetValue(docId, out var values))
+        {
+            values = [];
+            fieldMap[docId] = values;
+        }
+
+        values.Add(System.Text.Encoding.UTF8.GetBytes(value));
     }
 
     private void IndexVectorField(string fieldName, ReadOnlyMemory<float> value, int docId)

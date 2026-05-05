@@ -42,6 +42,9 @@ public sealed partial class IndexWriter : IDisposable
     // DocValues accumulators: field → per-doc values
     private Dictionary<string, List<double>> _numericDocValues = new(StringComparer.Ordinal);
     private Dictionary<string, List<string?>> _sortedDocValues = new(StringComparer.Ordinal);
+    private Dictionary<string, Dictionary<int, List<string>>> _sortedSetDocValues = new(StringComparer.Ordinal);
+    private Dictionary<string, Dictionary<int, List<double>>> _sortedNumericDocValues = new(StringComparer.Ordinal);
+    private Dictionary<string, Dictionary<int, List<byte[]>>> _binaryDocValues = new(StringComparer.Ordinal);
     private readonly Dictionary<string, IAnalyser> _analyserCache = new(StringComparer.Ordinal);
     private readonly List<string> _sortedTermsBuffer = new(capacity: 10000);
     // Parent bitset for block-join indexing: tracks which buffered doc IDs are parent docs
@@ -655,6 +658,9 @@ public sealed partial class IndexWriter : IDisposable
         _bufferedVectors.Clear();
         _numericDocValues.Clear();
         _sortedDocValues.Clear();
+        _sortedSetDocValues.Clear();
+        _sortedNumericDocValues.Clear();
+        _binaryDocValues.Clear();
         _sortedTermsBuffer.Clear();
         _bufferedDocCount = 0;
         _estimatedRamBytes = 0;

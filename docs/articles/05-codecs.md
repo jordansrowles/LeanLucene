@@ -19,6 +19,9 @@ format version from `CodecConstants`.
 | `.bkd` | BKD tree | Point index for fast numeric range queries. |
 | `.dvn` | Numeric DocValues | Single-valued numeric column data for sorting and aggregations. |
 | `.dvs` | Sorted DocValues | Single-valued string ordinal columns for sorting, faceting, and collapse. |
+| `.dss` | Sorted-set DocValues | Multi-valued string ordinal columns for repeated `StringField` values, used by facets and deterministic sort/collapse fallback. |
+| `.dsn` | Sorted-numeric DocValues | Multi-valued numeric columns for repeated `NumericField` values, used by aggregations and deterministic numeric sort fallback. |
+| `.dvb` | Binary DocValues | Multi-valued UTF-8 byte columns derived from stored-field payloads, used before stored-field scans for string facets and grouping fallback. |
 | `.vec` | Vectors | Per-field dense vector payloads used by vector search. |
 | `.hnsw` | HNSW graph | Approximate nearest-neighbour graph for vector search. |
 | `.tvd` | Term vectors data | Optional per-document term vector payloads. |

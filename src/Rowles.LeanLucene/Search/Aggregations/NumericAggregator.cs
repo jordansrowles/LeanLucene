@@ -55,7 +55,17 @@ public static class NumericAggregator
             var reader = readers[readerIdx];
             int localDocId = globalDocId - docBases[readerIdx];
 
-            if (reader.TryGetNumericValue(req.Field, localDocId, out double value))
+            if (reader.TryGetSortedNumericDocValues(req.Field, localDocId, out var values))
+            {
+                foreach (double value in values)
+                {
+                    count++;
+                    if (value < min) min = value;
+                    if (value > max) max = value;
+                    sum += value;
+                }
+            }
+            else if (reader.TryGetNumericValue(req.Field, localDocId, out double value))
             {
                 count++;
                 if (value < min) min = value;
@@ -97,7 +107,17 @@ public static class NumericAggregator
             var reader = readers[readerIdx];
             int localDocId = globalDocId - docBases[readerIdx];
 
-            if (reader.TryGetNumericValue(req.Field, localDocId, out double value))
+            if (reader.TryGetSortedNumericDocValues(req.Field, localDocId, out var docValues))
+            {
+                foreach (double value in docValues)
+                {
+                    values.Add(value);
+                    if (value < min) min = value;
+                    if (value > max) max = value;
+                    sum += value;
+                }
+            }
+            else if (reader.TryGetNumericValue(req.Field, localDocId, out double value))
             {
                 values.Add(value);
                 if (value < min) min = value;

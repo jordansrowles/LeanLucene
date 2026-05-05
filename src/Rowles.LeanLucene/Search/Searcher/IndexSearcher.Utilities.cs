@@ -212,9 +212,26 @@ public sealed partial class IndexSearcher
 
             foreach (var facetField in facetFields)
             {
-                if (reader.TryGetSortedDocValue(facetField, localDocId, out string val) && !string.IsNullOrEmpty(val))
+                if (reader.TryGetSortedSetDocValues(facetField, localDocId, out var setValues))
+                {
+                    foreach (var value in setValues)
+                    {
+                        if (!string.IsNullOrEmpty(value))
+                            facetsCollector.Collect(facetField, value);
+                    }
+                }
+                else if (reader.TryGetSortedDocValue(facetField, localDocId, out string val) && !string.IsNullOrEmpty(val))
                 {
                     facetsCollector.Collect(facetField, val);
+                }
+                else if (reader.TryGetBinaryDocValues(facetField, localDocId, out var binaryValues))
+                {
+                    foreach (var value in binaryValues)
+                    {
+                        var decoded = System.Text.Encoding.UTF8.GetString(value);
+                        if (!string.IsNullOrEmpty(decoded))
+                            facetsCollector.Collect(facetField, decoded);
+                    }
                 }
                 else
                 {
@@ -277,8 +294,7 @@ public sealed partial class IndexSearcher
             var reader = _readers[readerIdx];
             int localDocId = scoreDoc.DocId - _docBases[readerIdx];
 
-            if (!reader.TryGetSortedDocValue(collapse.FieldName, localDocId, out string groupValue))
-                groupValue = "__null__";
+            string groupValue = ResolveCollapseValue(reader, collapse.FieldName, localDocId);
 
             if (!bestPerGroup.TryGetValue(groupValue, out var existing))
             {
@@ -300,6 +316,20 @@ public sealed partial class IndexSearcher
             .ToArray();
 
         return new TopDocs(bestPerGroup.Count, collapsed);
+    }
+
+    private static string ResolveCollapseValue(Index.Segment.SegmentReader reader, string fieldName, int localDocId)
+    {
+        if (reader.TryGetSortedDocValue(fieldName, localDocId, out string value))
+            return value;
+
+        if (reader.TryGetSortedSetDocValues(fieldName, localDocId, out var setValues) && setValues.Count > 0)
+            return setValues[0];
+
+        if (reader.TryGetBinaryDocValues(fieldName, localDocId, out var binaryValues) && binaryValues.Count > 0)
+            return System.Text.Encoding.UTF8.GetString(binaryValues[0]);
+
+        return "__null__";
     }
 
     private TopDocs SearchAllMatches(Query query, int minimumCapacity)

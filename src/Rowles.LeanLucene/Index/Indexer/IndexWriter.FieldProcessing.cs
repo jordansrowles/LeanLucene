@@ -169,6 +169,8 @@ public sealed partial class IndexWriter
         }
         while (dvList.Count <= docId) dvList.Add(null);
         dvList[docId] = value;
+
+        AddSortedSetDocValue(fieldName, docId, value);
     }
 
     private void IndexNumericField(string fieldName, double value, int docId)
@@ -186,10 +188,12 @@ public sealed partial class IndexWriter
             dvList = new List<double>();
             _numericDocValues[fieldName] = dvList;
         }
-        // Pad with 0 for any skipped docs
-        while (dvList.Count < docId)
+        // Pad with 0 for any skipped docs.
+        while (dvList.Count <= docId)
             dvList.Add(0);
-        dvList.Add(value);
+        dvList[docId] = value;
+
+        AddSortedNumericDocValue(fieldName, docId, value);
     }
 
     private void WriteNumericIndex(string filePath)
@@ -223,6 +227,58 @@ public sealed partial class IndexWriter
         }
         _sfFieldIds.Add(fid);
         _sfValues.Add(value);
+        AddBinaryDocValue(fieldName, _bufferedDocCount, value);
+    }
+
+    private void AddSortedSetDocValue(string fieldName, int docId, string value)
+    {
+        if (!_sortedSetDocValues.TryGetValue(fieldName, out var fieldMap))
+        {
+            fieldMap = new Dictionary<int, List<string>>();
+            _sortedSetDocValues[fieldName] = fieldMap;
+        }
+
+        if (!fieldMap.TryGetValue(docId, out var values))
+        {
+            values = [];
+            fieldMap[docId] = values;
+        }
+
+        values.Add(value);
+    }
+
+    private void AddSortedNumericDocValue(string fieldName, int docId, double value)
+    {
+        if (!_sortedNumericDocValues.TryGetValue(fieldName, out var fieldMap))
+        {
+            fieldMap = new Dictionary<int, List<double>>();
+            _sortedNumericDocValues[fieldName] = fieldMap;
+        }
+
+        if (!fieldMap.TryGetValue(docId, out var values))
+        {
+            values = [];
+            fieldMap[docId] = values;
+        }
+
+        values.Add(value);
+    }
+
+    private void AddBinaryDocValue(string fieldName, int docId, string value)
+    {
+        if (!_binaryDocValues.TryGetValue(fieldName, out var fieldMap))
+        {
+            fieldMap = new Dictionary<int, List<byte[]>>();
+            _binaryDocValues[fieldName] = fieldMap;
+        }
+
+        if (!fieldMap.TryGetValue(docId, out var values))
+        {
+            values = [];
+            fieldMap[docId] = values;
+        }
+
+        values.Add(System.Text.Encoding.UTF8.GetBytes(value));
     }
 
     private string CanonicaliseTerm(string term)

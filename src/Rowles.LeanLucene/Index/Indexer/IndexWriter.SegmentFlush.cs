@@ -286,6 +286,15 @@ public sealed partial class IndexWriter
             SortedDocValuesWriter.Write(basePath + ".dvs", dvs, _bufferedDocCount);
         }
 
+        if (_sortedSetDocValues.Count > 0)
+            SortedSetDocValuesWriter.Write(basePath + ".dss", ToDenseMultiValueColumns(_sortedSetDocValues, _bufferedDocCount), _bufferedDocCount);
+
+        if (_sortedNumericDocValues.Count > 0)
+            SortedNumericDocValuesWriter.Write(basePath + ".dsn", ToDenseMultiValueColumns(_sortedNumericDocValues, _bufferedDocCount), _bufferedDocCount);
+
+        if (_binaryDocValues.Count > 0)
+            BinaryDocValuesWriter.Write(basePath + ".dvb", ToDenseMultiValueColumns(_binaryDocValues, _bufferedDocCount), _bufferedDocCount);
+
         // Write BKD tree for numeric fields (.bkd).
         // Source from the sparse numeric index so docs without a value are not padded
         // with a synthetic zero. This is what makes BKD safe to use on the read path.
@@ -481,6 +490,11 @@ public sealed partial class IndexWriter
             _sortedDocValues[field] = reordered;
         }
 
+        // 5a. Remap richer multi-valued doc values.
+        RemapMultiValuedDocValues(_sortedSetDocValues, sortPerm, n);
+        RemapMultiValuedDocValues(_sortedNumericDocValues, sortPerm, n);
+        RemapMultiValuedDocValues(_binaryDocValues, sortPerm, n);
+
         // 6. Remap numeric index (field → docId → value)
         foreach (var (field, docMap) in _numericIndex)
         {
@@ -509,6 +523,50 @@ public sealed partial class IndexWriter
                 newOuter[fieldName] = remapped;
             }
             _bufferedVectors = newOuter;
+        }
+    }
+
+    private static Dictionary<string, IReadOnlyList<T>?[]> ToDenseMultiValueColumns<T>(
+        Dictionary<string, Dictionary<int, List<T>>> source,
+        int docCount)
+    {
+        var dense = new Dictionary<string, IReadOnlyList<T>?[]>(source.Count, StringComparer.Ordinal);
+        foreach (var (field, sparseDocs) in source)
+        {
+            var values = new IReadOnlyList<T>?[docCount];
+            bool hasAnyValue = false;
+            foreach (var (docId, docValues) in sparseDocs)
+            {
+                if ((uint)docId >= (uint)docCount || docValues.Count == 0)
+                    continue;
+
+                values[docId] = docValues;
+                hasAnyValue = true;
+            }
+
+            if (hasAnyValue)
+                dense[field] = values;
+        }
+
+        return dense;
+    }
+
+    private static void RemapMultiValuedDocValues<T>(
+        Dictionary<string, Dictionary<int, List<T>>> source,
+        int[] sortPerm,
+        int docCount)
+    {
+        foreach (var (field, docMap) in source)
+        {
+            var remapped = new Dictionary<int, List<T>>(docMap.Count);
+            for (int newDocId = 0; newDocId < docCount; newDocId++)
+            {
+                int oldDocId = sortPerm[newDocId];
+                if (docMap.TryGetValue(oldDocId, out var values))
+                    remapped[newDocId] = values;
+            }
+
+            source[field] = remapped;
         }
     }
 

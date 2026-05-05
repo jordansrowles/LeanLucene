@@ -36,6 +36,9 @@ public sealed partial class SegmentReader : IDisposable
     private Dictionary<string, Util.RoaringBitmap?>? _numericDocValuesPresence;
     private Dictionary<string, string[]>? _sortedDocValues;
     private Dictionary<string, Util.RoaringBitmap?>? _sortedDocValuesPresence;
+    private Dictionary<string, string[][]>? _sortedSetDocValues;
+    private Dictionary<string, double[][]>? _sortedNumericDocValues;
+    private Dictionary<string, byte[][][]>? _binaryDocValues;
     private TermVectorsReader? _termVectorsReader;
     private Codecs.Bkd.BKDReader? _bkdReader;
     private bool _bkdReaderLoaded;

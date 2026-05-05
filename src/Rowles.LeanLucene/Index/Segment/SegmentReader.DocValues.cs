@@ -53,6 +53,48 @@ public sealed partial class SegmentReader
         return _sortedDocValues;
     }
 
+    /// <summary>Lazy-loads sorted-set doc values (.dss).</summary>
+    private Dictionary<string, string[][]> EnsureSortedSetDocValues()
+    {
+        if (_sortedSetDocValues is not null) return _sortedSetDocValues;
+
+        var lockObj = LazyInitializer.EnsureInitialized(ref _lazyInitLock)!;
+        lock (lockObj)
+        {
+            if (_sortedSetDocValues is not null) return _sortedSetDocValues;
+            _sortedSetDocValues = SortedSetDocValuesReader.Read(_basePath + ".dss");
+        }
+        return _sortedSetDocValues;
+    }
+
+    /// <summary>Lazy-loads sorted-numeric doc values (.dsn).</summary>
+    private Dictionary<string, double[][]> EnsureSortedNumericDocValues()
+    {
+        if (_sortedNumericDocValues is not null) return _sortedNumericDocValues;
+
+        var lockObj = LazyInitializer.EnsureInitialized(ref _lazyInitLock)!;
+        lock (lockObj)
+        {
+            if (_sortedNumericDocValues is not null) return _sortedNumericDocValues;
+            _sortedNumericDocValues = SortedNumericDocValuesReader.Read(_basePath + ".dsn");
+        }
+        return _sortedNumericDocValues;
+    }
+
+    /// <summary>Lazy-loads binary doc values (.dvb).</summary>
+    private Dictionary<string, byte[][][]> EnsureBinaryDocValues()
+    {
+        if (_binaryDocValues is not null) return _binaryDocValues;
+
+        var lockObj = LazyInitializer.EnsureInitialized(ref _lazyInitLock)!;
+        lock (lockObj)
+        {
+            if (_binaryDocValues is not null) return _binaryDocValues;
+            _binaryDocValues = BinaryDocValuesReader.Read(_basePath + ".dvb");
+        }
+        return _binaryDocValues;
+    }
+
     /// <summary>
     /// Tries to get a numeric field value for a document from the .num index.
     /// </summary>
@@ -109,6 +151,48 @@ public sealed partial class SegmentReader
         return false;
     }
 
+    /// <summary>
+    /// Tries to get sorted-set DocValues for a document.
+    /// </summary>
+    public bool TryGetSortedSetDocValues(string field, int docId, out IReadOnlyList<string> values)
+    {
+        values = [];
+        var docValues = EnsureSortedSetDocValues();
+        if (!docValues.TryGetValue(field, out var arr) || (uint)docId >= (uint)arr.Length || arr[docId].Length == 0)
+            return false;
+
+        values = arr[docId];
+        return true;
+    }
+
+    /// <summary>
+    /// Tries to get sorted-numeric DocValues for a document.
+    /// </summary>
+    public bool TryGetSortedNumericDocValues(string field, int docId, out IReadOnlyList<double> values)
+    {
+        values = [];
+        var docValues = EnsureSortedNumericDocValues();
+        if (!docValues.TryGetValue(field, out var arr) || (uint)docId >= (uint)arr.Length || arr[docId].Length == 0)
+            return false;
+
+        values = arr[docId];
+        return true;
+    }
+
+    /// <summary>
+    /// Tries to get binary DocValues for a document.
+    /// </summary>
+    public bool TryGetBinaryDocValues(string field, int docId, out IReadOnlyList<byte[]> values)
+    {
+        values = [];
+        var docValues = EnsureBinaryDocValues();
+        if (!docValues.TryGetValue(field, out var arr) || (uint)docId >= (uint)arr.Length || arr[docId].Length == 0)
+            return false;
+
+        values = arr[docId];
+        return true;
+    }
+
     /// <summary>Returns the NumericDocValues array for a field, or null if unavailable.</summary>
     public double[]? GetNumericDocValues(string field)
         => EnsureNumericDocValues().GetValueOrDefault(field);
@@ -116,6 +200,18 @@ public sealed partial class SegmentReader
     /// <summary>Returns the SortedDocValues array for a field, or null if unavailable.</summary>
     public string[]? GetSortedDocValues(string field)
         => EnsureSortedDocValues().GetValueOrDefault(field);
+
+    /// <summary>Returns the SortedSetDocValues array for a field, or null if unavailable.</summary>
+    public string[][]? GetSortedSetDocValues(string field)
+        => EnsureSortedSetDocValues().GetValueOrDefault(field);
+
+    /// <summary>Returns the SortedNumericDocValues array for a field, or null if unavailable.</summary>
+    public double[][]? GetSortedNumericDocValues(string field)
+        => EnsureSortedNumericDocValues().GetValueOrDefault(field);
+
+    /// <summary>Returns the BinaryDocValues array for a field, or null if unavailable.</summary>
+    public byte[][][]? GetBinaryDocValues(string field)
+        => EnsureBinaryDocValues().GetValueOrDefault(field);
 
     /// <summary>
     /// Returns all document IDs that have a numeric value in the given field within the specified range.

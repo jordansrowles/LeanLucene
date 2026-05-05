@@ -101,6 +101,74 @@ public sealed class SortedSearchTests : IClassFixture<TestDirectoryFixture>
     }
 
     /// <summary>
+    /// Verifies string sorting uses the minimum sorted-set value when single-valued DocValues are absent.
+    /// </summary>
+    [Fact(DisplayName = "Search: Sort By Multi Valued String Uses Minimum Value")]
+    public void Search_SortByMultiValuedString_UsesMinimumValue()
+    {
+        var path = SubDir("sort_multival_string");
+        var dir = new MMapDirectory(path);
+        using (var writer = new IndexWriter(dir, new IndexWriterConfig()))
+        {
+            var doc1 = new LeanDocument();
+            doc1.Add(new TextField("body", "item"));
+            doc1.Add(new StringField("id", "doc1"));
+            doc1.Add(new StringField("tag", "zulu"));
+            doc1.Add(new StringField("tag", "alpha"));
+            writer.AddDocument(doc1);
+
+            var doc2 = new LeanDocument();
+            doc2.Add(new TextField("body", "item"));
+            doc2.Add(new StringField("id", "doc2"));
+            doc2.Add(new StringField("tag", "bravo"));
+            writer.AddDocument(doc2);
+            writer.Commit();
+        }
+
+        foreach (var pathToDelete in Directory.GetFiles(path, "seg_*.dvs"))
+            File.Delete(pathToDelete);
+
+        using var searcher = new IndexSearcher(dir);
+        var results = searcher.Search(new TermQuery("body", "item"), 10, SortField.String("tag"));
+
+        Assert.Equal("doc1", searcher.GetStoredFields(results.ScoreDocs[0].DocId)["id"][0]);
+    }
+
+    /// <summary>
+    /// Verifies numeric sorting uses the minimum sorted-numeric value when single-valued DocValues are absent.
+    /// </summary>
+    [Fact(DisplayName = "Search: Sort By Multi Valued Numeric Uses Minimum Value")]
+    public void Search_SortByMultiValuedNumeric_UsesMinimumValue()
+    {
+        var path = SubDir("sort_multival_numeric");
+        var dir = new MMapDirectory(path);
+        using (var writer = new IndexWriter(dir, new IndexWriterConfig()))
+        {
+            var doc1 = new LeanDocument();
+            doc1.Add(new TextField("body", "item"));
+            doc1.Add(new StringField("id", "doc1"));
+            doc1.Add(new NumericField("rank", 50));
+            doc1.Add(new NumericField("rank", 1));
+            writer.AddDocument(doc1);
+
+            var doc2 = new LeanDocument();
+            doc2.Add(new TextField("body", "item"));
+            doc2.Add(new StringField("id", "doc2"));
+            doc2.Add(new NumericField("rank", 10));
+            writer.AddDocument(doc2);
+            writer.Commit();
+        }
+
+        foreach (var pathToDelete in Directory.GetFiles(path, "seg_*.dvn").Concat(Directory.GetFiles(path, "seg_*.num")))
+            File.Delete(pathToDelete);
+
+        using var searcher = new IndexSearcher(dir);
+        var results = searcher.Search(new TermQuery("body", "item"), 10, SortField.Numeric("rank"));
+
+        Assert.Equal("doc1", searcher.GetStoredFields(results.ScoreDocs[0].DocId)["id"][0]);
+    }
+
+    /// <summary>
     /// Verifies the Search: Sort By Numeric Descending Returns Highest First scenario.
     /// </summary>
     [Fact(DisplayName = "Search: Sort By Numeric Descending Returns Highest First")]

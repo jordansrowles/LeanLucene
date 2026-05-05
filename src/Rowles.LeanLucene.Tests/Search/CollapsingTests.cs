@@ -144,4 +144,42 @@ public class CollapsingTests : IDisposable
         // All in same group → single result
         Assert.Single(results.ScoreDocs);
     }
+
+    /// <summary>
+    /// Verifies collapse uses the minimum sorted-set value when single-valued DocValues are absent.
+    /// </summary>
+    [Fact(DisplayName = "Collapse: Multi Valued Field Uses Minimum Value")]
+    public void Collapse_MultiValuedField_UsesMinimumValue()
+    {
+        using (var writer = new IndexWriter(new MMapDirectory(_dir), new IndexWriterConfig()))
+        {
+            var doc1 = new LeanDocument();
+            doc1.Add(new TextField("body", "common"));
+            doc1.Add(new StringField("group", "alpha"));
+            doc1.Add(new StringField("group", "zed"));
+            writer.AddDocument(doc1);
+
+            var doc2 = new LeanDocument();
+            doc2.Add(new TextField("body", "common"));
+            doc2.Add(new StringField("group", "beta"));
+            writer.AddDocument(doc2);
+
+            var doc3 = new LeanDocument();
+            doc3.Add(new TextField("body", "common"));
+            doc3.Add(new StringField("group", "zed"));
+            writer.AddDocument(doc3);
+            writer.Commit();
+        }
+
+        foreach (var pathToDelete in Directory.GetFiles(_dir, "seg_*.dvs"))
+            File.Delete(pathToDelete);
+
+        using var searcher = new IndexSearcher(new MMapDirectory(_dir));
+        var results = searcher.SearchWithCollapse(
+            new TermQuery("body", "common"),
+            10,
+            new CollapseField("group"));
+
+        Assert.Equal(3, results.TotalHits);
+    }
 }
