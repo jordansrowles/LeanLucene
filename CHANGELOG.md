@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.2.1] - 2026-05-05
 
 ### Added
 
@@ -23,8 +23,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `KeywordMarkerFilter`: marks configured token texts for stemming bypass in compatible analysers.
 - `ShingleFilter`: emits contiguous token shingles with configurable min/max size, optional unigram output, and configurable separator; shingle offsets span the first to last source token.
 - `WordDelimiterFilter`: splits compound tokens on delimiter punctuation, case-change boundaries, acronym-word boundaries, and letter-digit boundaries; supports preserve-original, concatenate-words, and concatenate-numbers modes.
-- `StemmedAnalyser` now accepts an optional `KeywordMarkerFilter` to skip stemming for marked tokens.
-- `LanguageAnalyser` now accepts an optional `KeywordMarkerFilter` to skip stemming for marked tokens.
 - Benchmark suites `analysis-parity` and `analysis-filters` covering lightweight analyser throughput vs Lucene.NET and per-filter allocation on no-op and mutating paths.
 - Native AOT compatibility metadata for the core package, with a dedicated `Rowles.LeanLucene.Example.NativeAot` smoke executable and local `scripts\aot-smoke.ps1` validation script.
 
@@ -32,12 +30,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Core JSON persistence now uses source-generated `System.Text.Json` metadata for commit files, segment metadata, index stats, segment stats, search analytics, and slow-query log entries.
 - Regex-based character filters and regexp queries no longer force compiled regular expressions, improving Native AOT compatibility.
+- `StemmedAnalyser` now accepts an optional `KeywordMarkerFilter` to skip stemming for marked tokens.
+- `LanguageAnalyser` now accepts an optional `KeywordMarkerFilter` to skip stemming for marked tokens.
 
 ### Fixed
 
 - Reduced hot-path allocations in `WhitespaceAnalyser`, `KeywordAnalyser`, and `SimpleAnalyser` by reusing result buffers and caching repeated token text, matching the low-allocation pattern used by `StandardAnalyser`.
 
-## [1.2.0] - 2026-05-03
+## [1.2.0] - 2026-05-04
 
 ### Added
 
