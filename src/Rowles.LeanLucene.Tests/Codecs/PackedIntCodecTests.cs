@@ -9,7 +9,7 @@ namespace Rowles.LeanLucene.Tests.Codecs;
 public sealed class PackedIntCodecTests
 {
     /// <summary>
-    /// For each bit width 1–32, creates 128 values where the maximum fits in exactly
+    /// For each bit width 1-32, creates 128 values where the maximum fits in exactly
     /// that width, packs, unpacks, and verifies the round-trip produces identical values.
     /// </summary>
     [Fact(DisplayName = "Pack: Unpack All Bit Widths")]
@@ -75,7 +75,7 @@ public sealed class PackedIntCodecTests
         int bytesWritten = PackedIntCodec.Pack(values, output);
         int numBits = output[0];
 
-        // 42 = 0b101010 → 6 bits required.
+        // 42 = 0b101010, so 6 bits are required.
         Assert.Equal(6, numBits);
 
         var unpacked = new int[PackedIntCodec.BlockSize];
@@ -98,7 +98,7 @@ public sealed class PackedIntCodecTests
         int bytesWritten = PackedIntCodec.Pack(values, output);
         int numBits = output[0];
 
-        // int.MaxValue = 0x7FFFFFFF → 31 bits.
+        // int.MaxValue = 0x7FFFFFFF, so 31 bits are required.
         Assert.Equal(31, numBits);
 
         var unpacked = new int[PackedIntCodec.BlockSize];
@@ -108,7 +108,7 @@ public sealed class PackedIntCodecTests
     }
 
     /// <summary>
-    /// Sorted ascending array [100, 105, 110, …] with offset = 0.
+    /// Sorted ascending array [100, 105, 110, ...] with offset = 0.
     /// Delta-pack then delta-unpack must recover the original values.
     /// </summary>
     [Fact(DisplayName = "Pack Delta: Unpack Delta Sorted Input")]
@@ -148,7 +148,7 @@ public sealed class PackedIntCodecTests
     }
 
     /// <summary>
-    /// 128 sequential values [1, 2, 3, …, 128] with offset = 0.
+    /// 128 sequential values [1, 2, 3, ..., 128] with offset = 0.
     /// All deltas equal 1, so numBits should be 1.
     /// </summary>
     [Fact(DisplayName = "Pack Delta: Single Element Block")]
@@ -161,7 +161,7 @@ public sealed class PackedIntCodecTests
         var output = new byte[1 + 32 * 16];
         var (numBits, bytesWritten) = PackedIntCodec.PackDelta(values, offset: 0, output);
 
-        // Every delta is 1 → only 1 bit required.
+        // Every delta is 1, so only 1 bit is required.
         Assert.Equal(1, numBits);
 
         var unpacked = new int[PackedIntCodec.BlockSize];
@@ -192,7 +192,7 @@ public sealed class PackedIntCodecTests
     }
 
     /// <summary>
-    /// Verifies that the output byte count equals <c>1 + numBits × 16</c> for every bit width.
+    /// Verifies that the output byte count equals <c>1 + numBits * 16</c> for every bit width.
     /// </summary>
     [Fact(DisplayName = "Pack: Output Size Is Correct")]
     public void Pack_OutputSize_IsCorrect()
@@ -212,5 +212,84 @@ public sealed class PackedIntCodecTests
             int expectedSize = bits == 0 ? 1 : 1 + bits * 16;
             Assert.Equal(expectedSize, bytesWritten);
         }
+    }
+
+    /// <summary>
+    /// Verifies Pack rejects blocks smaller than the fixed packed-int block size.
+    /// </summary>
+    [Fact(DisplayName = "Pack: Short Input Throws")]
+    public void Pack_ShortInput_Throws()
+    {
+        var values = new int[PackedIntCodec.BlockSize - 1];
+        var output = new byte[1 + 32 * 16];
+
+        Assert.Throws<ArgumentException>(() => PackedIntCodec.Pack(values, output));
+    }
+
+    /// <summary>
+    /// Verifies Pack rejects an output buffer that cannot hold non-zero bit-packed data.
+    /// </summary>
+    [Fact(DisplayName = "Pack: Small Output Throws")]
+    public void Pack_SmallOutput_Throws()
+    {
+        var values = new int[PackedIntCodec.BlockSize];
+        Array.Fill(values, 1);
+        var output = new byte[1];
+
+        Assert.Throws<ArgumentException>(() => PackedIntCodec.Pack(values, output));
+    }
+
+    /// <summary>
+    /// Verifies Unpack rejects an output buffer smaller than the fixed block size.
+    /// </summary>
+    [Fact(DisplayName = "Unpack: Small Output Throws")]
+    public void Unpack_SmallOutput_Throws()
+    {
+        var output = new int[PackedIntCodec.BlockSize - 1];
+
+        Assert.Throws<ArgumentException>(() => PackedIntCodec.Unpack([], 0, output));
+    }
+
+    /// <summary>
+    /// Verifies Unpack rejects invalid bit widths when the output buffer is valid.
+    /// </summary>
+    [Theory(DisplayName = "Unpack: Invalid Bit Width Throws")]
+    [InlineData(-1)]
+    [InlineData(33)]
+    public void Unpack_InvalidBitWidth_Throws(int numBits)
+    {
+        var output = new int[PackedIntCodec.BlockSize];
+
+        Assert.Throws<ArgumentOutOfRangeException>(() => PackedIntCodec.Unpack([], numBits, output));
+    }
+
+    /// <summary>
+    /// Verifies PackDelta rejects blocks smaller than the fixed packed-int block size.
+    /// </summary>
+    [Fact(DisplayName = "Pack Delta: Short Input Throws")]
+    public void PackDelta_ShortInput_Throws()
+    {
+        var values = new int[PackedIntCodec.BlockSize - 1];
+        var output = new byte[1 + 32 * 16];
+
+        Assert.Throws<ArgumentException>(() => PackedIntCodec.PackDelta(values, 0, output));
+    }
+
+    /// <summary>
+    /// Verifies corrupt delta data that overflows during prefix-sum integration is rejected.
+    /// </summary>
+    [Fact(DisplayName = "Unpack Delta: Overflow Throws InvalidDataException")]
+    public void UnpackDelta_Overflow_ThrowsInvalidDataException()
+    {
+        var deltas = new int[PackedIntCodec.BlockSize];
+        deltas[0] = int.MaxValue;
+        deltas[1] = 1;
+        var packed = new byte[1 + 32 * 16];
+        int bytesWritten = PackedIntCodec.Pack(deltas, packed);
+        int numBits = packed[0];
+        var output = new int[PackedIntCodec.BlockSize];
+
+        Assert.Throws<InvalidDataException>(() =>
+            PackedIntCodec.UnpackDelta(packed.AsSpan(1, bytesWritten - 1), numBits, offset: 1, output));
     }
 }

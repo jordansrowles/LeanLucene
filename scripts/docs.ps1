@@ -30,11 +30,16 @@
 .EXAMPLE
     .\scripts\docs.ps1 -SkipBenchmarks
     Builds the site without regenerating benchmark pages.
+
+.EXAMPLE
+    .\scripts\docs.ps1 -SkipCoverage
+    Builds the site without regenerating the coverage report.
 #>
 param(
     [switch]$Serve,
     [switch]$MetadataOnly,
-    [switch]$SkipBenchmarks
+    [switch]$SkipBenchmarks,
+    [switch]$SkipCoverage
 )
 
 Set-StrictMode -Version Latest
@@ -435,6 +440,46 @@ if (-not $SkipBenchmarks) {
     & (Join-Path $PSScriptRoot 'generate-benchmark-docs.ps1')
     if ($LASTEXITCODE -ne 0) {
         Write-Warning "Benchmark doc generation failed (exit $LASTEXITCODE). Continuing without benchmark pages."
+    }
+}
+
+# ── Generate coverage report ──────────────────────────────────────────────────
+
+if (-not $SkipCoverage) {
+    $coverageResultsDir = Join-Path $repoRoot "coverage-results"
+    $coverageOutDir     = Join-Path $docsDir "coverage"
+    $xmlFiles = @(Get-ChildItem $coverageResultsDir -Filter 'coverage.cobertura.xml' -Recurse -ErrorAction SilentlyContinue)
+
+    if ($xmlFiles.Count -eq 0) {
+        Write-Warning "No coverage XML files found in $coverageResultsDir. Skipping coverage report. Run scripts\coverage.ps1 first."
+    } else {
+        if (-not (Get-Command reportgenerator -ErrorAction SilentlyContinue)) {
+            Write-Host "Installing reportgenerator global tool..." -ForegroundColor Cyan
+            dotnet tool install -g dotnet-reportgenerator-globaltool
+            if ($LASTEXITCODE -ne 0) {
+                Write-Error "Failed to install reportgenerator. Ensure the .NET SDK is on PATH."
+                exit 1
+            }
+            Write-Host "reportgenerator installed." -ForegroundColor Green
+        } else {
+            $rgVersion = @(reportgenerator --version 2>&1)[0]
+            Write-Host "reportgenerator found: $rgVersion" -ForegroundColor DarkGray
+        }
+
+        $reportPaths = ($xmlFiles | ForEach-Object { $_.FullName }) -join ';'
+        Write-Host "Generating coverage report..." -ForegroundColor Cyan
+
+        reportgenerator `
+            "-reports:$reportPaths" `
+            "-targetdir:$coverageOutDir" `
+            "-reporttypes:Html" `
+            "-title:LeanLucene Coverage"
+
+        if ($LASTEXITCODE -ne 0) {
+            Write-Warning "Coverage report generation failed (exit $LASTEXITCODE). Continuing without coverage report."
+        } else {
+            Write-Host "Coverage report written to: $coverageOutDir" -ForegroundColor Green
+        }
     }
 }
 

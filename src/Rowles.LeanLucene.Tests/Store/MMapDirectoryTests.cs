@@ -117,6 +117,166 @@ public sealed class MMapDirectoryTests : IClassFixture<TestDirectoryFixture>
     }
 
     /// <summary>
+    /// Verifies the MMap Directory: Null Path Throws scenario.
+    /// </summary>
+    [Fact(DisplayName = "MMap Directory: Null Path Throws Argument Null Exception")]
+    public void MMapDirectory_NullPath_Throws()
+        => Assert.Throws<ArgumentNullException>(() => new MMapDirectory(null!));
+
+    /// <summary>
+    /// Verifies the MMap Directory: Creates Missing Directory scenario.
+    /// </summary>
+    [Fact(DisplayName = "MMap Directory: Creates Missing Directory")]
+    public void MMapDirectory_CreatesMissingDirectory()
+    {
+        var path = Path.Combine(_fixture.Path, "newdir_" + Guid.NewGuid().ToString("N")[..6]);
+        Assert.False(Directory.Exists(path));
+        using var _ = new MMapDirectory(path);
+        Assert.True(Directory.Exists(path));
+    }
+
+    /// <summary>
+    /// Verifies that null file name throws in FileExists.
+    /// </summary>
+    [Fact(DisplayName = "MMap Directory: Null File Name Throws Argument Null Exception")]
+    public void MMapDirectory_NullFileName_Throws()
+    {
+        var dir = new MMapDirectory(_fixture.Path);
+        Assert.Throws<ArgumentNullException>(() => dir.FileExists(null!));
+    }
+
+    /// <summary>
+    /// Verifies that empty file name throws in FileExists.
+    /// </summary>
+    [Fact(DisplayName = "MMap Directory: Empty File Name Throws Argument Exception")]
+    public void MMapDirectory_EmptyFileName_Throws()
+    {
+        var dir = new MMapDirectory(_fixture.Path);
+        Assert.Throws<ArgumentException>(() => dir.FileExists(string.Empty));
+    }
+
+    /// <summary>
+    /// Verifies that a whitespace file name throws in FileExists.
+    /// </summary>
+    [Fact(DisplayName = "MMap Directory: Whitespace File Name Throws Argument Exception")]
+    public void MMapDirectory_WhitespaceFileName_Throws()
+    {
+        var dir = new MMapDirectory(_fixture.Path);
+        Assert.Throws<ArgumentException>(() => dir.FileExists("   "));
+    }
+
+    /// <summary>
+    /// Verifies that a forward-slash in a file name throws.
+    /// </summary>
+    [Fact(DisplayName = "MMap Directory: Forward Slash In Name Throws Argument Exception")]
+    public void MMapDirectory_ForwardSlash_Throws()
+    {
+        var dir = new MMapDirectory(_fixture.Path);
+        Assert.Throws<ArgumentException>(() => dir.FileExists("sub/file.txt"));
+    }
+
+    /// <summary>
+    /// Verifies that a control character in a file name throws.
+    /// </summary>
+    [Fact(DisplayName = "MMap Directory: Control Char In Name Throws Argument Exception")]
+    public void MMapDirectory_ControlChar_Throws()
+    {
+        var dir = new MMapDirectory(_fixture.Path);
+        Assert.Throws<ArgumentException>(() => dir.FileExists("file\x01.txt"));
+    }
+
+    /// <summary>
+    /// Verifies FileExists returns false for a missing file.
+    /// </summary>
+    [Fact(DisplayName = "MMap Directory: FileExists Returns False For Missing File")]
+    public void MMapDirectory_FileExists_ReturnsFalse()
+    {
+        var dir = new MMapDirectory(_fixture.Path);
+        Assert.False(dir.FileExists("definitely_missing_xyz.bin"));
+    }
+
+    /// <summary>
+    /// Verifies FileExists returns true for an existing file.
+    /// </summary>
+    [Fact(DisplayName = "MMap Directory: FileExists Returns True For Existing File")]
+    public void MMapDirectory_FileExists_ReturnsTrue()
+    {
+        var dir = new MMapDirectory(_fixture.Path);
+        var name = "present_" + Guid.NewGuid().ToString("N")[..6] + ".bin";
+        File.WriteAllText(Path.Combine(_fixture.Path, name), "x");
+        Assert.True(dir.FileExists(name));
+    }
+
+    /// <summary>
+    /// Verifies ListAll returns only file names without directory path.
+    /// </summary>
+    [Fact(DisplayName = "MMap Directory: ListAll Returns File Names Without Path")]
+    public void MMapDirectory_ListAll_ReturnsFileNamesOnly()
+    {
+        var sub = Path.Combine(_fixture.Path, "listall_" + Guid.NewGuid().ToString("N")[..6]);
+        Directory.CreateDirectory(sub);
+        var dir = new MMapDirectory(sub);
+        File.WriteAllText(Path.Combine(sub, "a.seg"), "x");
+        File.WriteAllText(Path.Combine(sub, "b.seg"), "y");
+
+        var files = dir.ListAll();
+        Assert.Contains("a.seg", files);
+        Assert.Contains("b.seg", files);
+        Assert.All(files, f => Assert.Equal(f, Path.GetFileName(f)));
+    }
+
+    /// <summary>
+    /// Verifies DeleteFile removes the named file from the directory.
+    /// </summary>
+    [Fact(DisplayName = "MMap Directory: DeleteFile Removes The File")]
+    public void MMapDirectory_DeleteFile_RemovesFile()
+    {
+        var sub = Path.Combine(_fixture.Path, "del_" + Guid.NewGuid().ToString("N")[..6]);
+        Directory.CreateDirectory(sub);
+        var dir = new MMapDirectory(sub);
+        var name = "del_me.bin";
+        File.WriteAllText(Path.Combine(sub, name), "bye");
+
+        dir.DeleteFile(name);
+        Assert.False(File.Exists(Path.Combine(sub, name)));
+    }
+
+    /// <summary>
+    /// Verifies that Dispose closes tracked IndexInput instances.
+    /// </summary>
+    [Fact(DisplayName = "MMap Directory: Dispose Closes Tracked Inputs")]
+    public void MMapDirectory_Dispose_ClosesTrackedInputs()
+    {
+        var sub = Path.Combine(_fixture.Path, "disp_" + Guid.NewGuid().ToString("N")[..6]);
+        Directory.CreateDirectory(sub);
+        var filePath = Path.Combine(sub, "tracked.bin");
+        File.WriteAllBytes(filePath, [1, 2, 3]);
+
+        var mmap = new MMapDirectory(sub);
+        var input = mmap.OpenInput("tracked.bin");
+        mmap.Dispose();
+
+        var disposedField = typeof(IndexInput).GetField("_disposed",
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+        Assert.NotNull(disposedField);
+        Assert.True((bool)disposedField.GetValue(input)!);
+        Assert.Throws<NullReferenceException>(() => input.ReadByte());
+    }
+
+    /// <summary>
+    /// Verifies that CreateOutput after Dispose throws ObjectDisposedException.
+    /// </summary>
+    [Fact(DisplayName = "MMap Directory: CreateOutput After Dispose Throws ObjectDisposed")]
+    public void MMapDirectory_CreateOutput_AfterDispose_Throws()
+    {
+        var sub = Path.Combine(_fixture.Path, "disp2_" + Guid.NewGuid().ToString("N")[..6]);
+        Directory.CreateDirectory(sub);
+        var mmap = new MMapDirectory(sub);
+        mmap.Dispose();
+        Assert.Throws<ObjectDisposedException>(() => mmap.CreateOutput("file.dat"));
+    }
+
+    /// <summary>
     /// Verifies the Index Output: Use Pooled Buffer No Heap Allocation scenario.
     /// </summary>
     [Fact(DisplayName = "Index Output: Use Pooled Buffer No Heap Allocation")]

@@ -38,6 +38,9 @@
     "resource": [
       {
         "files": [ "assets/**" ]
+      },
+      {
+        "files": [ "coverage/**" ]
       }
     ],
     "globalMetadata": {

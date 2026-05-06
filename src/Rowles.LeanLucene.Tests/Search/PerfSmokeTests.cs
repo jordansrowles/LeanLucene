@@ -16,6 +16,7 @@ namespace Rowles.LeanLucene.Tests.Search;
 /// Contains unit tests for Perf Smoke.
 /// </summary>
 [Trait("Category", "Perf")]
+[Trait("Coverage", "Skip")]
 public sealed class PerfSmokeTests : IClassFixture<TestDirectoryFixture>
 {
     private readonly TestDirectoryFixture _fixture;

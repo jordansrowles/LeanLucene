@@ -4,6 +4,7 @@
 ## Get latest from `dotnet new gitignore`
 
 bench/*
+coverage-report/
 
 .netcoredbg_hist
 

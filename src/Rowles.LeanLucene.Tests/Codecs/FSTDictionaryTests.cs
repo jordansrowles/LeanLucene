@@ -292,6 +292,7 @@ public sealed class FSTDictionaryTests : IClassFixture<TestDirectoryFixture>
     /// Verifies the Fuzzy Matches: Large Term Set Prefix Sharing Prunes scenario.
     /// </summary>
     [Fact(DisplayName = "Fuzzy Matches: Large Term Set Prefix Sharing Prunes")]
+    [Trait("Coverage", "Skip")]
     public void FuzzyMatches_LargeTermSet_PrefixSharingPrunes()
     {
         var path = DicPath("fuzzy_scale");

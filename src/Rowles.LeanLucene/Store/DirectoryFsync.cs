@@ -19,6 +19,10 @@ internal static class DirectoryFsync
 {
     private const int O_RDONLY = 0;
 
+    internal delegate int OpenDirectoryDelegate(byte[] pathBytes, int byteCount);
+    internal delegate int FileDescriptorDelegate(int fileDescriptor);
+    internal delegate int GetLastErrorDelegate();
+
     /// <summary>
     /// Forces the directory's metadata to be persisted to the underlying storage device.
     /// On Windows this is a no-op. On Unix, errors are swallowed when <paramref name="strict"/>
@@ -28,8 +32,27 @@ internal static class DirectoryFsync
     /// <param name="strict">When true, fsync failures are surfaced as <see cref="IOException"/>.</param>
     public static void Sync(string directoryPath, bool strict = false)
     {
+        SyncCore(
+            directoryPath,
+            strict,
+            RuntimeInformation.IsOSPlatform(OSPlatform.Windows),
+            OpenDirectory,
+            fsync,
+            close,
+            Marshal.GetLastWin32Error);
+    }
+
+    internal static void SyncCore(
+        string directoryPath,
+        bool strict,
+        bool isWindows,
+        OpenDirectoryDelegate openDirectory,
+        FileDescriptorDelegate syncDirectory,
+        FileDescriptorDelegate closeDirectory,
+        GetLastErrorDelegate getLastError)
+    {
         if (string.IsNullOrEmpty(directoryPath)) return;
-        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows)) return;
+        if (isWindows) return;
 
         int byteCount = Encoding.UTF8.GetByteCount(directoryPath);
         // +1 for null terminator. Use a rented buffer to avoid string interpolation / Marshal alloc.
@@ -39,37 +62,38 @@ internal static class DirectoryFsync
             int written = Encoding.UTF8.GetBytes(directoryPath, 0, directoryPath.Length, rented, 0);
             rented[written] = 0;
 
-            int fd;
-            unsafe
-            {
-                fixed (byte* ptr = rented)
-                {
-                    fd = open(ptr, O_RDONLY);
-                }
-            }
+            int fd = openDirectory(rented, written);
             if (fd < 0)
             {
                 if (strict)
                 {
-                    int err = Marshal.GetLastWin32Error();
+                    int err = getLastError();
                     throw new IOException($"open('{directoryPath}') failed: errno {err}");
                 }
                 return;
             }
 
             int rc;
-            try { rc = fsync(fd); }
-            finally { _ = close(fd); }
+            try { rc = syncDirectory(fd); }
+            finally { _ = closeDirectory(fd); }
 
             if (rc != 0 && strict)
             {
-                int err = Marshal.GetLastWin32Error();
+                int err = getLastError();
                 throw new IOException($"fsync('{directoryPath}') failed: errno {err}");
             }
         }
         finally
         {
             ArrayPool<byte>.Shared.Return(rented);
+        }
+    }
+
+    private static unsafe int OpenDirectory(byte[] pathBytes, int byteCount)
+    {
+        fixed (byte* ptr = pathBytes)
+        {
+            return open(ptr, O_RDONLY);
         }
     }
 
