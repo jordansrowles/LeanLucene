@@ -1,5 +1,6 @@
 using Rowles.LeanLucene.Document;
 using Rowles.LeanLucene.Document.Fields;
+using Rowles.LeanLucene.Codecs.DocValues;
 using Rowles.LeanLucene.Index;
 using Rowles.LeanLucene.Search;
 using Rowles.LeanLucene.Search.Simd;
@@ -84,6 +85,36 @@ public sealed class MultiValuedFieldTests : IClassFixture<TestDirectoryFixture>
         Assert.Equal("fruit", stored["category"][0]);
         Assert.Equal("food", stored["category"][1]);
         Assert.Equal("organic", stored["category"][2]);
+    }
+
+    /// <summary>
+    /// Verifies repeated string and numeric fields are preserved in richer DocValues.
+    /// </summary>
+    [Fact(DisplayName = "Multi Valued Fields: Richer Doc Values Preserve Values")]
+    public void MultiValuedFields_RicherDocValues_PreserveValues()
+    {
+        var path = SubDir("multival_docvalues");
+        var dir = new MMapDirectory(path);
+        using var writer = new IndexWriter(dir, new IndexWriterConfig());
+
+        var doc = new LeanDocument();
+        doc.Add(new StringField("category", "fruit"));
+        doc.Add(new StringField("category", "food"));
+        doc.Add(new NumericField("price", 10));
+        doc.Add(new NumericField("price", 5));
+        doc.Add(new StoredField("note", "first"));
+        doc.Add(new StoredField("note", "second"));
+        writer.AddDocument(doc);
+        writer.Commit();
+
+        var segmentId = Path.GetFileNameWithoutExtension(Directory.GetFiles(path, "seg_*.seg").Single());
+        var sortedSet = SortedSetDocValuesReader.Read(Path.Combine(path, segmentId + ".dss"));
+        var sortedNumeric = SortedNumericDocValuesReader.Read(Path.Combine(path, segmentId + ".dsn"));
+        var binary = BinaryDocValuesReader.Read(Path.Combine(path, segmentId + ".dvb"));
+
+        Assert.Equal(["food", "fruit"], sortedSet["category"][0]);
+        Assert.Equal([5, 10], sortedNumeric["price"][0]);
+        Assert.Equal(["first", "second"], binary["note"][0].Select(static value => System.Text.Encoding.UTF8.GetString(value)));
     }
 
     /// <summary>

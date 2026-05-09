@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Rowles.LeanLucene.Codecs.DocValues;
 using Rowles.LeanLucene.Document;
 using Rowles.LeanLucene.Document.Fields;
 using Rowles.LeanLucene.Index.Indexer;
@@ -180,6 +181,65 @@ public sealed class SegmentMergerTests : IClassFixture<TestDirectoryFixture>
         using var searcher = new IndexSearcher(mmap);
         var sorted = searcher.Search(new WildcardQuery("id", "*"), 10, SortField.String("category"));
         Assert.Equal(2, sorted.TotalHits);
+    }
+
+    /// <summary>
+    /// Verifies richer DocValues sidecars survive merge and deleted documents are filtered out.
+    /// </summary>
+    [Fact(DisplayName = "Merge: Preserves Richer Doc Values For Live Documents")]
+    public void Merge_PreservesRicherDocValues_ForLiveDocuments()
+    {
+        var dir = SubDir(nameof(Merge_PreservesRicherDocValues_ForLiveDocuments));
+        var mmap = new MMapDirectory(dir);
+
+        using (var writer = new IndexWriter(mmap, new IndexWriterConfig { MaxBufferedDocs = 2, MergeThreshold = 100 }))
+        {
+            var doc1 = new LeanDocument();
+            doc1.Add(new StringField("id", "live-a"));
+            doc1.Add(new StringField("tag", "red"));
+            doc1.Add(new StringField("tag", "blue"));
+            doc1.Add(new NumericField("score", 2));
+            doc1.Add(new NumericField("score", 1));
+            doc1.Add(new StoredField("note", "first"));
+            doc1.Add(new StoredField("note", "second"));
+            writer.AddDocument(doc1);
+
+            var victim = new LeanDocument();
+            victim.Add(new StringField("id", "victim"));
+            victim.Add(new StringField("tag", "victim"));
+            victim.Add(new NumericField("score", 99));
+            victim.Add(new StoredField("note", "deleted"));
+            writer.AddDocument(victim);
+
+            var doc2 = new LeanDocument();
+            doc2.Add(new StringField("id", "live-b"));
+            doc2.Add(new StringField("tag", "green"));
+            doc2.Add(new NumericField("score", 3));
+            doc2.Add(new StoredField("note", "third"));
+            writer.AddDocument(doc2);
+
+            writer.Commit();
+            writer.DeleteDocuments(new TermQuery("id", "victim"));
+            writer.Commit();
+        }
+
+        var mergedId = MergeSegmentsForTest(dir, mmap);
+        var sortedSet = SortedSetDocValuesReader.Read(Path.Combine(dir, mergedId + ".dss"));
+        var sortedNumeric = SortedNumericDocValuesReader.Read(Path.Combine(dir, mergedId + ".dsn"));
+        var binary = BinaryDocValuesReader.Read(Path.Combine(dir, mergedId + ".dvb"));
+
+        int firstDocIndex = Array.FindIndex(sortedSet["tag"], static values => values.SequenceEqual(["blue", "red"]));
+        int secondDocIndex = Array.FindIndex(sortedSet["tag"], static values => values.SequenceEqual(["green"]));
+        Assert.NotEqual(-1, firstDocIndex);
+        Assert.NotEqual(-1, secondDocIndex);
+        Assert.DoesNotContain(sortedSet["tag"].SelectMany(static values => values), static value => value == "victim");
+
+        Assert.Equal([1, 2], sortedNumeric["score"][firstDocIndex]);
+        Assert.Equal([3], sortedNumeric["score"][secondDocIndex]);
+        Assert.DoesNotContain(99, sortedNumeric["score"].SelectMany(static values => values));
+
+        Assert.Equal(["first", "second"], binary["note"][firstDocIndex].Select(static value => System.Text.Encoding.UTF8.GetString(value)));
+        Assert.Equal(["third"], binary["note"][secondDocIndex].Select(static value => System.Text.Encoding.UTF8.GetString(value)));
     }
 
     /// <summary>

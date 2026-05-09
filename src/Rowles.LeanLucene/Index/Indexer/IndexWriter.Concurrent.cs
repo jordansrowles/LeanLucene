@@ -153,6 +153,9 @@ public sealed partial class IndexWriter
         dwpt.NumericIndex.Clear();
         dwpt.NumericDocValues.Clear();
         dwpt.SortedDocValues.Clear();
+        dwpt.SortedSetDocValues.Clear();
+        dwpt.SortedNumericDocValues.Clear();
+        dwpt.BinaryDocValues.Clear();
         dwpt.Vectors.Clear();
         dwpt.FieldNames.Clear();
         dwpt.DocTokenCounts.Clear();
@@ -290,6 +293,10 @@ public sealed partial class IndexWriter
             }
         }
 
+        MergeMultiValuedDocValues(dwpt.SortedSetDocValues, _sortedSetDocValues, docBase);
+        MergeMultiValuedDocValues(dwpt.SortedNumericDocValues, _sortedNumericDocValues, docBase);
+        MergeMultiValuedDocValues(dwpt.BinaryDocValues, _binaryDocValues, docBase);
+
         // Vectors: remap per-doc keys into the writer's docId space.
         foreach (var (field, perField) in dwpt.Vectors)
         {
@@ -308,5 +315,23 @@ public sealed partial class IndexWriter
 
         if (ShouldFlush())
             FlushSegment();
+    }
+
+    private static void MergeMultiValuedDocValues<T>(
+        Dictionary<string, Dictionary<int, List<T>>> source,
+        Dictionary<string, Dictionary<int, List<T>>> destination,
+        int docBase)
+    {
+        foreach (var (field, sourceMap) in source)
+        {
+            if (!destination.TryGetValue(field, out var destinationMap))
+            {
+                destinationMap = new Dictionary<int, List<T>>();
+                destination[field] = destinationMap;
+            }
+
+            foreach (var (localDocId, values) in sourceMap)
+                destinationMap[docBase + localDocId] = [.. values];
+        }
     }
 }

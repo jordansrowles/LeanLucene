@@ -235,6 +235,9 @@ public sealed class SegmentMerger
         internal Dictionary<string, int[]> FieldLengths { get; } = new(StringComparer.Ordinal);
         internal Dictionary<string, double[]> NumericDocValues { get; } = new(StringComparer.Ordinal);
         internal Dictionary<string, string?[]> SortedDocValues { get; } = new(StringComparer.Ordinal);
+        internal Dictionary<string, IReadOnlyList<string>?[]> SortedSetDocValues { get; } = new(StringComparer.Ordinal);
+        internal Dictionary<string, IReadOnlyList<double>?[]> SortedNumericDocValues { get; } = new(StringComparer.Ordinal);
+        internal Dictionary<string, IReadOnlyList<byte[]>?[]> BinaryDocValues { get; } = new(StringComparer.Ordinal);
         internal ParentBitSet? ParentBitSet { get; set; }
         internal Dictionary<string, Dictionary<int, ReadOnlyMemory<float>>> Vectors { get; } = new(StringComparer.Ordinal);
         internal Dictionary<string, int> VectorFieldDims { get; } = new(StringComparer.Ordinal);
@@ -286,6 +289,12 @@ public sealed class SegmentMerger
                 Path.Combine(_directory.DirectoryPath, segInfo.SegmentId + ".dvn"));
             var segSortedDvs = SortedDocValuesReader.Read(
                 Path.Combine(_directory.DirectoryPath, segInfo.SegmentId + ".dvs"));
+            var segSortedSetDvs = SortedSetDocValuesReader.Read(
+                Path.Combine(_directory.DirectoryPath, segInfo.SegmentId + ".dss"));
+            var segSortedNumericDvs = SortedNumericDocValuesReader.Read(
+                Path.Combine(_directory.DirectoryPath, segInfo.SegmentId + ".dsn"));
+            var segBinaryDvs = BinaryDocValuesReader.Read(
+                Path.Combine(_directory.DirectoryPath, segInfo.SegmentId + ".dvb"));
             var segNumericIndex = ReadNumericIndex(
                 Path.Combine(_directory.DirectoryPath, segInfo.SegmentId + ".num"));
 
@@ -346,6 +355,10 @@ public sealed class SegmentMerger
                     }
                     dst[remapDocId] = arr[oldDocId];
                 }
+
+                CopyMergedMultiValues(segSortedSetDvs, ctx.SortedSetDocValues, oldDocId, remapDocId, ctx.TotalDocs);
+                CopyMergedMultiValues(segSortedNumericDvs, ctx.SortedNumericDocValues, oldDocId, remapDocId, ctx.TotalDocs);
+                CopyMergedMultiValues(segBinaryDvs, ctx.BinaryDocValues, oldDocId, remapDocId, ctx.TotalDocs);
 
                 if (ctx.TermVectorWriter is not null)
                 {
@@ -552,6 +565,44 @@ public sealed class SegmentMerger
                 SortedDocValuesWriter.WriteFieldBlock(output, field, ctx.SortedDocValues[field], ctx.TotalDocs);
                 ctx.SortedDocValues.Remove(field);
             }
+        }
+        if (ctx.SortedSetDocValues.Count > 0)
+            SortedSetDocValuesWriter.Write(basePath + ".dss", ctx.SortedSetDocValues, ctx.TotalDocs);
+        if (ctx.SortedNumericDocValues.Count > 0)
+            SortedNumericDocValuesWriter.Write(basePath + ".dsn", ctx.SortedNumericDocValues, ctx.TotalDocs);
+        if (ctx.BinaryDocValues.Count > 0)
+            BinaryDocValuesWriter.Write(basePath + ".dvb", ctx.BinaryDocValues, ctx.TotalDocs);
+    }
+
+    private static void AddMergedMultiValue<T>(
+        Dictionary<string, IReadOnlyList<T>?[]> destination,
+        string field,
+        int docId,
+        int totalDocs,
+        IReadOnlyList<T> values)
+    {
+        if (!destination.TryGetValue(field, out var perDoc))
+        {
+            perDoc = new IReadOnlyList<T>?[totalDocs];
+            destination[field] = perDoc;
+        }
+
+        perDoc[docId] = values.ToArray();
+    }
+
+    private static void CopyMergedMultiValues<T>(
+        Dictionary<string, T[][]> source,
+        Dictionary<string, IReadOnlyList<T>?[]> destination,
+        int oldDocId,
+        int remapDocId,
+        int totalDocs)
+    {
+        foreach (var (field, perDocValues) in source)
+        {
+            if ((uint)oldDocId >= (uint)perDocValues.Length || perDocValues[oldDocId].Length == 0)
+                continue;
+
+            AddMergedMultiValue(destination, field, remapDocId, totalDocs, perDocValues[oldDocId]);
         }
     }
 

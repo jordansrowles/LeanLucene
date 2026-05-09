@@ -227,7 +227,7 @@ title: Benchmarks - debian
     "sourceManifestPath": "",
     "gitCommitHash": "864b010",
     "gitAvailable": true,
-    "gitDirty": false,
+    "gitDirty": true,
     "benchmarkDotNetVersion": "0.16.0-nightly.20260427.506\u002Bc68dc1556c410c4bdfe21373c7689be5781fbaf9",
     "runtimeFramework": ".NET 10.0.3",
     "runtimeIdentifier": "linux-x64",
@@ -832,7 +832,7 @@ title: Benchmarks - debian
             "operationsPerSecond": 5786.652540208358
           },
           "gc": {
-            "bytesAllocatedPerOperation": 13616,
+            "bytesAllocatedPerOperation": 13621,
             "gen0Collections": 13,
             "gen1Collections": 0,
             "gen2Collections": 0
@@ -1564,7 +1564,7 @@ title: Benchmarks - debian
           },
           "gc": {
             "bytesAllocatedPerOperation": 11175,
-            "gen0Collections": 86,
+            "gen0Collections": 43,
             "gen1Collections": 1,
             "gen2Collections": 0
           }
@@ -2041,7 +2041,7 @@ title: Benchmarks - debian
           "gc": {
             "bytesAllocatedPerOperation": 64503,
             "gen0Collections": 32,
-            "gen1Collections": 1,
+            "gen1Collections": 0,
             "gen2Collections": 0
           }
         },

@@ -73,6 +73,8 @@ public sealed partial class IndexSearcher
             {
                 if (_readers[r].TryGetNumericValue(fieldName, globalId - _docBases[r], out double val))
                     return val;
+                if (_readers[r].TryGetSortedNumericDocValues(fieldName, globalId - _docBases[r], out var values) && values.Count > 0)
+                    return values[0];
                 break;
             }
         }
@@ -92,6 +94,10 @@ public sealed partial class IndexSearcher
             {
                 if (_readers[r].TryGetSortedDocValue(fieldName, globalId - _docBases[r], out string val))
                     return val;
+                if (_readers[r].TryGetSortedSetDocValues(fieldName, globalId - _docBases[r], out var values) && values.Count > 0)
+                    return values[0];
+                if (_readers[r].TryGetBinaryDocValues(fieldName, globalId - _docBases[r], out var binaryValues) && binaryValues.Count > 0)
+                    return System.Text.Encoding.UTF8.GetString(binaryValues[0]);
                 break;
             }
         }

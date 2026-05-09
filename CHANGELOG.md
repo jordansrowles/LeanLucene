@@ -25,6 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `WordDelimiterFilter`: splits compound tokens on delimiter punctuation, case-change boundaries, acronym-word boundaries, and letter-digit boundaries; supports preserve-original, concatenate-words, and concatenate-numbers modes.
 - Benchmark suites `analysis-parity` and `analysis-filters` covering lightweight analyser throughput vs Lucene.NET and per-filter allocation on no-op and mutating paths.
 - Native AOT compatibility metadata for the core package, with a dedicated `Rowles.LeanLucene.Example.NativeAot` smoke executable and local `scripts\aot-smoke.ps1` validation script.
+- Sorted-set, sorted-numeric, and binary DocValues sidecars for repeated `StringField`, repeated `NumericField`, and stored-field values, allowing facets, grouping fallback, sorting fallback, and numeric aggregations to avoid stored-field scans.
 
 ### Changed
 

@@ -64,6 +64,64 @@ public sealed class FacetAggregationCollapseCorrectnessTests : IDisposable
     }
 
     /// <summary>
+    /// Verifies multi-valued facets use sorted-set DocValues and do not require stored fields.
+    /// </summary>
+    [Fact(DisplayName = "Facets: Multi Valued String Fields Use Doc Values")]
+    public void Facets_MultiValuedStringFields_UseDocValues()
+    {
+        using var writer = new IndexWriter(new MMapDirectory(_dir), new IndexWriterConfig());
+        var doc1 = new LeanDocument();
+        doc1.Add(new TextField("body", "common"));
+        doc1.Add(new StringField("tag", "red", stored: false));
+        doc1.Add(new StringField("tag", "blue", stored: false));
+        writer.AddDocument(doc1);
+
+        var doc2 = new LeanDocument();
+        doc2.Add(new TextField("body", "common"));
+        doc2.Add(new StringField("tag", "red", stored: false));
+        writer.AddDocument(doc2);
+        writer.Commit();
+
+        using var searcher = new IndexSearcher(new MMapDirectory(_dir));
+        var (_, facets) = searcher.SearchWithFacets(new TermQuery("body", "common"), 1, "tag");
+
+        var tagFacet = Assert.Single(facets);
+        Assert.Equal(2, tagFacet.Buckets.Single(b => b.Value == "red").Count);
+        Assert.Equal(1, tagFacet.Buckets.Single(b => b.Value == "blue").Count);
+    }
+
+    /// <summary>
+    /// Verifies repeated numeric values contribute every sorted-numeric value to stats.
+    /// </summary>
+    [Fact(DisplayName = "Aggregations: Multi Valued Numeric Fields Use All Values")]
+    public void Aggregations_MultiValuedNumericFields_UseAllValues()
+    {
+        using var writer = new IndexWriter(new MMapDirectory(_dir), new IndexWriterConfig());
+        var doc1 = new LeanDocument();
+        doc1.Add(new TextField("body", "common"));
+        doc1.Add(new NumericField("price", 10, stored: false));
+        doc1.Add(new NumericField("price", 2, stored: false));
+        writer.AddDocument(doc1);
+
+        var doc2 = new LeanDocument();
+        doc2.Add(new TextField("body", "common"));
+        doc2.Add(new NumericField("price", 3, stored: false));
+        writer.AddDocument(doc2);
+        writer.Commit();
+
+        using var searcher = new IndexSearcher(new MMapDirectory(_dir));
+        var (_, aggregations) = searcher.SearchWithAggregations(
+            new TermQuery("body", "common"),
+            1,
+            new AggregationRequest("price_stats", "price"));
+
+        Assert.Equal(3, aggregations[0].Count);
+        Assert.Equal(2, aggregations[0].Min);
+        Assert.Equal(10, aggregations[0].Max);
+        Assert.Equal(15, aggregations[0].Sum);
+    }
+
+    /// <summary>
     /// Verifies the Collapse: Sees Groups Outside Original Over Fetch Window scenario.
     /// </summary>
     [Fact(DisplayName = "Collapse: Sees Groups Outside Original Over Fetch Window")]

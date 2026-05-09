@@ -19,6 +19,9 @@ internal static class CodecConstants
     public const byte TermVectorsVersion = 1;
     public const byte NumericDocValuesVersion = 2;
     public const byte SortedDocValuesVersion = 2;
+    public const byte SortedSetDocValuesVersion = 1;
+    public const byte SortedNumericDocValuesVersion = 1;
+    public const byte BinaryDocValuesVersion = 1;
     public const byte BKDVersion = 1;
     public const byte FieldLengthVersion = 2; // v2: VarInt field lengths (was fixed ushort)
     public const byte RoaringBitmapVersion = 1;

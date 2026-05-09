@@ -112,10 +112,13 @@ writer.AddDocumentBlock(new[] { child1, child2, parentDoc });
 | Type | Description |
 |---|---|
 | `TextField` | Tokenised text; supports analysis pipeline |
-| `StringField` | Exact-match keyword; not tokenised |
-| `NumericField` | `double` values; indexed in a BKD tree for range queries |
+| `StringField` | Exact-match keyword; not tokenised. Repeated values are also written to sorted-set DocValues for facets and deterministic grouping fallback |
+| `NumericField` | `double` values; indexed in a BKD tree for range queries. Repeated values are also written to sorted-numeric DocValues for aggregations |
+| `StoredField` | Stored-only string payload. Values are also written to binary DocValues so facets and grouping can avoid stored-field scans where possible |
 | `GeoPointField` | Lat/lon encoded as a 64-bit integer |
 | `VectorField` | `float[]` for vector/KNN queries |
+
+Single-valued `.dvs` and `.dvn` DocValues are still written for existing sort and collapse behaviour. New `.dss`, `.dsn`, and `.dvb` sidecars are optional, so older indexes remain readable.
 
 ## Analysis
 
