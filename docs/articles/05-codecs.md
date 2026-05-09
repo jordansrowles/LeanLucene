@@ -41,4 +41,9 @@ Stored field compression is configured through `FieldCompressionPolicy`. The
 codec records the chosen policy in `.fdx`, while compression implementations can
 publish native sidecar binaries when an application is published as Native AOT.
 
+`IndexValidator.Check` and `leanlucene-cli.exe check` validate the codec headers
+for the segment files above, including DocValues, vector, HNSW, term-vector, and
+live-doc sidecars when they are present. Deep validation opens the reader paths
+for postings, stored fields, DocValues, vectors, HNSW graphs, and live docs.
+
 See [Reliable commits](04-reliable-commits.md) for commit and recovery details.

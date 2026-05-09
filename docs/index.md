@@ -25,6 +25,7 @@ dotnet add package LeanLucene
 | **Analysis** | Pluggable tokenisers (standard, n-gram, edge n-gram, CJK bigram), char filters, token filters, stemmers for 10+ languages |
 | **Search features** | Facets, aggregations, highlighting, spell-check suggestions, field collapsing, query caching |
 | **Concurrency** | `SearcherManager` for near-real-time search, snapshot-based backup, configurable commit retention policies |
+| **Operations** | Structured `IndexValidator.Check` results, `leanlucene-cli.exe check`, deep validation for DocValues, stored fields, postings, vectors, HNSW, and live docs |
 | **Observability** | `ActivitySource` traces, `System.Diagnostics.Metrics` via `MeterMetricsCollector`, structured logs through OpenTelemetry, slow query log, search analytics |
 
 ---
@@ -75,4 +76,5 @@ engine uses SIMD posting intersection and BlockMax WAND for early termination on
 
 - [Tutorials](tutorials/index.md) - step-by-step guides for common tasks
 - [Articles](articles/index.md) - short notes on recent features
+- [Index checker CLI](tutorials/index-management/04-cli-checker.md) - command-line validation for local indexes
 - [API reference](~/api/index.md) - full type and member documentation

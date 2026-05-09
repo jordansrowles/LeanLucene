@@ -13,9 +13,11 @@ A .NET-native full-text search engine. Segment-centric indexing, memory-mapped r
 | `Rowles.LeanLucene.Compression.LZ4` | Optional LZ4 codec (`K4os.Compression.LZ4`) |
 | `Rowles.LeanLucene.Compression.Snappy` | Optional Snappy codec (`Snappier`) |
 | `Rowles.LeanLucene.Compression.Zstandard` | Optional Zstandard codec (`ZstdSharp.Port`) |
+| `Rowles.LeanLucene.Cli` | Command-line index checker |
 | `Rowles.LeanLucene.Tests` | xUnit test suite |
 | `Rowles.LeanLucene.Benchmarks` | BenchmarkDotNet suites, compared against Lucene.NET |
 | `Rowles.LeanLucene.Example.JsonApi` | ASP.NET Minimal API example |
+| `Rowles.LeanLucene.Example.NewsgroupsIndexer` | Console example that builds a checker-ready 20 Newsgroups index |
 | `Rowles.LeanLucene.Example.Telemetry` | OpenTelemetry traces, metrics and structured logs example |
 | `Rowles.LeanLucene.Example.NativeAot` | Native AOT smoke executable |
 
@@ -300,6 +302,36 @@ var config = new IndexWriterConfig { Schema = schema };
 
 On construction, `IndexWriter` reads the latest `segments_N` file and loads any existing commit state. Partial or corrupt commits are skipped.
 
+## Index Checker
+
+Use `IndexValidator.Check` for structured validation from application code:
+
+```csharp
+using Rowles.LeanLucene.Index;
+using Rowles.LeanLucene.Store;
+
+using var dir = new MMapDirectory("./index");
+IndexCheckResult result = IndexValidator.Check(dir, new IndexCheckOptions
+{
+    Deep = true
+});
+
+foreach (var issue in result.DetailedIssues)
+    Console.WriteLine($"{issue.Severity} {issue.Code} {issue.SegmentId} {issue.FileName} {issue.Message}");
+```
+
+The checker reports stable issue codes, severity, file names, segment IDs, and repairability flags. Shallow validation checks commit files, segment metadata, required sidecars, codec headers, stored-field compression metadata, deletion generations, vectors, and HNSW files. Deep validation can additionally read postings, stored fields, DocValues, vectors, HNSW graphs, and live docs.
+
+The CLI executable is `leanlucene-cli.exe`:
+
+```powershell
+dotnet build .\src\devops\Rowles.LeanLucene.Cli\Rowles.LeanLucene.Cli.csproj -c Release
+.\src\devops\Rowles.LeanLucene.Cli\bin\Release\net10.0\leanlucene-cli.exe check .\index --deep
+.\src\devops\Rowles.LeanLucene.Cli\bin\Release\net10.0\leanlucene-cli.exe check .\index --json --doc-values --vectors
+```
+
+Exit code `0` means healthy or warnings only, `1` means validation errors, and `2` means invalid arguments or CLI failure. See [Index checker CLI](docs/tutorials/index-management/04-cli-checker.md).
+
 ## Benchmarks
 
 Benchmark suites compare LeanLucene against Lucene.NET across indexing, search, analysis, and more.
@@ -341,3 +373,14 @@ GET    /collections/{name}/search?q=hello&field=content&topN=10
 ```
 
 Search responses include `totalHits`, `hits` (score + stored fields), and `suggestions` (DidYouMean per token).
+
+## Example Newsgroups Indexer
+
+`Rowles.LeanLucene.Example.NewsgroupsIndexer` bundles a 20 Newsgroups sample and writes an index suitable for exercising the checker:
+
+```powershell
+dotnet run --project .\src\examples\Rowles.LeanLucene.Example.NewsgroupsIndexer -- --index .\artifacts\newsgroups-index --limit 500
+.\src\devops\Rowles.LeanLucene.Cli\bin\Release\net10.0\leanlucene-cli.exe check .\artifacts\newsgroups-index --deep
+```
+
+Use `--limit` to control the number of source files indexed, `--source` to point at another 20 Newsgroups checkout, and `--append` to keep an existing index directory.
