@@ -148,18 +148,7 @@ public sealed partial class IndexWriter
     /// </summary>
     private static void ResetDwpt(DocumentsWriterPerThread dwpt)
     {
-        dwpt.Postings.Clear();
-        dwpt.StoredFields.Clear();
-        dwpt.NumericIndex.Clear();
-        dwpt.NumericDocValues.Clear();
-        dwpt.SortedDocValues.Clear();
-        dwpt.SortedSetDocValues.Clear();
-        dwpt.SortedNumericDocValues.Clear();
-        dwpt.BinaryDocValues.Clear();
-        dwpt.Vectors.Clear();
-        dwpt.FieldNames.Clear();
-        dwpt.DocTokenCounts.Clear();
-        dwpt.DocCount = 0;
+        dwpt.ClearAll();
     }
 
     /// <summary>
@@ -205,14 +194,13 @@ public sealed partial class IndexWriter
                 _postings[qt] = dstAcc;
             }
             var srcIds = srcAcc.DocIds;
+            bool srcHasPositions = srcAcc.HasPositions;
             for (int i = 0; i < srcIds.Length; i++)
             {
                 int remappedDocId = srcIds[i] + docBase;
-                if (srcAcc.HasPositions)
+                if (srcHasPositions)
                 {
-                    var positions = srcAcc.GetPositions(i);
-                    foreach (var p in positions)
-                        dstAcc.Add(remappedDocId, p);
+                    dstAcc.AddPositions(remappedDocId, srcAcc.GetPositions(i));
                 }
                 else
                 {
@@ -221,13 +209,20 @@ public sealed partial class IndexWriter
             }
         }
 
-        foreach (var storedDoc in dwpt.StoredFields)
+        int dwptDocCount = dwpt.DocCount;
+        var srcDocStarts = dwpt.StoredDocStarts;
+        var srcFieldIds = dwpt.StoredFieldIds;
+        var srcValues = dwpt.StoredValues;
+        var srcIdToName = dwpt.StoredFieldIdToName;
+        int srcEntryTotal = srcFieldIds.Count;
+        for (int d = 0; d < dwptDocCount; d++)
         {
             _sfDocStarts.Add(_sfFieldIds.Count);
-            foreach (var (name, values) in storedDoc)
+            int start = srcDocStarts[d];
+            int end = (d + 1) < dwptDocCount ? srcDocStarts[d + 1] : srcEntryTotal;
+            for (int e = start; e < end; e++)
             {
-                foreach (var value in values)
-                    AppendStoredField(name, value);
+                AppendStoredField(srcIdToName[srcFieldIds[e]], srcValues[e]);
             }
         }
 

@@ -1,4 +1,5 @@
-﻿using Rowles.LeanLucene.Analysis.Analysers;
+﻿using System.Runtime.CompilerServices;
+using Rowles.LeanLucene.Analysis.Analysers;
 using Rowles.LeanLucene.Document;
 
 namespace Rowles.LeanLucene.Index.Indexer;
@@ -12,7 +13,15 @@ internal sealed class DocumentsWriterPerThread
     private readonly IAnalyser _analyser;
     private readonly Dictionary<string, IAnalyser> _fieldAnalysers;
     internal readonly Dictionary<string, PostingAccumulator> Postings = new(StringComparer.Ordinal);
-    internal readonly List<Dictionary<string, List<string>>> StoredFields = [];
+
+    // Stored fields as a flat struct-of-arrays buffer (mirrors the main writer).
+    // StoredDocStarts[d] = start index into StoredFieldIds/StoredValues for doc d.
+    internal readonly List<int> StoredDocStarts = [];
+    internal readonly List<int> StoredFieldIds = [];
+    internal readonly List<string> StoredValues = [];
+    internal readonly List<string> StoredFieldIdToName = [];
+    private readonly Dictionary<string, int> _storedFieldNameToId = new(StringComparer.Ordinal);
+
     internal readonly Dictionary<string, Dictionary<int, double>> NumericIndex = new();
     internal readonly Dictionary<string, List<double>> NumericDocValues = new(StringComparer.Ordinal);
     internal readonly Dictionary<string, List<string?>> SortedDocValues = new(StringComparer.Ordinal);
@@ -24,7 +33,8 @@ internal sealed class DocumentsWriterPerThread
     // Per-field token counts: field → docId → count
     internal Dictionary<string, int[]> DocTokenCounts = new(StringComparer.Ordinal);
     internal int DocCount;
-    private readonly Dictionary<(string, string), string> _qualifiedTermPool = new();
+    private readonly Dictionary<string, string> _qualifiedTermPool = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, string> _fieldPrefixCache = new(StringComparer.Ordinal);
     private readonly HashSet<string> _termPool = new(StringComparer.Ordinal);
     private long _estimatedRamBytes;
 
@@ -37,6 +47,28 @@ internal sealed class DocumentsWriterPerThread
         _fieldAnalysers = fieldAnalysers;
     }
 
+    /// <summary>Resets all buffers to empty state for reuse.</summary>
+    internal void ClearAll()
+    {
+        Postings.Clear();
+        StoredDocStarts.Clear();
+        StoredFieldIds.Clear();
+        StoredValues.Clear();
+        StoredFieldIdToName.Clear();
+        _storedFieldNameToId.Clear();
+        NumericIndex.Clear();
+        NumericDocValues.Clear();
+        SortedDocValues.Clear();
+        SortedSetDocValues.Clear();
+        SortedNumericDocValues.Clear();
+        BinaryDocValues.Clear();
+        Vectors.Clear();
+        FieldNames.Clear();
+        DocTokenCounts.Clear();
+        DocCount = 0;
+        _estimatedRamBytes = 0;
+    }
+
     /// <summary>
     /// Indexes a single document into this thread's local buffer.
     /// Not thread-safe — each thread owns its own DWPT instance.
@@ -44,7 +76,7 @@ internal sealed class DocumentsWriterPerThread
     public void AddDocument(LeanDocument doc)
     {
         int localDocId = DocCount;
-        var storedDoc = new Dictionary<string, List<string>>(8);
+        StoredDocStarts.Add(StoredFieldIds.Count);
 
         foreach (var field in doc.Fields)
         {
@@ -54,7 +86,7 @@ internal sealed class DocumentsWriterPerThread
                     IndexTextField(tf.Name, tf.Value, localDocId);
                     if (tf.IsStored)
                     {
-                        AddStored(storedDoc, tf.Name, tf.Value);
+                        AppendStored(tf.Name, tf.Value);
                         AddBinaryDocValue(tf.Name, localDocId, tf.Value);
                         _estimatedRamBytes += tf.Value.Length * 2 + 64;
                     }
@@ -63,7 +95,7 @@ internal sealed class DocumentsWriterPerThread
                     IndexStringField(sf.Name, sf.Value, localDocId);
                     if (sf.IsStored)
                     {
-                        AddStored(storedDoc, sf.Name, sf.Value);
+                        AppendStored(sf.Name, sf.Value);
                         AddBinaryDocValue(sf.Name, localDocId, sf.Value);
                         _estimatedRamBytes += sf.Value.Length * 2 + 64;
                     }
@@ -73,13 +105,13 @@ internal sealed class DocumentsWriterPerThread
                     if (nf.IsStored)
                     {
                         var storedValue = nf.Value.ToString(System.Globalization.CultureInfo.InvariantCulture);
-                        AddStored(storedDoc, nf.Name, storedValue);
+                        AppendStored(nf.Name, storedValue);
                         AddBinaryDocValue(nf.Name, localDocId, storedValue);
                         _estimatedRamBytes += 48;
                     }
                     break;
                 case StoredField sf:
-                    AddStored(storedDoc, sf.Name, sf.Value);
+                    AppendStored(sf.Name, sf.Value);
                     AddBinaryDocValue(sf.Name, localDocId, sf.Value);
                     _estimatedRamBytes += sf.Value.Length * 2 + 64;
                     break;
@@ -91,7 +123,7 @@ internal sealed class DocumentsWriterPerThread
                     IndexNumericField(gf.LonFieldName, gf.Longitude, localDocId);
                     if (gf.IsStored)
                     {
-                        AddStored(storedDoc, gf.Name, gf.Value);
+                        AppendStored(gf.Name, gf.Value);
                         AddBinaryDocValue(gf.Name, localDocId, gf.Value);
                         _estimatedRamBytes += gf.Value.Length * 2 + 64;
                     }
@@ -99,19 +131,20 @@ internal sealed class DocumentsWriterPerThread
             }
         }
 
-        StoredFields.Add(storedDoc);
         DocCount++;
-        _estimatedRamBytes += 128; // Dictionary + List overhead per doc
+        _estimatedRamBytes += 32; // per-doc overhead
     }
 
-    private static void AddStored(Dictionary<string, List<string>> storedDoc, string name, string value)
+    private void AppendStored(string name, string value)
     {
-        if (!storedDoc.TryGetValue(name, out var list))
+        if (!_storedFieldNameToId.TryGetValue(name, out int id))
         {
-            list = new List<string>();
-            storedDoc[name] = list;
+            id = StoredFieldIdToName.Count;
+            _storedFieldNameToId[name] = id;
+            StoredFieldIdToName.Add(name);
         }
-        list.Add(value);
+        StoredFieldIds.Add(id);
+        StoredValues.Add(value);
     }
 
     private void IndexTextField(string fieldName, string value, int docId)
@@ -135,7 +168,7 @@ internal sealed class DocumentsWriterPerThread
         for (int pos = 0; pos < tokens.Count; pos++)
         {
             var term = CanonicaliseTerm(tokens[pos].Text);
-            var qualifiedTerm = GetQualifiedTerm(fieldName, term);
+            var qualifiedTerm = GetOrCreateQualifiedTerm(fieldName, term);
 
             if (!Postings.TryGetValue(qualifiedTerm, out var acc))
             {
@@ -152,7 +185,7 @@ internal sealed class DocumentsWriterPerThread
     {
         FieldNames.Add(fieldName);
         var term = CanonicaliseTerm(value);
-        var qualifiedTerm = GetQualifiedTerm(fieldName, term);
+        var qualifiedTerm = GetOrCreateQualifiedTerm(fieldName, term);
 
         if (!Postings.TryGetValue(qualifiedTerm, out var acc))
         {
@@ -265,13 +298,26 @@ internal sealed class DocumentsWriterPerThread
         return term;
     }
 
-    private string GetQualifiedTerm(string fieldName, string term)
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private string GetOrCreateQualifiedTerm(string fieldName, string term)
     {
-        if (!_qualifiedTermPool.TryGetValue((fieldName, term), out var qt))
+        if (!_fieldPrefixCache.TryGetValue(fieldName, out var prefix))
         {
-            qt = string.Concat(fieldName, "\x00", term);
-            _qualifiedTermPool[(fieldName, term)] = qt;
+            prefix = string.Concat(fieldName, "\x00");
+            _fieldPrefixCache[fieldName] = prefix;
         }
-        return qt;
+
+        int totalLen = prefix.Length + term.Length;
+        Span<char> buf = totalLen <= 256 ? stackalloc char[totalLen] : new char[totalLen];
+        prefix.AsSpan().CopyTo(buf);
+        term.AsSpan().CopyTo(buf[prefix.Length..]);
+
+        var lookup = _qualifiedTermPool.GetAlternateLookup<ReadOnlySpan<char>>();
+        if (lookup.TryGetValue(buf, out var pooled))
+            return pooled;
+
+        var qualifiedTerm = new string(buf);
+        _qualifiedTermPool[qualifiedTerm] = qualifiedTerm;
+        return qualifiedTerm;
     }
 }
