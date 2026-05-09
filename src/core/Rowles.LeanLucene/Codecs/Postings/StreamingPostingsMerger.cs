@@ -20,13 +20,13 @@ internal static class StreamingPostingsMerger
 
     /// <summary>
     /// One source segment for the merge. The DocIdMap maps source local
-    /// doc IDs to merged doc IDs; entries omitted from the map are dropped.
+    /// doc IDs to merged doc IDs; entries containing -1 are dropped (deleted).
     /// </summary>
     internal sealed class Source
     {
         internal required string DicPath { get; init; }
         internal required string PosPath { get; init; }
-        internal required IReadOnlyDictionary<int, int> DocIdMap { get; init; }
+        internal required int[] DocIdMap { get; init; }
     }
 
     internal static Result Merge(IReadOnlyList<Source> sources, string posOutputPath, string dicOutputPath)
@@ -50,23 +50,23 @@ internal static class StreamingPostingsMerger
 
             // Min-heap of cursor indices, ordered by current term (then by source order
             // so the lowest-numbered segment wins ties — keeps doc IDs monotonic).
-            var heap = new SortedSet<(string Term, int Idx)>(TermAndIndexComparer.Instance);
+            var heap = new PriorityQueue<int, (string Term, int Idx)>(cursors.Count, TermAndIndexComparer.Instance);
             for (int i = 0; i < cursors.Count; i++)
-                heap.Add((cursors[i].CurrentTerm, i));
+                heap.Enqueue(i, (cursors[i].CurrentTerm, i));
 
             var participants = new List<int>(cursors.Count);
             var positionStream = new List<(int DocId, int[] Positions)>();
 
             while (heap.Count > 0)
             {
-                var min = heap.Min;
-                string currentTerm = min.Term;
+                heap.TryPeek(out _, out var minPriority);
+                string currentTerm = minPriority.Term;
 
                 participants.Clear();
-                while (heap.Count > 0 && string.CompareOrdinal(heap.Min.Term, currentTerm) == 0)
+                while (heap.Count > 0 && heap.TryPeek(out _, out var topPriority) &&
+                       string.CompareOrdinal(topPriority.Term, currentTerm) == 0)
                 {
-                    participants.Add(heap.Min.Idx);
-                    heap.Remove(heap.Min);
+                    participants.Add(heap.Dequeue());
                 }
 
                 participants.Sort();
@@ -99,7 +99,10 @@ internal static class StreamingPostingsMerger
                         var docMap = cursor.Source.DocIdMap;
                         for (int j = 0; j < count; j++)
                         {
-                            if (!docMap.TryGetValue(oldIds[j], out int newId)) continue;
+                            int oldId = oldIds[j];
+                            if ((uint)oldId >= (uint)docMap.Length) continue;
+                            int newId = docMap[oldId];
+                            if (newId < 0) continue;
                             blockWriter.AddPosting(newId, hasFreqs ? freqs[j] : 1);
                             if (hasPositions)
                             {
@@ -148,7 +151,7 @@ internal static class StreamingPostingsMerger
                 {
                     cursors[idx].Advance();
                     if (cursors[idx].HasMore)
-                        heap.Add((cursors[idx].CurrentTerm, idx));
+                        heap.Enqueue(idx, (cursors[idx].CurrentTerm, idx));
                 }
             }
 

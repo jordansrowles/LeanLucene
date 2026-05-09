@@ -141,11 +141,16 @@ public sealed class StreamingPostingsMergerTests : IDisposable
         }
 
         TermDictionaryWriter.Write(dicPath, terms, offsets);
+        int maxOldId = -1;
+        foreach (var k in docIdMap.Keys) if (k > maxOldId) maxOldId = k;
+        var docMapArr = new int[maxOldId + 1];
+        for (int i = 0; i < docMapArr.Length; i++) docMapArr[i] = -1;
+        foreach (var kv in docIdMap) docMapArr[kv.Key] = kv.Value;
         return new StreamingPostingsMerger.Source
         {
             DicPath = dicPath,
             PosPath = posPath,
-            DocIdMap = docIdMap
+            DocIdMap = docMapArr
         };
     }
 
