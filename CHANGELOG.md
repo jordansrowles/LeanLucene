@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `Rowles.LeanLucene.Compression.Zstandard`, via `ZstdSharp`.
 - `Rowles.LeanLucene.Benchmarks.Compression` project benchmarking compress and decompress throughput across all six policies at three payload sizes (128 B, 4 KB, 64 KB).
 - Richer DocValues support with sorted-set (`.dss`), sorted-numeric (`.dsn`), and binary (`.dvb`) sidecars for repeated `StringField`, repeated `NumericField`, and stored-field values, letting facets, grouping fallback, sorting fallback, and numeric aggregations avoid stored-field scans.
+- Public `IndexValidator.Check` API and `leanlucene check` command for structured index validation with text and JSON output.
 
 ### Changed
 
@@ -32,6 +33,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Vector field lookup is pre-built once per writer and DocValues key snapshots are pooled.
 - Field-sorted top-N selection now uses `PriorityQueue<TElement, TPriority>` with an `int[]` doc-id map in place of `SortedSet<T>`.
 - `DocumentsWriterPerThread` migrated to flat stored-field buffers with a bulk position-merge path, removing per-document list allocations during indexing.
+- `IndexValidator` now reports structured issues with severity, stable codes, segment IDs, file names, and repairability flags, and can opt into deep checks for postings, stored fields, DocValues, vectors, HNSW, and live docs.
 
 ### Fixed
 

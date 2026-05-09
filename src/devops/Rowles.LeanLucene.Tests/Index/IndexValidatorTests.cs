@@ -1,7 +1,9 @@
 using Rowles.LeanLucene.Document;
 using Rowles.LeanLucene.Document.Fields;
+using Rowles.LeanLucene.Codecs;
 using Rowles.LeanLucene.Index;
 using Rowles.LeanLucene.Index.Segment;
+using Rowles.LeanLucene.Search.Queries;
 using Rowles.LeanLucene.Store;
 using Rowles.LeanLucene.Tests.Fixtures;
 
@@ -182,5 +184,146 @@ public sealed class IndexValidatorTests : IClassFixture<TestDirectoryFixture>
         var dir = new MMapDirectory(path);
         var result = IndexValidator.Validate(dir);
         Assert.True(result.Issues.Any(i => i.Contains(".nrm")));
+    }
+
+    [Fact(DisplayName = "Check: Missing Required File Returns Structured Issue")]
+    public void Check_MissingRequiredFile_ReturnsStructuredIssue()
+    {
+        var dir = new MMapDirectory(SubDir("val_structured_missing"));
+        using var writer = new IndexWriter(dir, new IndexWriterConfig());
+        var doc = new LeanDocument();
+        doc.Add(new TextField("body", "hello"));
+        writer.AddDocument(doc);
+        writer.Commit();
+
+        var dicFile = Directory.GetFiles(dir.DirectoryPath, "*.dic").Single();
+        var segmentId = Path.GetFileNameWithoutExtension(dicFile);
+        File.Delete(dicFile);
+
+        var result = IndexValidator.Check(dir);
+
+        var issue = Assert.Single(result.DetailedIssues, i => i.Code == IndexCheckIssueCodes.RequiredFileMissing);
+        Assert.Equal(IndexCheckSeverity.Error, issue.Severity);
+        Assert.Equal(segmentId, issue.SegmentId);
+        Assert.Equal(Path.GetFileName(dicFile), issue.FileName);
+        Assert.True(issue.IsRepairable);
+        Assert.False(result.IsHealthy);
+    }
+
+    [Fact(DisplayName = "Check: Invalid DocValues Header Returns Stable Code")]
+    public void Check_InvalidDocValuesHeader_ReturnsStableCode()
+    {
+        var dir = new MMapDirectory(SubDir("val_bad_dss"));
+        using var writer = new IndexWriter(dir, new IndexWriterConfig());
+        var doc = new LeanDocument();
+        doc.Add(new StringField("tag", "alpha"));
+        doc.Add(new StringField("tag", "beta"));
+        writer.AddDocument(doc);
+        writer.Commit();
+
+        var dssFile = Directory.GetFiles(dir.DirectoryPath, "*.dss").Single();
+        File.WriteAllBytes(dssFile, [0x01, 0x02, 0x03, 0x04, 0x00]);
+
+        var result = IndexValidator.Check(dir);
+
+        Assert.Contains(result.DetailedIssues, i => i.Code == IndexCheckIssueCodes.InvalidCodecMagic && i.FileName == Path.GetFileName(dssFile));
+    }
+
+    [Fact(DisplayName = "Check: Unregistered Stored Field Compression Returns Issue")]
+    public void Check_UnregisteredStoredFieldCompression_ReturnsIssue()
+    {
+        var dir = new MMapDirectory(SubDir("val_bad_compression"));
+        using var writer = new IndexWriter(dir, new IndexWriterConfig());
+        var doc = new LeanDocument();
+        doc.Add(new TextField("body", "hello"));
+        writer.AddDocument(doc);
+        writer.Commit();
+
+        var fdtFile = Directory.GetFiles(dir.DirectoryPath, "*.fdt").Single();
+        using (var stream = File.Open(fdtFile, FileMode.Open, FileAccess.Write, FileShare.None))
+        {
+            stream.Seek(9, SeekOrigin.Begin);
+            stream.WriteByte(250);
+        }
+
+        var result = IndexValidator.Check(dir);
+
+        Assert.Contains(result.DetailedIssues, i => i.Code == IndexCheckIssueCodes.UnregisteredCompressionPolicy);
+    }
+
+    [Fact(DisplayName = "Check: Missing Deletion Generation File Returns Issue")]
+    public void Check_MissingDeletionGenerationFile_ReturnsIssue()
+    {
+        var dir = new MMapDirectory(SubDir("val_missing_del_gen"));
+        using var writer = new IndexWriter(dir, new IndexWriterConfig());
+        var keep = new LeanDocument();
+        keep.Add(new TextField("body", "keep"));
+        var delete = new LeanDocument();
+        delete.Add(new TextField("body", "delete"));
+        writer.AddDocument(keep);
+        writer.AddDocument(delete);
+        writer.Commit();
+        writer.DeleteDocuments(new TermQuery("body", "delete"));
+        writer.Commit();
+
+        foreach (var delFile in Directory.GetFiles(dir.DirectoryPath, "*_gen_*.del"))
+            File.Delete(delFile);
+
+        var result = IndexValidator.Check(dir);
+
+        Assert.Contains(result.DetailedIssues, i => i.Code == IndexCheckIssueCodes.DeletionFileMissing);
+    }
+
+    [Fact(DisplayName = "Check: Missing Vector And Hnsw Files Return Issues")]
+    public void Check_MissingVectorAndHnswFiles_ReturnIssues()
+    {
+        var dir = new MMapDirectory(SubDir("val_missing_vector_hnsw"));
+        using var writer = new IndexWriter(dir, new IndexWriterConfig { BuildHnswOnFlush = true });
+        for (int i = 0; i < 2; i++)
+        {
+            var doc = new LeanDocument();
+            doc.Add(new VectorField("embedding", new ReadOnlyMemory<float>([i + 1f, 0f, 0f])));
+            writer.AddDocument(doc);
+        }
+        writer.Commit();
+
+        var vecFile = Directory.GetFiles(dir.DirectoryPath, "*.vec").Single();
+        var hnswFile = Directory.GetFiles(dir.DirectoryPath, "*.hnsw").Single();
+        File.Delete(vecFile);
+        File.Delete(hnswFile);
+
+        var result = IndexValidator.Check(dir);
+
+        Assert.Contains(result.DetailedIssues, i => i.Code == IndexCheckIssueCodes.VectorFileMissing);
+    }
+
+    [Fact(DisplayName = "Check: Deep DocValues Catches Corrupt Offsets")]
+    public void Check_WithDeepDocValues_CatchesCorruptOffsets()
+    {
+        var dir = new MMapDirectory(SubDir("val_deep_bad_dss"));
+        using var writer = new IndexWriter(dir, new IndexWriterConfig());
+        var doc = new LeanDocument();
+        doc.Add(new StringField("tag", "alpha"));
+        writer.AddDocument(doc);
+        writer.Commit();
+
+        var dssFile = Directory.GetFiles(dir.DirectoryPath, "*.dss").Single();
+        using (var stream = File.Create(dssFile))
+        using (var binaryWriter = new BinaryWriter(stream))
+        {
+            CodecConstants.WriteHeader(binaryWriter, CodecConstants.SortedSetDocValuesVersion);
+            binaryWriter.Write(1);
+            binaryWriter.Write((byte)3);
+            binaryWriter.Write(System.Text.Encoding.UTF8.GetBytes("tag"));
+            binaryWriter.Write(1);
+            binaryWriter.Write(0);
+            binaryWriter.Write(1);
+            binaryWriter.Write(0);
+            binaryWriter.Write(0);
+        }
+
+        var result = IndexValidator.Check(dir, new IndexCheckOptions { VerifyDocValues = true });
+
+        Assert.Contains(result.DetailedIssues, i => i.Code == IndexCheckIssueCodes.DocValuesReadFailure);
     }
 }

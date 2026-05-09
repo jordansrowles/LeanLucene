@@ -1,4 +1,7 @@
-﻿using System.Text.Json;
+using Rowles.LeanLucene.Codecs;
+using Rowles.LeanLucene.Codecs.Hnsw;
+using Rowles.LeanLucene.Codecs.StoredFields;
+using Rowles.LeanLucene.Codecs.Vectors;
 using Rowles.LeanLucene.Store;
 
 namespace Rowles.LeanLucene.Index;
@@ -10,144 +13,709 @@ public static class IndexValidator
 {
     private static readonly string[] RequiredExtensions = [".seg", ".dic", ".pos", ".fdt", ".fdx", ".nrm"];
 
+    private static readonly (string Extension, byte Version, string FileType)[] HeaderChecks =
+    [
+        (".dic", CodecConstants.TermDictionaryVersion, "term dictionary (.dic)"),
+        (".pos", CodecConstants.PostingsVersion, "postings (.pos)"),
+        (".nrm", CodecConstants.NormsVersion, "norms (.nrm)"),
+        (".dvn", CodecConstants.NumericDocValuesVersion, "numeric doc values (.dvn)"),
+        (".dvs", CodecConstants.SortedDocValuesVersion, "sorted doc values (.dvs)"),
+        (".dss", CodecConstants.SortedSetDocValuesVersion, "sorted-set doc values (.dss)"),
+        (".dsn", CodecConstants.SortedNumericDocValuesVersion, "sorted-numeric doc values (.dsn)"),
+        (".dvb", CodecConstants.BinaryDocValuesVersion, "binary doc values (.dvb)"),
+        (".bkd", CodecConstants.BKDVersion, "BKD tree (.bkd)"),
+        (".fln", CodecConstants.FieldLengthVersion, "field lengths (.fln)"),
+        (".tvd", CodecConstants.TermVectorsVersion, "term vectors data (.tvd)"),
+        (".tvx", CodecConstants.TermVectorsVersion, "term vectors index (.tvx)")
+    ];
+
     /// <summary>
     /// Validates the latest commit in <paramref name="directory"/>.
-    /// Checks that all referenced segment files are present and readable,
-    /// and that the document counts are internally consistent.
     /// </summary>
+    /// <param name="directory">The directory containing the index.</param>
+    /// <returns>The validation result.</returns>
     public static IndexCheckResult Validate(MMapDirectory directory)
+        => Check(directory);
+
+    /// <summary>
+    /// Checks the latest commit in <paramref name="directory"/>.
+    /// </summary>
+    /// <param name="directory">The directory containing the index.</param>
+    /// <param name="options">Validation options. Defaults to shallow validation.</param>
+    /// <returns>The validation result.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="directory"/> is <c>null</c>.</exception>
+    public static IndexCheckResult Check(MMapDirectory directory, IndexCheckOptions? options = null)
     {
+        ArgumentNullException.ThrowIfNull(directory);
+
+        options ??= new IndexCheckOptions();
         var result = new IndexCheckResult();
         var dirPath = directory.DirectoryPath;
-
-        // Locate the latest segments_N file
-        var commitPath = FindLatestCommit(dirPath);
-        if (commitPath is null)
+        var commits = IndexFileInspector.FindCommitFiles(dirPath);
+        if (commits.Count == 0)
         {
-            result.AddIssue("No commit file (segments_N) found in directory.");
+            result.AddIssue(
+                IndexCheckSeverity.Error,
+                IndexCheckIssueCodes.NoCommitFile,
+                "No commit file (segments_N) found in directory.",
+                null,
+                null,
+                false);
             return result;
         }
 
-        List<string> segmentIds;
-        try
-        {
-            var json = CommitFileFormat.ReadJson(commitPath);
-            using var doc = JsonDocument.Parse(json);
-            segmentIds = doc.RootElement.GetProperty("Segments")
-                .EnumerateArray()
-                .Select(e => e.GetString()!)
-                .ToList();
-        }
-        catch (IOException ex)
-        {
-            result.AddIssue($"Cannot read commit file '{commitPath}': {ex.Message}");
+        var (generation, commitPath) = commits[0];
+        result.CommitGeneration = generation;
+        var commitData = IndexFileInspector.TryReadCommit(commitPath, generation, result);
+        if (commitData is null)
             return result;
-        }
-        catch (JsonException ex)
-        {
-            result.AddIssue($"Cannot read commit file '{commitPath}': {ex.Message}");
-            return result;
-        }
 
-        foreach (var segId in segmentIds)
-        {
-            result.SegmentsChecked++;
-            var basePath = Path.Combine(dirPath, segId);
-
-            // Check required files exist
-            foreach (var ext in RequiredExtensions)
-            {
-                var filePath = basePath + ext;
-                if (!File.Exists(filePath))
-                    result.AddIssue($"Segment '{segId}': missing file '{segId}{ext}'.");
-            }
-
-            // Read and validate segment metadata
-            var segPath = basePath + ".seg";
-            if (!File.Exists(segPath)) continue;
-
-            SegmentInfo info;
-            try
-            {
-                info = SegmentInfo.ReadFrom(segPath);
-            }
-            catch (IOException ex)
-            {
-                result.AddIssue($"Segment '{segId}': cannot read .seg metadata — {ex.Message}");
-                continue;
-            }
-            catch (JsonException ex)
-            {
-                result.AddIssue($"Segment '{segId}': cannot read .seg metadata — {ex.Message}");
-                continue;
-            }
-
-            if (info.DocCount <= 0)
-            {
-                result.AddIssue($"Segment '{segId}': DocCount={info.DocCount} is invalid.");
-            }
-
-            if (info.LiveDocCount < 0 || info.LiveDocCount > info.DocCount)
-            {
-                result.AddIssue($"Segment '{segId}': LiveDocCount={info.LiveDocCount} is out of range [0,{info.DocCount}].");
-            }
-
-            // Verify .fdt (stored fields data) and .fdx (index) are readable
-            // Verify .fdt and .fdx are readable
-            var fdtPath = basePath + ".fdt";
-            var fdxPath = basePath + ".fdx";
-            if (File.Exists(fdtPath) && File.Exists(fdxPath))
-            {
-                try
-                {
-                    // Just verify we can open the index file
-                    using var fdxStream = File.OpenRead(fdxPath);
-                    if (fdxStream.Length == 0)
-                        result.AddIssue($"Segment '{segId}': .fdx is empty.");
-                }
-                catch (IOException ex)
-                {
-                    result.AddIssue($"Segment '{segId}': cannot read .fdx — {ex.Message}");
-                }
-            }
-
-            // Verify .nrm is readable (per-field format: 4-byte field count header minimum)
-            var nrmPath = basePath + ".nrm";
-            if (File.Exists(nrmPath))
-            {
-                try
-                {
-                    long nrmLen = new FileInfo(nrmPath).Length;
-                    if (nrmLen < 4)
-                    {
-                        result.AddIssue($"Segment '{segId}': .nrm has {nrmLen} bytes, expected at least 4.");
-                    }
-                }
-                catch (IOException ex)
-                {
-                    result.AddIssue($"Segment '{segId}': cannot read .nrm — {ex.Message}");
-                }
-            }
-
-            result.DocumentsChecked += info.DocCount;
-        }
+        foreach (var segmentId in commitData.Segments)
+            CheckSegment(dirPath, segmentId, options, result);
 
         return result;
     }
 
-    private static string? FindLatestCommit(string dirPath)
+    private static void CheckSegment(string dirPath, string segmentId, IndexCheckOptions options, IndexCheckResult result)
     {
-        string? latest = null;
-        int maxGen = -1;
-        foreach (var file in Directory.GetFiles(dirPath, "segments_*"))
+        result.SegmentsChecked++;
+        var basePath = Path.Combine(dirPath, segmentId);
+
+        foreach (var extension in RequiredExtensions)
+            IndexFileInspector.CheckRequiredFile(basePath + extension, segmentId, result);
+
+        var segPath = basePath + ".seg";
+        if (!File.Exists(segPath))
+            return;
+
+        SegmentInfo info;
+        try
         {
-            var name = Path.GetFileName(file);
-            if (name.StartsWith("segments_") && int.TryParse(name["segments_".Length..], out int gen) && gen > maxGen)
+            info = SegmentInfo.ReadFrom(segPath);
+        }
+        catch (Exception ex) when (ex is IOException or InvalidDataException or System.Text.Json.JsonException)
+        {
+            result.AddIssue(
+                IndexCheckSeverity.Error,
+                IndexCheckIssueCodes.SegmentMetadataUnreadable,
+                $"Segment '{segmentId}' cannot read .seg metadata: {ex.Message}",
+                Path.GetFileName(segPath),
+                segmentId,
+                false);
+            return;
+        }
+
+        if (!string.IsNullOrEmpty(info.SegmentId) && !string.Equals(info.SegmentId, segmentId, StringComparison.Ordinal))
+        {
+            result.AddIssue(
+                IndexCheckSeverity.Error,
+                IndexCheckIssueCodes.SegmentIdMismatch,
+                $"Segment metadata ID '{info.SegmentId}' does not match referenced segment ID '{segmentId}'.",
+                Path.GetFileName(segPath),
+                segmentId,
+                false);
+        }
+
+        if (info.DocCount < 0)
+        {
+            result.AddIssue(
+                IndexCheckSeverity.Error,
+                IndexCheckIssueCodes.InvalidDocCount,
+                $"Segment '{segmentId}' has invalid DocCount={info.DocCount}.",
+                Path.GetFileName(segPath),
+                segmentId,
+                false);
+        }
+
+        if (info.LiveDocCount < 0 || info.LiveDocCount > info.DocCount)
+        {
+            result.AddIssue(
+                IndexCheckSeverity.Error,
+                IndexCheckIssueCodes.InvalidLiveDocCount,
+                $"Segment '{segmentId}' has LiveDocCount={info.LiveDocCount}, outside [0,{info.DocCount}].",
+                Path.GetFileName(segPath),
+                segmentId,
+                false);
+        }
+
+        result.DocumentsChecked += Math.Max(info.DocCount, 0);
+        CheckHeaders(basePath, segmentId, options, result);
+        CheckStoredFields(basePath, segmentId, info, result);
+        CheckDeletionGeneration(basePath, segmentId, info, options, result);
+        CheckVectors(basePath, segmentId, info, options, result);
+        RunDeepChecks(directoryPath: dirPath, basePath, info, options, result);
+    }
+
+    private static void CheckHeaders(string basePath, string segmentId, IndexCheckOptions options, IndexCheckResult result)
+    {
+        foreach (var (extension, version, fileType) in HeaderChecks)
+        {
+            if (!options.IncludeOptionalSidecars && !IsRequiredHeader(extension))
+                continue;
+
+            IndexFileInspector.CheckCodecHeader(basePath + extension, version, fileType, segmentId, result);
+        }
+
+        if (options.IncludeOptionalSidecars)
+        {
+            IndexFileInspector.CheckOptionalFile(basePath + ".num", segmentId, result);
+            IndexFileInspector.CheckOptionalFile(basePath + ".pbs", segmentId, result);
+        }
+    }
+
+    private static bool IsRequiredHeader(string extension)
+        => extension is ".dic" or ".pos" or ".nrm";
+
+    private static void CheckStoredFields(string basePath, string segmentId, SegmentInfo info, IndexCheckResult result)
+    {
+        CheckStoredFieldsCompression(basePath + ".fdt", segmentId, result);
+        CheckStoredFieldsIndex(basePath + ".fdx", segmentId, info, result);
+    }
+
+    private static void CheckStoredFieldsCompression(string fdtPath, string segmentId, IndexCheckResult result)
+    {
+        if (!File.Exists(fdtPath))
+            return;
+
+        result.FilesChecked++;
+        var fileName = Path.GetFileName(fdtPath);
+        try
+        {
+            using var stream = File.OpenRead(fdtPath);
+            using var reader = new BinaryReader(stream, System.Text.Encoding.UTF8, leaveOpen: false);
+            int magic = reader.ReadInt32();
+            if (magic != CodecConstants.Magic)
             {
-                maxGen = gen;
-                latest = file;
+                result.AddIssue(
+                    IndexCheckSeverity.Error,
+                    IndexCheckIssueCodes.InvalidStoredFieldHeader,
+                    $"Invalid stored fields data file: expected magic 0x{CodecConstants.Magic:X8}, got 0x{magic:X8}.",
+                    fileName,
+                    segmentId,
+                    false);
+                return;
+            }
+
+            byte version = reader.ReadByte();
+            if (version > CodecConstants.StoredFieldsVersion)
+            {
+                result.AddIssue(
+                    IndexCheckSeverity.Error,
+                    IndexCheckIssueCodes.UnsupportedStoredFieldVersion,
+                    $"Unsupported stored fields format version {version}; this build supports up to version {CodecConstants.StoredFieldsVersion}.",
+                    fileName,
+                    segmentId,
+                    false);
+                return;
+            }
+
+            reader.ReadInt32();
+            if (version >= 5)
+            {
+                byte policyByte = reader.ReadByte();
+                if (!CompressionCodecRegistry.TryGet(policyByte, out _))
+                {
+                    result.AddIssue(
+                        IndexCheckSeverity.Error,
+                        IndexCheckIssueCodes.UnregisteredCompressionPolicy,
+                        $"Stored fields use unregistered compression policy byte {policyByte}.",
+                        fileName,
+                        segmentId,
+                        false);
+                }
             }
         }
-        return latest;
+        catch (Exception ex) when (ex is IOException or EndOfStreamException)
+        {
+            result.AddIssue(
+                IndexCheckSeverity.Error,
+                IndexCheckIssueCodes.InvalidStoredFieldHeader,
+                $"Cannot read stored fields data header from '{fileName}': {ex.Message}",
+                fileName,
+                segmentId,
+                false);
+        }
+    }
+
+    private static void CheckStoredFieldsIndex(string fdxPath, string segmentId, SegmentInfo info, IndexCheckResult result)
+    {
+        if (!File.Exists(fdxPath))
+            return;
+
+        result.FilesChecked++;
+        var fileName = Path.GetFileName(fdxPath);
+        try
+        {
+            using var stream = File.OpenRead(fdxPath);
+            using var reader = new BinaryReader(stream, System.Text.Encoding.UTF8, leaveOpen: false);
+
+            int magic = reader.ReadInt32();
+            if (magic != CodecConstants.Magic)
+            {
+                result.AddIssue(
+                    IndexCheckSeverity.Error,
+                    IndexCheckIssueCodes.InvalidStoredFieldHeader,
+                    $"Invalid stored fields index file: expected magic 0x{CodecConstants.Magic:X8}, got 0x{magic:X8}.",
+                    fileName,
+                    segmentId,
+                    false);
+                return;
+            }
+
+            byte version = reader.ReadByte();
+            if (version > CodecConstants.StoredFieldsVersion)
+            {
+                result.AddIssue(
+                    IndexCheckSeverity.Error,
+                    IndexCheckIssueCodes.UnsupportedStoredFieldVersion,
+                    $"Unsupported stored fields index format version {version}; this build supports up to version {CodecConstants.StoredFieldsVersion}.",
+                    fileName,
+                    segmentId,
+                    false);
+                return;
+            }
+
+            int blockSize = reader.ReadInt32();
+            int docCount = reader.ReadInt32();
+            int blockCount = reader.ReadInt32();
+            if (blockSize <= 0 || blockCount < 0 || docCount < 0 || docCount != info.DocCount)
+            {
+                result.AddIssue(
+                    IndexCheckSeverity.Error,
+                    IndexCheckIssueCodes.StoredFieldDocCountMismatch,
+                    $"Stored fields index doc count {docCount} does not match segment DocCount {info.DocCount}.",
+                    fileName,
+                    segmentId,
+                    false);
+            }
+
+            long previous = -1;
+            for (int i = 0; i < blockCount; i++)
+            {
+                long current = reader.ReadInt64();
+                if (current < previous || current < 0)
+                {
+                    result.AddIssue(
+                        IndexCheckSeverity.Error,
+                        IndexCheckIssueCodes.InvalidStoredFieldOffsets,
+                        $"Stored fields index contains invalid block offset {current} at block {i}.",
+                        fileName,
+                        segmentId,
+                        false);
+                    return;
+                }
+
+                previous = current;
+            }
+        }
+        catch (Exception ex) when (ex is IOException or EndOfStreamException)
+        {
+            result.AddIssue(
+                IndexCheckSeverity.Error,
+                IndexCheckIssueCodes.InvalidStoredFieldHeader,
+                $"Cannot read stored fields index header from '{fileName}': {ex.Message}",
+                fileName,
+                segmentId,
+                false);
+        }
+    }
+
+    private static void CheckDeletionGeneration(
+        string basePath,
+        string segmentId,
+        SegmentInfo info,
+        IndexCheckOptions options,
+        IndexCheckResult result)
+    {
+        var delPath = info.DelGeneration is int generation
+            ? Path.Combine(Path.GetDirectoryName(basePath)!, $"{segmentId}_gen_{generation}.del")
+            : basePath + ".del";
+
+        if (!File.Exists(delPath))
+        {
+            if (info.LiveDocCount < info.DocCount)
+            {
+                result.AddIssue(
+                    IndexCheckSeverity.Error,
+                    IndexCheckIssueCodes.DeletionFileMissing,
+                    $"Segment '{segmentId}' has deleted documents but deletion file '{Path.GetFileName(delPath)}' is missing.",
+                    Path.GetFileName(delPath),
+                    segmentId,
+                    true);
+            }
+            return;
+        }
+
+        result.FilesChecked++;
+        if (options.Deep || options.VerifyLiveDocs)
+            ValidateLiveDocs(delPath, segmentId, info, result);
+    }
+
+    private static void CheckVectors(string basePath, string segmentId, SegmentInfo info, IndexCheckOptions options, IndexCheckResult result)
+    {
+        foreach (var vectorField in info.VectorFields)
+        {
+            var vectorPath = VectorFilePaths.VectorFile(basePath, vectorField.FieldName);
+            if (!File.Exists(vectorPath))
+            {
+                result.AddIssue(
+                    IndexCheckSeverity.Error,
+                    IndexCheckIssueCodes.VectorFileMissing,
+                    $"Vector field '{vectorField.FieldName}' declares missing file '{Path.GetFileName(vectorPath)}'.",
+                    Path.GetFileName(vectorPath),
+                    segmentId,
+                    true);
+                continue;
+            }
+
+            CheckVectorHeader(vectorPath, segmentId, info, vectorField, result);
+
+            if (vectorField.HasHnsw)
+            {
+                var hnswPath = VectorFilePaths.HnswFile(basePath, vectorField.FieldName);
+                if (!File.Exists(hnswPath))
+                {
+                    result.AddIssue(
+                        IndexCheckSeverity.Error,
+                        IndexCheckIssueCodes.HnswFileMissing,
+                        $"Vector field '{vectorField.FieldName}' declares missing HNSW file '{Path.GetFileName(hnswPath)}'.",
+                        Path.GetFileName(hnswPath),
+                        segmentId,
+                        true);
+                    continue;
+                }
+
+                CheckHnswHeader(hnswPath, segmentId, vectorField, result);
+            }
+        }
+    }
+
+    private static void CheckVectorHeader(
+        string vectorPath,
+        string segmentId,
+        SegmentInfo info,
+        VectorFieldInfo vectorField,
+        IndexCheckResult result)
+    {
+        result.FilesChecked++;
+        var fileName = Path.GetFileName(vectorPath);
+        try
+        {
+            using var stream = File.OpenRead(vectorPath);
+            using var reader = new BinaryReader(stream, System.Text.Encoding.UTF8, leaveOpen: false);
+            int magic = reader.ReadInt32();
+            byte version = reader.ReadByte();
+            if (magic != CodecConstants.Magic || version > CodecConstants.VectorVersion)
+            {
+                result.AddIssue(
+                    IndexCheckSeverity.Error,
+                    IndexCheckIssueCodes.InvalidVectorHeader,
+                    $"Invalid vector header for field '{vectorField.FieldName}'.",
+                    fileName,
+                    segmentId,
+                    false);
+                return;
+            }
+
+            int vectorCount = reader.ReadInt32();
+            int dimension = reader.ReadInt32();
+            if (vectorCount != info.DocCount)
+            {
+                result.AddIssue(
+                    IndexCheckSeverity.Error,
+                    IndexCheckIssueCodes.VectorCountMismatch,
+                    $"Vector file has {vectorCount} rows but segment DocCount is {info.DocCount}.",
+                    fileName,
+                    segmentId,
+                    false);
+            }
+
+            if (dimension != vectorField.Dimension)
+            {
+                result.AddIssue(
+                    IndexCheckSeverity.Error,
+                    IndexCheckIssueCodes.VectorDimensionMismatch,
+                    $"Vector file dimension {dimension} does not match declared dimension {vectorField.Dimension}.",
+                    fileName,
+                    segmentId,
+                    false);
+            }
+        }
+        catch (Exception ex) when (ex is IOException or EndOfStreamException)
+        {
+            result.AddIssue(
+                IndexCheckSeverity.Error,
+                IndexCheckIssueCodes.InvalidVectorHeader,
+                $"Cannot read vector header from '{fileName}': {ex.Message}",
+                fileName,
+                segmentId,
+                false);
+        }
+    }
+
+    private static void CheckHnswHeader(string hnswPath, string segmentId, VectorFieldInfo vectorField, IndexCheckResult result)
+    {
+        result.FilesChecked++;
+        var fileName = Path.GetFileName(hnswPath);
+        try
+        {
+            using var stream = File.OpenRead(hnswPath);
+            using var reader = new BinaryReader(stream, System.Text.Encoding.UTF8, leaveOpen: false);
+            int magic = reader.ReadInt32();
+            byte version = reader.ReadByte();
+            if (magic != CodecConstants.Magic || version > CodecConstants.HnswVersion)
+            {
+                result.AddIssue(
+                    IndexCheckSeverity.Error,
+                    IndexCheckIssueCodes.InvalidHnswHeader,
+                    $"Invalid HNSW header for field '{vectorField.FieldName}'.",
+                    fileName,
+                    segmentId,
+                    false);
+                return;
+            }
+
+            int dimension = reader.ReadInt32();
+            bool normalised = reader.ReadByte() != 0;
+            if (dimension != vectorField.Dimension)
+            {
+                result.AddIssue(
+                    IndexCheckSeverity.Error,
+                    IndexCheckIssueCodes.HnswDimensionMismatch,
+                    $"HNSW file dimension {dimension} does not match declared dimension {vectorField.Dimension}.",
+                    fileName,
+                    segmentId,
+                    false);
+            }
+
+            if (normalised != vectorField.Normalised)
+            {
+                result.AddIssue(
+                    IndexCheckSeverity.Error,
+                    IndexCheckIssueCodes.HnswNormalisationMismatch,
+                    $"HNSW normalisation flag {normalised} does not match declared value {vectorField.Normalised}.",
+                    fileName,
+                    segmentId,
+                    false);
+            }
+        }
+        catch (Exception ex) when (ex is IOException or EndOfStreamException)
+        {
+            result.AddIssue(
+                IndexCheckSeverity.Error,
+                IndexCheckIssueCodes.InvalidHnswHeader,
+                $"Cannot read HNSW header from '{fileName}': {ex.Message}",
+                fileName,
+                segmentId,
+                false);
+        }
+    }
+
+    private static void RunDeepChecks(
+        string directoryPath,
+        string basePath,
+        SegmentInfo info,
+        IndexCheckOptions options,
+        IndexCheckResult result)
+    {
+        if (options.Deep || options.VerifyDocValues)
+            ValidateDocValuesDeep(basePath, info, result);
+        if (options.Deep || options.VerifyStoredFields)
+            ValidateStoredFieldsDeep(basePath, info, result);
+        if (options.Deep || options.VerifyPostings)
+            ValidatePostingsDeep(directoryPath, info, result);
+        if (options.Deep || options.VerifyVectors)
+            ValidateVectorsDeep(basePath, info, result);
+        if (options.Deep || options.VerifyHnsw)
+            ValidateHnswDeep(basePath, info, result);
+    }
+
+    private static void ValidateDocValuesDeep(string basePath, SegmentInfo info, IndexCheckResult result)
+    {
+        TryReadDocValues(basePath + ".dvn", info, result, static path => NumericDocValuesReader.Read(path).Values.Values.Select(static values => values.Length));
+        TryReadDocValues(basePath + ".dvs", info, result, static path => SortedDocValuesReader.Read(path).Values.Values.Select(static values => values.Length));
+        TryReadDocValues(basePath + ".dss", info, result, static path => SortedSetDocValuesReader.Read(path).Values.Select(static values => values.Length));
+        TryReadDocValues(basePath + ".dsn", info, result, static path => SortedNumericDocValuesReader.Read(path).Values.Select(static values => values.Length));
+        TryReadDocValues(basePath + ".dvb", info, result, static path => BinaryDocValuesReader.Read(path).Values.Select(static values => values.Length));
+    }
+
+    private static void TryReadDocValues(
+        string path,
+        SegmentInfo info,
+        IndexCheckResult result,
+        Func<string, IEnumerable<int>> readLengths)
+    {
+        if (!File.Exists(path))
+            return;
+
+        string fileName = Path.GetFileName(path);
+        try
+        {
+            foreach (int length in readLengths(path))
+            {
+                if (length != info.DocCount)
+                {
+                    result.AddIssue(
+                        IndexCheckSeverity.Error,
+                        IndexCheckIssueCodes.DocValuesDocCountMismatch,
+                        $"DocValues file '{fileName}' has field length {length}, expected {info.DocCount}.",
+                        fileName,
+                        info.SegmentId,
+                        false);
+                }
+            }
+        }
+        catch (Exception ex) when (ex is IOException or InvalidDataException or EndOfStreamException)
+        {
+            result.AddIssue(
+                IndexCheckSeverity.Error,
+                IndexCheckIssueCodes.DocValuesReadFailure,
+                $"Cannot read DocValues file '{fileName}': {ex.Message}",
+                fileName,
+                info.SegmentId,
+                false);
+        }
+    }
+
+    private static void ValidateStoredFieldsDeep(string basePath, SegmentInfo info, IndexCheckResult result)
+    {
+        string fileName = Path.GetFileName(basePath + ".fdt");
+        try
+        {
+            using var reader = StoredFieldsReader.Open(basePath + ".fdt", basePath + ".fdx");
+            for (int docId = 0; docId < info.DocCount; docId++)
+                reader.ReadDocument(docId);
+        }
+        catch (Exception ex) when (ex is IOException or InvalidDataException or EndOfStreamException)
+        {
+            result.AddIssue(
+                IndexCheckSeverity.Error,
+                IndexCheckIssueCodes.StoredFieldsReadFailure,
+                $"Cannot read stored fields for segment '{info.SegmentId}': {ex.Message}",
+                fileName,
+                info.SegmentId,
+                false);
+        }
+    }
+
+    private static void ValidatePostingsDeep(string directoryPath, SegmentInfo info, IndexCheckResult result)
+    {
+        try
+        {
+            using var directory = new MMapDirectory(directoryPath);
+            using var reader = new SegmentReader(directory, info);
+            foreach (var fieldName in info.FieldNames)
+            {
+                var terms = reader.GetAllTermsForField(fieldName + '\0');
+                foreach (var (_, offset) in terms)
+                {
+                    using var postings = reader.GetPostingsEnumAtOffset(offset);
+                    int previous = -1;
+                    while (postings.MoveNext())
+                    {
+                        int docId = postings.DocId;
+                        if (docId <= previous || docId < 0 || docId >= info.DocCount)
+                            throw new InvalidDataException($"Invalid postings doc ID {docId} in segment '{info.SegmentId}'.");
+                        previous = docId;
+                    }
+                }
+            }
+        }
+        catch (Exception ex) when (ex is IOException or InvalidDataException or EndOfStreamException)
+        {
+            result.AddIssue(
+                IndexCheckSeverity.Error,
+                IndexCheckIssueCodes.PostingsReadFailure,
+                $"Cannot validate postings for segment '{info.SegmentId}': {ex.Message}",
+                info.SegmentId + ".pos",
+                info.SegmentId,
+                false);
+        }
+    }
+
+    private static void ValidateLiveDocs(string delPath, string segmentId, SegmentInfo info, IndexCheckResult result)
+    {
+        var fileName = Path.GetFileName(delPath);
+        try
+        {
+            var liveDocs = LiveDocs.Deserialise(delPath, info.DocCount);
+            if (liveDocs.MaxDoc != info.DocCount || liveDocs.LiveCount != info.LiveDocCount)
+            {
+                result.AddIssue(
+                    IndexCheckSeverity.Error,
+                    IndexCheckIssueCodes.DeletionLiveCountMismatch,
+                    $"Deletion file live count {liveDocs.LiveCount} does not match segment LiveDocCount {info.LiveDocCount}.",
+                    fileName,
+                    segmentId,
+                    false);
+            }
+        }
+        catch (Exception ex) when (ex is IOException or InvalidDataException or EndOfStreamException)
+        {
+            result.AddIssue(
+                IndexCheckSeverity.Error,
+                IndexCheckIssueCodes.DeletionFileUnreadable,
+                $"Cannot read deletion file '{fileName}': {ex.Message}",
+                fileName,
+                segmentId,
+                false);
+        }
+    }
+
+    private static void ValidateVectorsDeep(string basePath, SegmentInfo info, IndexCheckResult result)
+    {
+        foreach (var vectorField in info.VectorFields)
+        {
+            var vectorPath = VectorFilePaths.VectorFile(basePath, vectorField.FieldName);
+            string fileName = Path.GetFileName(vectorPath);
+            try
+            {
+                using var reader = VectorReader.Open(vectorPath);
+                if (reader.VectorCount > 0)
+                {
+                    reader.ReadVector(0);
+                    reader.ReadVector(reader.VectorCount - 1);
+                }
+            }
+            catch (Exception ex) when (ex is IOException or InvalidDataException or EndOfStreamException)
+            {
+                result.AddIssue(
+                    IndexCheckSeverity.Error,
+                    IndexCheckIssueCodes.VectorReadFailure,
+                    $"Cannot read vector file '{fileName}': {ex.Message}",
+                    fileName,
+                    info.SegmentId,
+                    false);
+            }
+        }
+    }
+
+    private static void ValidateHnswDeep(string basePath, SegmentInfo info, IndexCheckResult result)
+    {
+        foreach (var vectorField in info.VectorFields)
+        {
+            if (!vectorField.HasHnsw)
+                continue;
+
+            var vectorPath = VectorFilePaths.VectorFile(basePath, vectorField.FieldName);
+            var hnswPath = VectorFilePaths.HnswFile(basePath, vectorField.FieldName);
+            string fileName = Path.GetFileName(hnswPath);
+            try
+            {
+                using var vectorReader = VectorReader.Open(vectorPath);
+                var source = new VectorReaderSource(vectorReader);
+                HnswReader.Read(hnswPath, source, vectorField.Normalised);
+            }
+            catch (Exception ex) when (ex is IOException or InvalidDataException or EndOfStreamException)
+            {
+                result.AddIssue(
+                    IndexCheckSeverity.Error,
+                    IndexCheckIssueCodes.HnswReadFailure,
+                    $"Cannot read HNSW file '{fileName}': {ex.Message}",
+                    fileName,
+                    info.SegmentId,
+                    false);
+            }
+        }
     }
 }
