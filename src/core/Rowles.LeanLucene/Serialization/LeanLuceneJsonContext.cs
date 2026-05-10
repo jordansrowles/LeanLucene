@@ -1,6 +1,7 @@
 using System.Text.Json.Serialization;
 using Rowles.LeanLucene.Diagnostics;
 using Rowles.LeanLucene.Index;
+using Rowles.LeanLucene.Index.Backup;
 using Rowles.LeanLucene.Index.Migration;
 using Rowles.LeanLucene.Index.Segment;
 using Rowles.LeanLucene.Search.Scoring;
@@ -16,4 +17,6 @@ namespace Rowles.LeanLucene.Serialization;
 [JsonSerializable(typeof(SlowQueryEntry))]
 [JsonSerializable(typeof(IndexMigrationMarker))]
 [JsonSerializable(typeof(IndexCodecMigrationAction))]
+[JsonSerializable(typeof(IndexBackupManifest))]
+[JsonSerializable(typeof(IndexBackupFileEntry))]
 internal sealed partial class LeanLuceneJsonContext : JsonSerializerContext;

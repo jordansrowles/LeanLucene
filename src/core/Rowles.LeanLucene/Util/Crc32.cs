@@ -29,6 +29,22 @@ internal static class Crc32
         return c ^ 0xFFFFFFFFu;
     }
 
+    /// <summary>Computes the CRC-32 of all bytes read from <paramref name="stream"/>.</summary>
+    public static uint Compute(Stream stream)
+    {
+        ArgumentNullException.ThrowIfNull(stream);
+        uint c = 0xFFFFFFFFu;
+        Span<byte> buffer = stackalloc byte[16 * 1024];
+        int read;
+        while ((read = stream.Read(buffer)) > 0)
+        {
+            foreach (var b in buffer[..read])
+                c = Table[(c ^ b) & 0xFF] ^ (c >> 8);
+        }
+
+        return c ^ 0xFFFFFFFFu;
+    }
+
     /// <summary>Computes the CRC-32 of <paramref name="text"/> using UTF-8.</summary>
     public static uint Compute(string text)
         => Compute(System.Text.Encoding.UTF8.GetBytes(text));

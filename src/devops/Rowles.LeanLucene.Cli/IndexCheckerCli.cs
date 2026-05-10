@@ -2,6 +2,7 @@
 using System.Text;
 using System.Text.Json;
 using Rowles.LeanLucene.Index;
+using Rowles.LeanLucene.Index.Backup;
 using Rowles.LeanLucene.Index.Compatibility;
 using Rowles.LeanLucene.Index.Format;
 using Rowles.LeanLucene.Index.Migration;
@@ -139,6 +140,8 @@ public static class IndexCheckerCli
         root.Add(BuildInspectCommand());
         root.Add(BuildCompatCommand());
         root.Add(BuildMigrateCommand());
+        root.Add(BuildBackupCommand());
+        root.Add(BuildRestoreCommand());
         return root;
     }
 
@@ -257,6 +260,60 @@ public static class IndexCheckerCli
         return command;
     }
 
+    private static Command BuildBackupCommand()
+    {
+        var indexPath = new Argument<string>("index-path") { Description = "Path to the LeanLucene index directory." };
+        var backupPath = new Argument<string>("backup-path") { Description = "Path to the backup directory." };
+        var commitGeneration = new Option<int?>("--commit-generation") { Description = "Back up a specific commit generation. Latest is used by default." };
+        var overwrite = BoolOption("--overwrite", "Allow an existing backup directory to be cleared.");
+        var json = BoolOption("--json", "Write JSON instead of text.");
+        var outputPath = StringOption("--output", "Write the report to a file.");
+        var command = new Command("backup", "Back up a LeanLucene index commit point.");
+        command.Add(indexPath);
+        command.Add(backupPath);
+        command.Add(commitGeneration);
+        command.Add(overwrite);
+        command.Add(json);
+        command.Add(outputPath);
+        command.SetAction(result => RunBackup(
+            GetRequiredValue(result, indexPath),
+            GetRequiredValue(result, backupPath),
+            result.GetValue(commitGeneration),
+            result.GetValue(overwrite),
+            result.GetValue(json),
+            result.GetValue(outputPath),
+            result.InvocationConfiguration.Output,
+            result.InvocationConfiguration.Error));
+        return command;
+    }
+
+    private static Command BuildRestoreCommand()
+    {
+        var backupPath = new Argument<string>("backup-path") { Description = "Path to the LeanLucene backup directory." };
+        var targetPath = new Argument<string>("target-path") { Description = "Path to the target index directory." };
+        var overwrite = BoolOption("--overwrite", "Allow an existing target index directory to be cleared.");
+        var skipValidation = BoolOption("--skip-validation", "Skip validation after restore.");
+        var json = BoolOption("--json", "Write JSON instead of text.");
+        var outputPath = StringOption("--output", "Write the report to a file.");
+        var command = new Command("restore", "Restore a LeanLucene index backup.");
+        command.Add(backupPath);
+        command.Add(targetPath);
+        command.Add(overwrite);
+        command.Add(skipValidation);
+        command.Add(json);
+        command.Add(outputPath);
+        command.SetAction(result => RunRestore(
+            GetRequiredValue(result, backupPath),
+            GetRequiredValue(result, targetPath),
+            result.GetValue(overwrite),
+            result.GetValue(skipValidation),
+            result.GetValue(json),
+            result.GetValue(outputPath),
+            result.InvocationConfiguration.Output,
+            result.InvocationConfiguration.Error));
+        return command;
+    }
+
     private static int RunInspect(string indexPath, bool json, string? outputPath, TextWriter output, TextWriter error)
     {
         try
@@ -320,6 +377,68 @@ public static class IndexCheckerCli
             return result.Succeeded ? CliExitCodes.Success : CliExitCodes.ValidationErrors;
         }
         catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException or ArgumentException)
+        {
+            error.WriteLine(ex.Message);
+            return CliExitCodes.InvalidArguments;
+        }
+    }
+
+    private static int RunBackup(
+        string indexPath,
+        string backupPath,
+        int? commitGeneration,
+        bool overwrite,
+        bool json,
+        string? outputPath,
+        TextWriter output,
+        TextWriter error)
+    {
+        try
+        {
+            var result = IndexBackup.Backup(
+                Path.GetFullPath(indexPath),
+                Path.GetFullPath(backupPath),
+                new IndexBackupOptions
+                {
+                    CommitGeneration = commitGeneration,
+                    OverwriteBackupDirectory = overwrite
+                });
+            var dto = CliBackupResultDto.FromResult(result);
+            WriteCliResult(outputPath, json, output, dto, writer => WriteBackupText(writer, dto));
+            return CliExitCodes.Success;
+        }
+        catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException or ArgumentException or InvalidOperationException)
+        {
+            error.WriteLine(ex.Message);
+            return CliExitCodes.InvalidArguments;
+        }
+    }
+
+    private static int RunRestore(
+        string backupPath,
+        string targetPath,
+        bool overwrite,
+        bool skipValidation,
+        bool json,
+        string? outputPath,
+        TextWriter output,
+        TextWriter error)
+    {
+        try
+        {
+            var result = IndexBackup.Restore(
+                Path.GetFullPath(backupPath),
+                Path.GetFullPath(targetPath),
+                new IndexRestoreOptions
+                {
+                    OverwriteTargetDirectory = overwrite,
+                    ValidateAfterRestore = !skipValidation
+                });
+            var dto = CliRestoreResultDto.FromResult(result);
+            WriteCliResult(outputPath, json, output, dto, writer => WriteRestoreText(writer, dto));
+            return dto.IsHealthy ? CliExitCodes.Success : CliExitCodes.ValidationErrors;
+        }
+        catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException or ArgumentException or InvalidOperationException)
         {
             error.WriteLine(ex.Message);
             return CliExitCodes.InvalidArguments;
@@ -438,6 +557,31 @@ public static class IndexCheckerCli
         }
     }
 
+    private static void WriteBackupText(TextWriter writer, CliBackupResultDto result)
+    {
+        writer.WriteLine("Backup");
+        writer.WriteLine($"Commit generation: {result.CommitGeneration}");
+        writer.WriteLine($"Backup directory: {result.BackupDirectoryPath}");
+        writer.WriteLine($"Files: {result.Files.Count}");
+        foreach (var file in result.Files)
+            writer.WriteLine($"{file.FileName} {file.Role} length={file.Length} crc32={file.Crc32}");
+    }
+
+    private static void WriteRestoreText(TextWriter writer, CliRestoreResultDto result)
+    {
+        writer.WriteLine("Restore");
+        writer.WriteLine($"Commit generation: {result.CommitGeneration}");
+        writer.WriteLine($"Target directory: {result.TargetDirectoryPath}");
+        writer.WriteLine($"Files: {result.RestoredFiles.Count}");
+        writer.WriteLine($"Healthy: {result.IsHealthy}");
+        foreach (var issue in result.Issues)
+        {
+            writer.WriteLine($"{issue.Severity} {issue.Code} {issue.Message}");
+            foreach (var suggestedAction in issue.SuggestedActions)
+                writer.WriteLine($"  Suggested action: {suggestedAction}");
+        }
+    }
+
     private static string FormatSummary(IndexCheckResult result)
         => result.IsHealthy
             ? $"Healthy: checked {result.SegmentsChecked} segment(s), {result.DocumentsChecked} document(s), {result.FilesChecked} file(s)."
@@ -465,6 +609,8 @@ public static class IndexCheckerCli
             CliIndexFormatInventoryDto inventory => JsonSerializer.Serialize(inventory, IndexCheckCliJsonContext.Default.CliIndexFormatInventoryDto),
             CliCompatibilityResultDto compatibility => JsonSerializer.Serialize(compatibility, IndexCheckCliJsonContext.Default.CliCompatibilityResultDto),
             CliMigrationResultDto migration => JsonSerializer.Serialize(migration, IndexCheckCliJsonContext.Default.CliMigrationResultDto),
+            CliBackupResultDto backup => JsonSerializer.Serialize(backup, IndexCheckCliJsonContext.Default.CliBackupResultDto),
+            CliRestoreResultDto restore => JsonSerializer.Serialize(restore, IndexCheckCliJsonContext.Default.CliRestoreResultDto),
             _ => throw new InvalidOperationException($"Unsupported JSON DTO type '{typeof(T).Name}'.")
         };
         writer.WriteLine(json);
@@ -715,5 +861,68 @@ internal sealed class CliMigrationActionDto
             FileName = action.FileName,
             FromVersion = action.FromVersion,
             ToVersion = action.ToVersion
+        };
+}
+
+internal sealed class CliBackupResultDto
+{
+    public required int CommitGeneration { get; init; }
+    public required long ContentToken { get; init; }
+    public required string BackupDirectoryPath { get; init; }
+    public required IReadOnlyList<string> CopiedFiles { get; init; }
+    public required List<CliBackupFileDto> Files { get; init; }
+
+    public static CliBackupResultDto FromResult(IndexBackupResult result)
+        => new()
+        {
+            CommitGeneration = result.Manifest.CommitGeneration,
+            ContentToken = result.Manifest.ContentToken,
+            BackupDirectoryPath = result.BackupDirectoryPath,
+            CopiedFiles = result.CopiedFiles,
+            Files = result.Manifest.Files.Select(CliBackupFileDto.FromEntry).ToList()
+        };
+}
+
+internal sealed class CliRestoreResultDto
+{
+    public required int CommitGeneration { get; init; }
+    public required long ContentToken { get; init; }
+    public required string TargetDirectoryPath { get; init; }
+    public required IReadOnlyList<string> RestoredFiles { get; init; }
+    public required bool IsHealthy { get; init; }
+    public required List<CliIndexCheckIssueDto> Issues { get; init; }
+
+    public static CliRestoreResultDto FromResult(IndexRestoreResult result)
+        => new()
+        {
+            CommitGeneration = result.Manifest.CommitGeneration,
+            ContentToken = result.Manifest.ContentToken,
+            TargetDirectoryPath = result.TargetDirectoryPath,
+            RestoredFiles = result.RestoredFiles,
+            IsHealthy = result.ValidationResult?.IsHealthy ?? true,
+            Issues = result.ValidationResult?.DetailedIssues.Select(CliIndexCheckIssueDto.FromIssue).ToList() ?? []
+        };
+}
+
+internal sealed class CliBackupFileDto
+{
+    public required string FileName { get; init; }
+    public required long Length { get; init; }
+    public required string Crc32 { get; init; }
+    public string? SegmentId { get; init; }
+    public required string Role { get; init; }
+    public required bool IsRequired { get; init; }
+    public required bool IsCommitFile { get; init; }
+
+    public static CliBackupFileDto FromEntry(IndexBackupFileEntry entry)
+        => new()
+        {
+            FileName = entry.FileName,
+            Length = entry.Length,
+            Crc32 = entry.Crc32.ToString("x8"),
+            SegmentId = entry.SegmentId,
+            Role = entry.Role,
+            IsRequired = entry.IsRequired,
+            IsCommitFile = entry.IsCommitFile
         };
 }

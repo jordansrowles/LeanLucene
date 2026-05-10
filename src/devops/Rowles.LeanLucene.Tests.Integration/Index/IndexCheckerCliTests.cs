@@ -183,6 +183,79 @@ public sealed class IndexCheckerCliTests : IClassFixture<TestDirectoryFixture>
         Assert.Equal(string.Empty, error.ToString());
     }
 
+    [Fact(DisplayName = "IndexCheckerCli: Backup Writes Manifest")]
+    public void IndexCheckerCli_Backup_WritesManifest()
+    {
+        var path = CreateIndex("cli_backup");
+        var backupPath = Path.Combine(_fixture.Path, "cli-backup-output");
+        using var output = new StringWriter();
+        using var error = new StringWriter();
+
+        int exitCode = IndexCheckerCli.Run(["backup", path, backupPath], output, error);
+
+        Assert.Equal(0, exitCode);
+        Assert.Contains("Backup", output.ToString());
+        Assert.True(File.Exists(Path.Combine(backupPath, "leanlucene-backup-manifest.json")));
+        Assert.Equal(string.Empty, error.ToString());
+    }
+
+    [Fact(DisplayName = "IndexCheckerCli: Backup Json Writes Manifest Shape")]
+    public void IndexCheckerCli_BackupJson_WritesManifestShape()
+    {
+        var path = CreateIndex("cli_backup_json");
+        var backupPath = Path.Combine(_fixture.Path, "cli-backup-json-output");
+        using var output = new StringWriter();
+        using var error = new StringWriter();
+
+        int exitCode = IndexCheckerCli.Run(["backup", path, backupPath, "--json"], output, error);
+
+        Assert.Equal(0, exitCode);
+        Assert.Contains("\"commitGeneration\":1", output.ToString());
+        Assert.Contains("\"files\"", output.ToString());
+        Assert.Equal(string.Empty, error.ToString());
+    }
+
+    [Fact(DisplayName = "IndexCheckerCli: Restore Recreates Healthy Index")]
+    public void IndexCheckerCli_Restore_RecreatesHealthyIndex()
+    {
+        var path = CreateIndex("cli_restore");
+        var backupPath = Path.Combine(_fixture.Path, "cli-restore-backup");
+        var restorePath = Path.Combine(_fixture.Path, "cli-restore-output");
+        using var backupOutput = new StringWriter();
+        using var backupError = new StringWriter();
+        using var restoreOutput = new StringWriter();
+        using var restoreError = new StringWriter();
+
+        int backupExitCode = IndexCheckerCli.Run(["backup", path, backupPath], backupOutput, backupError);
+        int restoreExitCode = IndexCheckerCli.Run(["restore", backupPath, restorePath, "--json"], restoreOutput, restoreError);
+
+        Assert.Equal(0, backupExitCode);
+        Assert.Equal(0, restoreExitCode);
+        Assert.Contains("\"isHealthy\":true", restoreOutput.ToString());
+        Assert.True(File.Exists(Path.Combine(restorePath, "segments_1")));
+        Assert.Equal(string.Empty, restoreError.ToString());
+    }
+
+    [Fact(DisplayName = "IndexCheckerCli: Restore Corrupt Backup Returns Two")]
+    public void IndexCheckerCli_RestoreCorruptBackup_ReturnsTwo()
+    {
+        var path = CreateIndex("cli_restore_corrupt");
+        var backupPath = Path.Combine(_fixture.Path, "cli-restore-corrupt-backup");
+        var restorePath = Path.Combine(_fixture.Path, "cli-restore-corrupt-output");
+        using var backupOutput = new StringWriter();
+        using var backupError = new StringWriter();
+        using var restoreOutput = new StringWriter();
+        using var restoreError = new StringWriter();
+
+        int backupExitCode = IndexCheckerCli.Run(["backup", path, backupPath], backupOutput, backupError);
+        File.AppendAllText(Directory.GetFiles(backupPath, "*.dic").Single(), "corruption");
+        int restoreExitCode = IndexCheckerCli.Run(["restore", backupPath, restorePath], restoreOutput, restoreError);
+
+        Assert.Equal(0, backupExitCode);
+        Assert.Equal(2, restoreExitCode);
+        Assert.NotEqual(string.Empty, restoreError.ToString());
+    }
+
     private string CreateIndex(string name)
     {
         var path = Path.Combine(_fixture.Path, name);

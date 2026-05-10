@@ -153,7 +153,16 @@ if (!compatibility.CanWrite && compatibility.CanMigrate)
 
 `IndexWriter`, `IndexSearcher`, and `SearcherManager` reject unsupported future formats and incomplete migration markers by default. Set `CompatibilityMode` only when intentionally opening supported older readable formats.
 
-The CLI is built as `leanlucene-cli.exe` and exposes validation, inventory, compatibility, and migration commands:
+Use `IndexBackup` to create a manifest-backed copy of the exact files needed to restore one commit point:
+
+```csharp
+var backup = IndexBackup.Backup("./index", "./index.backup");
+var restore = IndexBackup.Restore("./index.backup", "./index.restored");
+```
+
+The backup manifest records the selected `segments_N` generation, segment-owned files, optional sidecars, file lengths, and CRC-32 checksums. Restore validates the manifest before copying files and validates the restored index by default.
+
+The CLI is built as `leanlucene-cli.exe` and exposes validation, inventory, compatibility, migration, backup, and restore commands:
 
 ```powershell
 leanlucene-cli.exe check .\index --deep
@@ -161,6 +170,8 @@ leanlucene-cli.exe inspect .\index --json
 leanlucene-cli.exe compat .\index --deep
 leanlucene-cli.exe migrate .\index --dry-run --json
 leanlucene-cli.exe migrate .\index --execute --staging .\index.migration
+leanlucene-cli.exe backup .\index .\index.backup --json
+leanlucene-cli.exe restore .\index.backup .\index.restored
 ```
 
 See [Index checker CLI](docs/tutorials/index-management/04-cli-checker.md) for command options and exit codes.
@@ -370,6 +381,8 @@ dotnet build .\src\devops\Rowles.LeanLucene.Cli\Rowles.LeanLucene.Cli.csproj -c 
 .\src\devops\Rowles.LeanLucene.Cli\bin\Release\net10.0\leanlucene-cli.exe check .\index --json --doc-values --vectors
 .\src\devops\Rowles.LeanLucene.Cli\bin\Release\net10.0\leanlucene-cli.exe check .\index --summary-only --output .\check.txt
 .\src\devops\Rowles.LeanLucene.Cli\bin\Release\net10.0\leanlucene-cli.exe migrate .\index --execute --staging .\index.migration
+.\src\devops\Rowles.LeanLucene.Cli\bin\Release\net10.0\leanlucene-cli.exe backup .\index .\index.backup
+.\src\devops\Rowles.LeanLucene.Cli\bin\Release\net10.0\leanlucene-cli.exe restore .\index.backup .\index.restored
 ```
 
 Exit code `0` means healthy or warnings only, `1` means validation errors, and `2` means invalid arguments or CLI failure. `--fail-on-warnings` makes warnings return `1`. See [Index checker CLI](docs/tutorials/index-management/04-cli-checker.md).

@@ -1,4 +1,6 @@
-﻿namespace Rowles.LeanLucene.Index.Indexer;
+﻿using Rowles.LeanLucene.Index.Backup;
+
+namespace Rowles.LeanLucene.Index.Indexer;
 
 public sealed partial class IndexWriter
 {
@@ -167,6 +169,45 @@ public sealed partial class IndexWriter
         {
             _heldSnapshots.Remove(snapshot);
         }
+    }
+
+    /// <summary>
+    /// Creates a backup manifest for a held snapshot without copying files.
+    /// </summary>
+    /// <param name="snapshot">The snapshot whose commit generation should be described.</param>
+    /// <returns>A backup manifest for the snapshot commit generation.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="snapshot"/> is <c>null</c>.</exception>
+    public IndexBackupManifest CreateBackupManifest(IndexSnapshot snapshot)
+    {
+        ArgumentNullException.ThrowIfNull(snapshot);
+        ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
+
+        return IndexBackup.CreateManifest(
+            _directory.DirectoryPath,
+            new IndexBackupOptions { CommitGeneration = snapshot.CommitGeneration });
+    }
+
+    /// <summary>
+    /// Creates a backup for a held snapshot.
+    /// </summary>
+    /// <param name="snapshot">The snapshot whose commit generation should be backed up.</param>
+    /// <param name="backupDirectoryPath">The target backup directory path.</param>
+    /// <param name="options">Backup options. The snapshot commit generation always takes precedence.</param>
+    /// <returns>The backup result.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="snapshot"/> is <c>null</c>.</exception>
+    public IndexBackupResult BackupSnapshot(IndexSnapshot snapshot, string backupDirectoryPath, IndexBackupOptions? options = null)
+    {
+        ArgumentNullException.ThrowIfNull(snapshot);
+        ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
+
+        var effectiveOptions = new IndexBackupOptions
+        {
+            CommitGeneration = snapshot.CommitGeneration,
+            OverwriteBackupDirectory = options?.OverwriteBackupDirectory ?? false,
+            IncludeCommitStats = options?.IncludeCommitStats ?? true
+        };
+
+        return IndexBackup.Backup(_directory.DirectoryPath, backupDirectoryPath, effectiveOptions);
     }
 
     /// <summary>Returns the set of segment IDs protected by active snapshots.</summary>

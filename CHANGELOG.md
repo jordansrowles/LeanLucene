@@ -20,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Public compatibility API through `IndexCompatibility.Check`, plus reader and writer open guardrails for unsupported future formats, required migrations, and incomplete migration markers.
 - Public codec migration API through `IndexCodecMigrator.Plan` and `IndexCodecMigrator.Migrate`, with dry-run planning, staged migration, migration markers, rollback, abandon, and executable rewrites for readable term dictionary, numeric DocValues, sorted DocValues, field-length, and stored-field codec upgrades.
 - Public `IndexValidator.Check` API and `System.CommandLine` based `leanlucene-cli.exe` commands for `check`, `inspect`, `compat`, and `migrate`.
+- Public `IndexBackup` API and `leanlucene-cli.exe backup`/`restore` commands for manifest-backed snapshot backups. Manifests record commit generation, content token, file names, file lengths, CRC-32 checksums, and file roles before restore validation.
 - `Rowles.LeanLucene.Example.NewsgroupsIndexer`, a console example using the shared `bench\data\20newsgroups` data for creating checker test indexes.
 
 ### Changed

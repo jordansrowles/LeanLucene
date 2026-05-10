@@ -7,4 +7,6 @@ namespace Rowles.LeanLucene.Cli;
 [JsonSerializable(typeof(CliIndexFormatInventoryDto))]
 [JsonSerializable(typeof(CliCompatibilityResultDto))]
 [JsonSerializable(typeof(CliMigrationResultDto))]
+[JsonSerializable(typeof(CliBackupResultDto))]
+[JsonSerializable(typeof(CliRestoreResultDto))]
 internal sealed partial class IndexCheckCliJsonContext : JsonSerializerContext;
