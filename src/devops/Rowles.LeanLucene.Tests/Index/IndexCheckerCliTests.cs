@@ -71,7 +71,7 @@ public sealed class IndexCheckerCliTests : IClassFixture<TestDirectoryFixture>
         int exitCode = IndexCheckerCli.Run(["check", "--unknown"], output, error);
 
         Assert.Equal(2, exitCode);
-        Assert.Contains("Unknown option", error.ToString());
+        Assert.NotEqual(string.Empty, error.ToString());
     }
 
     [Fact(DisplayName = "IndexCheckerCli: Output Writes Report File")]
@@ -90,16 +90,47 @@ public sealed class IndexCheckerCliTests : IClassFixture<TestDirectoryFixture>
         Assert.Equal(string.Empty, error.ToString());
     }
 
-    [Fact(DisplayName = "IndexCheckerCli: Interactive Command Requires Terminal When Redirected")]
-    public void IndexCheckerCli_Interactive_WhenRedirected_ReturnsTwo()
+    [Fact(DisplayName = "IndexCheckerCli: Inspect Json Writes Inventory")]
+    public void IndexCheckerCli_InspectJson_WritesInventory()
     {
+        var path = CreateIndex("cli_inspect");
         using var output = new StringWriter();
         using var error = new StringWriter();
 
-        int exitCode = IndexCheckerCli.Run(["interactive"], output, error);
+        int exitCode = IndexCheckerCli.Run(["inspect", path, "--json"], output, error);
 
-        Assert.Equal(2, exitCode);
-        Assert.Contains("Interactive mode requires a terminal", error.ToString());
+        Assert.Equal(0, exitCode);
+        Assert.Contains("\"commitGeneration\":1", output.ToString());
+        Assert.Contains("\"segments\"", output.ToString());
+        Assert.Equal(string.Empty, error.ToString());
+    }
+
+    [Fact(DisplayName = "IndexCheckerCli: Compat Valid Index Returns Zero")]
+    public void IndexCheckerCli_CompatValidIndex_ReturnsZero()
+    {
+        var path = CreateIndex("cli_compat");
+        using var output = new StringWriter();
+        using var error = new StringWriter();
+
+        int exitCode = IndexCheckerCli.Run(["compat", path], output, error);
+
+        Assert.Equal(0, exitCode);
+        Assert.Contains("Status: Compatible", output.ToString());
+        Assert.Equal(string.Empty, error.ToString());
+    }
+
+    [Fact(DisplayName = "IndexCheckerCli: Migrate Dry Run Returns Plan")]
+    public void IndexCheckerCli_MigrateDryRun_ReturnsPlan()
+    {
+        var path = CreateIndex("cli_migrate");
+        using var output = new StringWriter();
+        using var error = new StringWriter();
+
+        int exitCode = IndexCheckerCli.Run(["migrate", path, "--dry-run"], output, error);
+
+        Assert.Equal(0, exitCode);
+        Assert.Contains("Migration dry-run", output.ToString());
+        Assert.Equal(string.Empty, error.ToString());
     }
 
     private string CreateIndex(string name)

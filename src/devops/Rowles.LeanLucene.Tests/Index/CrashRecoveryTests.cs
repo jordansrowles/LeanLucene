@@ -216,9 +216,9 @@ public class CrashRecoveryTests : IDisposable
         // Act
         using var writer2 = new IndexWriter(new MMapDirectory(_dir), new IndexWriterConfig());
 
-        // Assert — temp files removed
+        // Assert: recognised temp files are removed, unrelated temp files are left alone.
         Assert.False(File.Exists(Path.Combine(_dir, "segments_99.tmp")));
-        Assert.False(File.Exists(Path.Combine(_dir, "data.tmp")));
+        Assert.True(File.Exists(Path.Combine(_dir, "data.tmp")));
     }
 
     /// <summary>

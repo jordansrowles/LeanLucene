@@ -1,0 +1,120 @@
+﻿using Rowles.LeanLucene.Codecs;
+using Rowles.LeanLucene.Document;
+using Rowles.LeanLucene.Document.Fields;
+using Rowles.LeanLucene.Index.Compatibility;
+using Rowles.LeanLucene.Index.Migration;
+using Rowles.LeanLucene.Store;
+using Rowles.LeanLucene.Tests.Fixtures;
+
+namespace Rowles.LeanLucene.Tests.Index;
+
+[Trait("Category", "Index")]
+[Trait("Category", "Validation")]
+public sealed class IndexCompatibilityTests : IClassFixture<TestDirectoryFixture>
+{
+    private readonly TestDirectoryFixture _fixture;
+
+    public IndexCompatibilityTests(TestDirectoryFixture fixture) => _fixture = fixture;
+
+    [Fact]
+    public void Check_CurrentIndex_ReturnsCompatible()
+    {
+        using var directory = CreateIndex("compat_current");
+
+        var result = IndexCompatibility.Check(directory);
+
+        Assert.Equal(IndexCompatibilityStatus.Compatible, result.Status);
+        Assert.True(result.CanRead);
+        Assert.True(result.CanWrite);
+        Assert.False(result.RequiresMigration);
+    }
+
+    [Fact]
+    public void Check_OlderReadableCodec_ReturnsMigrationRecommended()
+    {
+        using var directory = CreateIndex("compat_old");
+        WriteCodecVersion(directory, "*.dic", 1);
+
+        var result = IndexCompatibility.Check(directory);
+
+        Assert.Equal(IndexCompatibilityStatus.MigrationRecommended, result.Status);
+        Assert.True(result.CanRead);
+        Assert.False(result.CanWrite);
+        Assert.True(result.CanMigrate);
+        Assert.Contains(result.MigrationActions, action => action.FileName is not null && action.FileName.EndsWith(".dic", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Check_FutureCodec_ReturnsUnsupportedFutureFormat()
+    {
+        using var directory = CreateIndex("compat_future");
+        WriteCodecVersion(directory, "*.dic", CodecConstants.TermDictionaryVersion + 1);
+
+        var result = IndexCompatibility.Check(directory);
+
+        Assert.Equal(IndexCompatibilityStatus.UnsupportedFutureFormat, result.Status);
+        Assert.False(result.CanRead);
+        Assert.False(result.CanWrite);
+    }
+
+    [Fact]
+    public void IndexSearcher_FutureCodec_ThrowsInvalidDataException()
+    {
+        using var directory = CreateIndex("compat_searcher_guard");
+        WriteCodecVersion(directory, "*.dic", CodecConstants.TermDictionaryVersion + 1);
+
+        Assert.Throws<InvalidDataException>(() => new IndexSearcher(directory));
+    }
+
+    [Fact]
+    public void IndexWriter_OlderReadableCodec_ThrowsInvalidDataException()
+    {
+        using var directory = CreateIndex("compat_writer_guard");
+        WriteCodecVersion(directory, "*.dic", 1);
+
+        Assert.Throws<InvalidDataException>(() => new IndexWriter(directory, new IndexWriterConfig()));
+    }
+
+    [Fact]
+    public void IndexSearcher_MigrationMarker_ThrowsInvalidDataException()
+    {
+        using var directory = CreateIndex("compat_marker_guard");
+        File.WriteAllText(
+            Path.Combine(directory.DirectoryPath, IndexMigrationRecovery.MarkerFileName),
+            $$"""
+            {
+              "State": 2,
+              "SourceDirectory": "{{directory.DirectoryPath.Replace("\\", "\\\\", StringComparison.Ordinal)}}",
+              "StagingDirectory": "{{Path.Combine(_fixture.Path, "staging").Replace("\\", "\\\\", StringComparison.Ordinal)}}",
+              "SourceCommitGeneration": 1,
+              "CreatedAtUtc": "2026-05-10T00:00:00+00:00",
+              "UpdatedAtUtc": "2026-05-10T00:00:00+00:00",
+              "PlannedActions": []
+            }
+            """);
+
+        Assert.Throws<InvalidDataException>(() => new IndexSearcher(directory));
+    }
+
+    private MMapDirectory CreateIndex(string name)
+    {
+        var path = Path.Combine(_fixture.Path, name);
+        Directory.CreateDirectory(path);
+        var directory = new MMapDirectory(path);
+        using var writer = new IndexWriter(directory, new IndexWriterConfig());
+        var document = new LeanDocument();
+        document.Add(new TextField("body", "hello world"));
+        document.Add(new StringField("id", "1"));
+        writer.AddDocument(document);
+        writer.Commit();
+        return directory;
+    }
+
+    private static void WriteCodecVersion(MMapDirectory directory, string pattern, int version)
+    {
+        var path = Directory.GetFiles(directory.DirectoryPath, pattern).Single();
+        using var stream = File.Open(path, FileMode.Open, FileAccess.Write, FileShare.None);
+        stream.Position = sizeof(int);
+        stream.WriteByte((byte)version);
+    }
+}
