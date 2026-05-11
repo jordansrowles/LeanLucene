@@ -1,5 +1,7 @@
 ﻿# Rowles.LeanCorpus
 
+ (formerly LeanLucene ([see](https://github.com/jordansrowles/LeanCorpus/issues/22)))
+
 ![NuGet Version](https://img.shields.io/nuget/v/LeanCorpus?link=https%3A%2F%2Fwww.nuget.org%2Fpackages%2FLeanCorpus%2F)
  [![Build](https://github.com/jordansrowles/LeanCorpus/actions/workflows/build.yml/badge.svg)](https://github.com/jordansrowles/LeanCorpus/actions/workflows/build.yml)  ![](https://img.shields.io/badge/AOT%20Compatible-8A2BE2)
 
