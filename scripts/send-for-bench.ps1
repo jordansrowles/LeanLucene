@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Starts a benchmark run on the Debian benchmark host.
 
@@ -33,11 +33,11 @@
 param(
     [string]$Remote = 'jordan@debian',
 
-    [string]$RemotePath = '/home/jordan/code/leanlucene',
+    [string]$RemotePath = '/home/jordan/code/leancorpus',
 
     [string]$Branch = 'main',
 
-    [string]$SessionName = 'leanlucene-bench',
+    [string]$SessionName = 'leancorpus-bench',
 
     [string]$BenchmarkArgs = ''
 )

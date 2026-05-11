@@ -1,8 +1,8 @@
-# Codecs
+﻿# Codecs
 
-LeanLucene stores each segment as a small set of purpose-built codec files. The
+LeanCorpus stores each segment as a small set of purpose-built codec files. The
 files are sidecars that share the segment ID prefix, for example `seg_0.dic` and
-`seg_0.pos`. Every binary codec starts with the LeanLucene magic header and a
+`seg_0.pos`. Every binary codec starts with the LeanCorpus magic header and a
 format version from `CodecConstants`.
 
 | Extension | Codec | Used for |
@@ -41,7 +41,7 @@ Stored field compression is configured through `FieldCompressionPolicy`. The
 codec records the chosen policy in `.fdx`, while compression implementations can
 publish native sidecar binaries when an application is published as Native AOT.
 
-`IndexValidator.Check` and `leanlucene-cli.exe check` validate the codec headers
+`IndexValidator.Check` and `leancorpus-cli.exe check` validate the codec headers
 for the segment files above, including DocValues, vector, HNSW, term-vector, and
 live-doc sidecars when they are present. Deep validation opens the reader paths
 for postings, stored fields, DocValues, vectors, HNSW graphs, and live docs.

@@ -1,6 +1,6 @@
-# Articles
+﻿# Articles
 
-Short notes on the larger pieces of LeanLucene.
+Short notes on the larger pieces of LeanCorpus.
 
 - [Aspire telemetry](01-aspire-telemetry.md)
 - [HNSW vector search](02-hnsw-vector-search.md)

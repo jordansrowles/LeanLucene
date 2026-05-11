@@ -1,4 +1,4 @@
-# Validation and recovery
+﻿# Validation and recovery
 
 ## Validate an index
 
@@ -7,8 +7,8 @@ returns an `IndexCheckResult` with compatibility string messages in `Issues` and
 structured issues in `DetailedIssues`.
 
 ```csharp
-using Rowles.LeanLucene.Index;
-using Rowles.LeanLucene.Store;
+using Rowles.LeanCorpus.Index;
+using Rowles.LeanCorpus.Store;
 
 using var dir = new MMapDirectory("./index");
 IndexCheckResult result = IndexValidator.Check(dir);
@@ -110,7 +110,7 @@ codec versions, current versions, DocValues sidecars, vector files, HNSW files,
 live-doc generations, and orphan files.
 
 ```csharp
-using Rowles.LeanLucene.Index.Format;
+using Rowles.LeanCorpus.Index.Format;
 
 var inventory = IndexFormatInspector.Inspect(dir);
 
@@ -134,8 +134,8 @@ The result also exposes `CanRead`, `CanWrite`, `CanValidate`, `CanMigrate`,
 `MustReject`, and `RequiresMigration` flags for automation.
 
 ```csharp
-using Rowles.LeanLucene.Index.Compatibility;
-using Rowles.LeanLucene.Index.Migration;
+using Rowles.LeanCorpus.Index.Compatibility;
+using Rowles.LeanCorpus.Index.Migration;
 
 var compatibility = IndexCompatibility.Check(dir, new IndexCompatibilityOptions
 {
@@ -183,12 +183,12 @@ back to an older valid generation.
 ## See also
 
 - [Index checker CLI](04-cli-checker.md)
-- <xref:Rowles.LeanLucene.Index.Format.IndexFormatInspector>
-- <xref:Rowles.LeanLucene.Index.Compatibility.IndexCompatibility>
-- <xref:Rowles.LeanLucene.Index.Migration.IndexCodecMigrator>
-- <xref:Rowles.LeanLucene.Index.Migration.IndexMigrationRecovery>
-- <xref:Rowles.LeanLucene.Index.IndexValidator>
-- <xref:Rowles.LeanLucene.Index.IndexRecovery>
-- <xref:Rowles.LeanLucene.Index.IndexCheckResult>
-- <xref:Rowles.LeanLucene.Index.IndexCheckIssue>
-- <xref:Rowles.LeanLucene.Index.IndexCheckOptions>
+- <xref:Rowles.LeanCorpus.Index.Format.IndexFormatInspector>
+- <xref:Rowles.LeanCorpus.Index.Compatibility.IndexCompatibility>
+- <xref:Rowles.LeanCorpus.Index.Migration.IndexCodecMigrator>
+- <xref:Rowles.LeanCorpus.Index.Migration.IndexMigrationRecovery>
+- <xref:Rowles.LeanCorpus.Index.IndexValidator>
+- <xref:Rowles.LeanCorpus.Index.IndexRecovery>
+- <xref:Rowles.LeanCorpus.Index.IndexCheckResult>
+- <xref:Rowles.LeanCorpus.Index.IndexCheckIssue>
+- <xref:Rowles.LeanCorpus.Index.IndexCheckOptions>

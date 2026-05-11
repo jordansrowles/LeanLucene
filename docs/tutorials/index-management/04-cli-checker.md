@@ -1,19 +1,19 @@
 ﻿# Index checker CLI
 
-`Rowles.LeanLucene.Cli` builds `leanlucene-cli.exe`, a `System.CommandLine`
+`Rowles.LeanCorpus.Cli` builds `leancorpus-cli.exe`, a `System.CommandLine`
 front end for index validation, format inspection, compatibility checks,
 codec migration, snapshot backup, and restore.
 
 ## Build the CLI
 
 ```powershell
-dotnet build .\src\devops\Rowles.LeanLucene.Cli\Rowles.LeanLucene.Cli.csproj -c Release
+dotnet build .\src\devops\Rowles.LeanCorpus.Cli\Rowles.LeanCorpus.Cli.csproj -c Release
 ```
 
 The executable is written under the target framework output directory:
 
 ```powershell
-.\src\devops\Rowles.LeanLucene.Cli\bin\Release\net10.0\leanlucene-cli.exe
+.\src\devops\Rowles.LeanCorpus.Cli\bin\Release\net10.0\leancorpus-cli.exe
 ```
 
 ## Commands
@@ -30,7 +30,7 @@ The executable is written under the target framework output directory:
 ## Check an index
 
 ```powershell
-.\src\devops\Rowles.LeanLucene.Cli\bin\Release\net10.0\leanlucene-cli.exe check .\index --deep
+.\src\devops\Rowles.LeanCorpus.Cli\bin\Release\net10.0\leancorpus-cli.exe check .\index --deep
 ```
 
 ```text
@@ -49,7 +49,7 @@ The issue columns are severity, stable issue code, segment ID, file name, and
 message, followed by suggested repair actions where available.
 
 ```text
-leanlucene-cli.exe check <index-path> [--deep] [--json] [--postings] [--stored-fields] [--doc-values] [--vectors] [--hnsw] [--live-docs] [--summary-only] [--fail-on-warnings] [--output <path>]
+leancorpus-cli.exe check <index-path> [--deep] [--json] [--postings] [--stored-fields] [--doc-values] [--vectors] [--hnsw] [--live-docs] [--summary-only] [--fail-on-warnings] [--output <path>]
 ```
 
 | Option | Behaviour |
@@ -69,7 +69,7 @@ leanlucene-cli.exe check <index-path> [--deep] [--json] [--postings] [--stored-f
 ## Inspect an index
 
 ```powershell
-.\src\devops\Rowles.LeanLucene.Cli\bin\Release\net10.0\leanlucene-cli.exe inspect .\index --json --output .\inventory.json
+.\src\devops\Rowles.LeanCorpus.Cli\bin\Release\net10.0\leancorpus-cli.exe inspect .\index --json --output .\inventory.json
 ```
 
 `inspect` reports file inventory without constructing search readers. Use it to
@@ -77,13 +77,13 @@ see current and older codec versions, optional sidecars, vector and HNSW files,
 deletion generations, missing files, and orphan files.
 
 ```text
-leanlucene-cli.exe inspect <index-path> [--json] [--output <path>]
+leancorpus-cli.exe inspect <index-path> [--json] [--output <path>]
 ```
 
 ## Check compatibility
 
 ```powershell
-.\src\devops\Rowles.LeanLucene.Cli\bin\Release\net10.0\leanlucene-cli.exe compat .\index --deep
+.\src\devops\Rowles.LeanCorpus.Cli\bin\Release\net10.0\leancorpus-cli.exe compat .\index --deep
 ```
 
 Compatibility statuses are:
@@ -98,7 +98,7 @@ Compatibility statuses are:
 | `Corrupt` | Validation found error-severity issues |
 
 ```text
-leanlucene-cli.exe compat <index-path> [--deep] [--json] [--output <path>]
+leancorpus-cli.exe compat <index-path> [--deep] [--json] [--output <path>]
 ```
 
 ## Plan or run migration
@@ -106,17 +106,17 @@ leanlucene-cli.exe compat <index-path> [--deep] [--json] [--output <path>]
 Dry-run mode is the default safe workflow for automation:
 
 ```powershell
-.\src\devops\Rowles.LeanLucene.Cli\bin\Release\net10.0\leanlucene-cli.exe migrate .\index --dry-run --json
+.\src\devops\Rowles.LeanCorpus.Cli\bin\Release\net10.0\leancorpus-cli.exe migrate .\index --dry-run --json
 ```
 
 Run staged migration with an explicit staging directory:
 
 ```powershell
-.\src\devops\Rowles.LeanLucene.Cli\bin\Release\net10.0\leanlucene-cli.exe migrate .\index --execute --staging .\index.migration
+.\src\devops\Rowles.LeanCorpus.Cli\bin\Release\net10.0\leancorpus-cli.exe migrate .\index --execute --staging .\index.migration
 ```
 
 ```text
-leanlucene-cli.exe migrate <index-path> [--dry-run] [--execute] [--staging <path>] [--in-place] [--json] [--output <path>]
+leancorpus-cli.exe migrate <index-path> [--dry-run] [--execute] [--staging <path>] [--in-place] [--json] [--output <path>]
 ```
 
 | Option | Behaviour |
@@ -138,27 +138,27 @@ after an interrupted migration.
 Back up the latest commit point:
 
 ```powershell
-.\src\devops\Rowles.LeanLucene.Cli\bin\Release\net10.0\leanlucene-cli.exe backup .\index .\index.backup --json
+.\src\devops\Rowles.LeanCorpus.Cli\bin\Release\net10.0\leancorpus-cli.exe backup .\index .\index.backup --json
 ```
 
 Back up a specific commit generation:
 
 ```powershell
-.\src\devops\Rowles.LeanLucene.Cli\bin\Release\net10.0\leanlucene-cli.exe backup .\index .\index.backup --commit-generation 3 --overwrite
+.\src\devops\Rowles.LeanCorpus.Cli\bin\Release\net10.0\leancorpus-cli.exe backup .\index .\index.backup --commit-generation 3 --overwrite
 ```
 
 Restore into a new index directory:
 
 ```powershell
-.\src\devops\Rowles.LeanLucene.Cli\bin\Release\net10.0\leanlucene-cli.exe restore .\index.backup .\index.restored
+.\src\devops\Rowles.LeanCorpus.Cli\bin\Release\net10.0\leancorpus-cli.exe restore .\index.backup .\index.restored
 ```
 
 ```text
-leanlucene-cli.exe backup <index-path> <backup-path> [--commit-generation <generation>] [--overwrite] [--json] [--output <path>]
-leanlucene-cli.exe restore <backup-path> <target-path> [--overwrite] [--skip-validation] [--json] [--output <path>]
+leancorpus-cli.exe backup <index-path> <backup-path> [--commit-generation <generation>] [--overwrite] [--json] [--output <path>]
+leancorpus-cli.exe restore <backup-path> <target-path> [--overwrite] [--skip-validation] [--json] [--output <path>]
 ```
 
-`backup` writes `leanlucene-backup-manifest.json` with the commit generation,
+`backup` writes `leancorpus-backup-manifest.json` with the commit generation,
 file names, lengths, CRC-32 checksums, and file roles. `restore` validates the
 manifest before copying and validates the restored index unless
 `--skip-validation` is supplied.
@@ -176,7 +176,7 @@ manifest before copying and validates the restored index unless
 Use `--json` for automation:
 
 ```powershell
-.\src\devops\Rowles.LeanLucene.Cli\bin\Release\net10.0\leanlucene-cli.exe check .\index --json --doc-values
+.\src\devops\Rowles.LeanCorpus.Cli\bin\Release\net10.0\leancorpus-cli.exe check .\index --json --doc-values
 ```
 
 The check JSON shape includes stable issue fields:
@@ -206,15 +206,15 @@ The check JSON shape includes stable issue fields:
 
 ## Create a sample index
 
-`Rowles.LeanLucene.Example.NewsgroupsIndexer` reads the shared `bench\data\20newsgroups` corpus and
+`Rowles.LeanCorpus.Example.NewsgroupsIndexer` reads the shared `bench\data\20newsgroups` corpus and
 creates a checker-ready index with postings, stored fields, DocValues, vectors,
 HNSW, term vectors, and stored-field compression metadata.
 
 ```powershell
-dotnet run --project .\src\examples\Rowles.LeanLucene.Example.NewsgroupsIndexer -- --index .\artifacts\newsgroups-index --limit 500
-.\src\devops\Rowles.LeanLucene.Cli\bin\Release\net10.0\leanlucene-cli.exe check .\artifacts\newsgroups-index --deep
-.\src\devops\Rowles.LeanLucene.Cli\bin\Release\net10.0\leanlucene-cli.exe inspect .\artifacts\newsgroups-index --json
-.\src\devops\Rowles.LeanLucene.Cli\bin\Release\net10.0\leanlucene-cli.exe compat .\artifacts\newsgroups-index
+dotnet run --project .\src\examples\Rowles.LeanCorpus.Example.NewsgroupsIndexer -- --index .\artifacts\newsgroups-index --limit 500
+.\src\devops\Rowles.LeanCorpus.Cli\bin\Release\net10.0\leancorpus-cli.exe check .\artifacts\newsgroups-index --deep
+.\src\devops\Rowles.LeanCorpus.Cli\bin\Release\net10.0\leancorpus-cli.exe inspect .\artifacts\newsgroups-index --json
+.\src\devops\Rowles.LeanCorpus.Cli\bin\Release\net10.0\leancorpus-cli.exe compat .\artifacts\newsgroups-index
 ```
 
 The example options are:
@@ -229,7 +229,7 @@ The example options are:
 ## See also
 
 - [Validation and recovery](03-validation-recovery.md)
-- <xref:Rowles.LeanLucene.Index.IndexValidator>
-- <xref:Rowles.LeanLucene.Index.Format.IndexFormatInspector>
-- <xref:Rowles.LeanLucene.Index.Compatibility.IndexCompatibility>
-- <xref:Rowles.LeanLucene.Index.Migration.IndexCodecMigrator>
+- <xref:Rowles.LeanCorpus.Index.IndexValidator>
+- <xref:Rowles.LeanCorpus.Index.Format.IndexFormatInspector>
+- <xref:Rowles.LeanCorpus.Index.Compatibility.IndexCompatibility>
+- <xref:Rowles.LeanCorpus.Index.Migration.IndexCodecMigrator>

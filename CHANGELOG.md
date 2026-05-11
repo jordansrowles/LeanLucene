@@ -1,4 +1,4 @@
-
+﻿
 All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
@@ -10,23 +10,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Pluggable stored-field compression via the `IFieldCompressionCodec` interface and `CompressionCodecRegistry`; any codec can be registered at startup without modifying core library code.
 - BCL codecs for `None`, `Deflate`, and `Brotli` policies using `System.IO.Compression`; available in the core package with no additional dependencies.
-- Optional `Rowles.LeanLucene.Compression.*` packages:
-  - `Rowles.LeanLucene.Compression.LZ4`, via `K4os.Compression.LZ4`.
-  - `Rowles.LeanLucene.Compression.Snappy`, via `Snappier`.
-  - `Rowles.LeanLucene.Compression.Zstandard`, via `ZstdSharp`.
-- `Rowles.LeanLucene.Benchmarks.Compression` project benchmarking compress and decompress throughput across all six policies at three payload sizes (128 B, 4 KB, 64 KB).
+- Optional `Rowles.LeanCorpus.Compression.*` packages:
+  - `Rowles.LeanCorpus.Compression.LZ4`, via `K4os.Compression.LZ4`.
+  - `Rowles.LeanCorpus.Compression.Snappy`, via `Snappier`.
+  - `Rowles.LeanCorpus.Compression.Zstandard`, via `ZstdSharp`.
+- `Rowles.LeanCorpus.Benchmarks.Compression` project benchmarking compress and decompress throughput across all six policies at three payload sizes (128 B, 4 KB, 64 KB).
 - Richer DocValues support with sorted-set (`.dss`), sorted-numeric (`.dsn`), and binary (`.dvb`) sidecars for repeated `StringField`, repeated `NumericField`, and stored-field values, letting facets, grouping fallback, sorting fallback, and numeric aggregations avoid stored-field scans.
 - Public index format inventory API through `IndexFormatInspector.Inspect`, reporting commit generation, segment IDs, codec files, codec versions, DocValues sidecars, vector files, HNSW files, live-doc generations, and orphan files.
 - Public compatibility API through `IndexCompatibility.Check`, plus reader and writer open guardrails for unsupported future formats, required migrations, and incomplete migration markers.
 - Public codec migration API through `IndexCodecMigrator.Plan` and `IndexCodecMigrator.Migrate`, with dry-run planning, staged migration, migration markers, rollback, abandon, and executable rewrites for readable term dictionary, numeric DocValues, sorted DocValues, field-length, and stored-field codec upgrades.
-- Public `IndexValidator.Check` API and `System.CommandLine` based `leanlucene-cli.exe` commands for `check`, `inspect`, `compat`, and `migrate`.
-- Public `IndexBackup` API and `leanlucene-cli.exe backup`/`restore` commands for manifest-backed snapshot backups. Manifests record commit generation, content token, file names, file lengths, CRC-32 checksums, and file roles before restore validation.
-- Maintenance diagnostics for `IndexFormatInspector`, `IndexCodecMigrator`, and `IndexBackup` using `ActivitySource` spans and `Meter` instruments under `Rowles.LeanLucene`.
-- `Rowles.LeanLucene.Example.NewsgroupsIndexer`, a console example using the shared `bench\data\20newsgroups` data for creating checker test indexes.
+- Public `IndexValidator.Check` API and `System.CommandLine` based `leancorpus-cli.exe` commands for `check`, `inspect`, `compat`, and `migrate`.
+- Public `IndexBackup` API and `leancorpus-cli.exe backup`/`restore` commands for manifest-backed snapshot backups. Manifests record commit generation, content token, file names, file lengths, CRC-32 checksums, and file roles before restore validation.
+- Maintenance diagnostics for `IndexFormatInspector`, `IndexCodecMigrator`, and `IndexBackup` using `ActivitySource` spans and `Meter` instruments under `Rowles.LeanCorpus`.
+- `Rowles.LeanCorpus.Example.NewsgroupsIndexer`, a console example using the shared `bench\data\20newsgroups` data for creating checker test indexes.
 - Script documentation and a `send-for-bench.ps1` helper for starting remote Debian benchmark runs in tmux.
 
 ### Changed
 
+- Renamed the project, package family, namespaces, command-line tool, scripts, workflows, and documentation to `Rowles.LeanCorpus` and `LeanCorpus`.
 - Default stored-field compression policy changed from Brotli (via `NativeCompressions`) to `FieldCompressionPolicy.Deflate` using BCL `DeflateStream`.
 - Extension package assemblies auto-register their codec via `[ModuleInitializer]` in standard .NET hosts; Native AOT consumers must call `Register()` explicitly at startup.
 - `src/` reorganised into `src/core/` (main library and compression packages) and `src/devops/` (benchmarks and tests).
@@ -42,9 +43,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `DocumentsWriterPerThread` migrated to flat stored-field buffers with a bulk position-merge path, removing per-document list allocations during indexing.
 - Zstandard compression now pools compressor and decompressor instances rather than allocating a native wrapper per block.
 - `IndexValidator` now reports structured issues with severity, stable codes, segment IDs, file names, and repairability flags, and can opt into deep checks for postings, stored fields, DocValues, vectors, HNSW, and live docs.
-- The command-line checker project now builds as `leanlucene-cli.exe`, uses `System.CommandLine`, and supports JSON and file output across validation, inspection, compatibility, and migration commands.
+- The command-line checker project now builds as `leancorpus-cli.exe`, uses `System.CommandLine`, and supports JSON and file output across validation, inspection, compatibility, and migration commands.
 - Commit, segment metadata, live-doc, segment stats, and migration marker writes now share the same temp-file publication helper, and validation reports recognised stale temp files and partial migration markers.
-- The test suite is split into `Rowles.LeanLucene.Tests.Unit`, `Rowles.LeanLucene.Tests.Integration`, `Rowles.LeanLucene.Tests.Chaos`, and `Rowles.LeanLucene.Tests.Shared`, with test sources moved into their owning projects.
+- The test suite is split into `Rowles.LeanCorpus.Tests.Unit`, `Rowles.LeanCorpus.Tests.Integration`, `Rowles.LeanCorpus.Tests.Chaos`, and `Rowles.LeanCorpus.Tests.Shared`, with test sources moved into their owning projects.
 - Common target framework, nullable, implicit using, xUnit using, packability, package versions, and NuGet source mapping configuration is centralised through `Directory.Build.props`, `Directory.Packages.props`, and root `NuGet.config`.
 - The GitHub build workflow now runs on `main` and `1.3.0`, and includes the compression parity test project.
 
@@ -80,7 +81,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `ShingleFilter`: emits contiguous token shingles with configurable min/max size, optional unigram output, and configurable separator; shingle offsets span the first to last source token.
 - `WordDelimiterFilter`: splits compound tokens on delimiter punctuation, case-change boundaries, acronym-word boundaries, and letter-digit boundaries; supports preserve-original, concatenate-words, and concatenate-numbers modes.
 - Benchmark suites `analysis-parity` and `analysis-filters` covering lightweight analyser throughput vs Lucene.NET and per-filter allocation on no-op and mutating paths.
-- Native AOT compatibility metadata for the core package, with a dedicated `Rowles.LeanLucene.Example.NativeAot` smoke executable and local `scripts\aot-smoke.ps1` validation script.
+- Native AOT compatibility metadata for the core package, with a dedicated `Rowles.LeanCorpus.Example.NativeAot` smoke executable and local `scripts\aot-smoke.ps1` validation script.
 
 ### Changed
 
@@ -127,7 +128,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- Default stop word list replaced with Lucene.NET's classic 33-word `ENGLISH_STOP_WORDS_SET` (`a`, `an`, `and`, `are`, `as`, `at`, `be`, `but`, `by`, `for`, `if`, `in`, `into`, `is`, `it`, `no`, `not`, `of`, `on`, `or`, `such`, `that`, `the`, `their`, `then`, `there`, `these`, `they`, `this`, `to`, `was`, `will`, `with`). The previous ~95-word list was silently dropping common terms such as `after`, `before`, `could`, and `how` at index time, causing queries for those terms to return no results.
+- Default stop word list replaced with the classic 33-word English list (`a`, `an`, `and`, `are`, `as`, `at`, `be`, `but`, `by`, `for`, `if`, `in`, `into`, `is`, `it`, `no`, `not`, `of`, `on`, `or`, `such`, `that`, `the`, `their`, `then`, `there`, `these`, `they`, `this`, `to`, `was`, `will`, `with`). The previous ~95-word list was silently dropping common terms such as `after`, `before`, `could`, and `how` at index time, causing queries for those terms to return no results.
 
 ### Added
 
@@ -145,7 +146,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - `stored` parameter on `TextField`, `StringField`, and `NumericField` constructors (defaults to `true`, preserving existing behaviour).
-- `StoredField` class for parity with Lucene.NET — stores a value without indexing it.
+- `StoredField` class for stored-only values without indexing.
 
 ### Fixed
 

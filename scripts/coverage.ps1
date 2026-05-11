@@ -1,6 +1,6 @@
-<#
+﻿<#
 .SYNOPSIS
-    Runs LeanLucene tests with code coverage collection.
+    Runs LeanCorpus tests with code coverage collection.
 
 .DESCRIPTION
     Executes the test suite under coverlet, collecting XPlat Code Coverage
@@ -55,8 +55,8 @@ $testProjectsRoot = Join-Path $repoRoot "src\devops"
 $testProjects     = @(
     Get-ChildItem -Path $testProjectsRoot -Filter "*.csproj" -Recurse |
         Where-Object {
-            $_.Directory.Name -like "Rowles.LeanLucene.Tests.*" -and
-            $_.Directory.Name -ne "Rowles.LeanLucene.Tests.Shared"
+            $_.Directory.Name -like "Rowles.LeanCorpus.Tests.*" -and
+            $_.Directory.Name -ne "Rowles.LeanCorpus.Tests.Shared"
         } |
         Sort-Object -Property FullName |
         ForEach-Object { $_.FullName }

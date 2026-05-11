@@ -1,4 +1,4 @@
-# Stored field compression
+﻿# Stored field compression
 
 Stored fields are written in blocks under the
 `.fdt` extension and compressed.
@@ -18,9 +18,9 @@ var config = new IndexWriterConfig
 | `None` | Core | No compression. Fastest write, largest disk. |
 | `Deflate` (default) | Core | BCL `DeflateStream`. Good ratio, no native deps. |
 | `Brotli` | Core | BCL `BrotliStream`. Better ratio, slower writes. |
-| `Lz4` | `Rowles.LeanLucene.Compression.LZ4` | Very fast, modest ratio. |
-| `Snappy` | `Rowles.LeanLucene.Compression.Snappy` | Similar speed to LZ4. |
-| `Zstandard` | `Rowles.LeanLucene.Compression.Zstandard` | Better ratio than LZ4, still fast. |
+| `Lz4` | `Rowles.LeanCorpus.Compression.LZ4` | Very fast, modest ratio. |
+| `Snappy` | `Rowles.LeanCorpus.Compression.Snappy` | Similar speed to LZ4. |
+| `Zstandard` | `Rowles.LeanCorpus.Compression.Zstandard` | Better ratio than LZ4, still fast. |
 
 The policy is recorded in the segment header, so reads tolerate mixed segments.
 
@@ -50,5 +50,5 @@ retrieval.
 
 ## See also
 
-- <xref:Rowles.LeanLucene.Codecs.StoredFields.FieldCompressionPolicy>
-- <xref:Rowles.LeanLucene.Index.Indexer.IndexWriterConfig>
+- <xref:Rowles.LeanCorpus.Codecs.StoredFields.FieldCompressionPolicy>
+- <xref:Rowles.LeanCorpus.Index.Indexer.IndexWriterConfig>

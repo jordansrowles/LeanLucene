@@ -1,7 +1,9 @@
-# Rowles.LeanLucene
+﻿# Rowles.LeanCorpus
 
-![NuGet Version](https://img.shields.io/nuget/v/LeanLucene?link=https%3A%2F%2Fwww.nuget.org%2Fpackages%2FLeanLucene%2F)
- [![Build](https://github.com/jordansrowles/LeanLucene/actions/workflows/build.yml/badge.svg)](https://github.com/jordansrowles/LeanLucene/actions/workflows/build.yml)  ![](https://img.shields.io/badge/AOT%20Compatible-8A2BE2)
+![NuGet Version](https://img.shields.io/nuget/v/LeanCorpus?link=https%3A%2F%2Fwww.nuget.org%2Fpackages%2FLeanCorpus%2F)
+ [![Build](https://github.com/jordansrowles/LeanCorpus/actions/workflows/build.yml/badge.svg)](https://github.com/jordansrowles/LeanCorpus/actions/workflows/build.yml)  ![](https://img.shields.io/badge/AOT%20Compatible-8A2BE2)
+
+Documentation: https://leancorpus.com
 
 A .NET-native full-text search engine. Segment-centric indexing, memory-mapped reads, and atomic commit semantics. Targets `net10.0` and `net11.0`. The core library has no external dependencies; stored-field compression uses BCL types only. Optional extension packages add LZ4, Snappy, and Zstandard support.
 
@@ -9,20 +11,20 @@ A .NET-native full-text search engine. Segment-centric indexing, memory-mapped r
 
 | Project | Description |
 |---|---|
-| `Rowles.LeanLucene` | Core library |
-| `Rowles.LeanLucene.Compression.LZ4` | Optional LZ4 codec (`K4os.Compression.LZ4`) |
-| `Rowles.LeanLucene.Compression.Snappy` | Optional Snappy codec (`Snappier`) |
-| `Rowles.LeanLucene.Compression.Zstandard` | Optional Zstandard codec (`ZstdSharp.Port`) |
-| `Rowles.LeanLucene.Cli` | Command-line index checker |
-| `Rowles.LeanLucene.Tests.Shared` | Shared test helpers |
-| `Rowles.LeanLucene.Tests.Unit` | Unit test suite |
-| `Rowles.LeanLucene.Tests.Integration` | Integration test suite |
-| `Rowles.LeanLucene.Tests.Chaos` | Chaos and property-based test suite |
-| `Rowles.LeanLucene.Benchmarks` | BenchmarkDotNet suites, compared against Lucene.NET |
-| `Rowles.LeanLucene.Example.JsonApi` | ASP.NET Minimal API example |
-| `Rowles.LeanLucene.Example.NewsgroupsIndexer` | Console example that builds a checker-ready 20 Newsgroups index |
-| `Rowles.LeanLucene.Example.Telemetry` | OpenTelemetry traces, metrics and structured logs example |
-| `Rowles.LeanLucene.Example.NativeAot` | Native AOT smoke executable |
+| `Rowles.LeanCorpus` | Core library |
+| `Rowles.LeanCorpus.Compression.LZ4` | Optional LZ4 codec (`K4os.Compression.LZ4`) |
+| `Rowles.LeanCorpus.Compression.Snappy` | Optional Snappy codec (`Snappier`) |
+| `Rowles.LeanCorpus.Compression.Zstandard` | Optional Zstandard codec (`ZstdSharp.Port`) |
+| `Rowles.LeanCorpus.Cli` | Command-line index checker |
+| `Rowles.LeanCorpus.Tests.Shared` | Shared test helpers |
+| `Rowles.LeanCorpus.Tests.Unit` | Unit test suite |
+| `Rowles.LeanCorpus.Tests.Integration` | Integration test suite |
+| `Rowles.LeanCorpus.Tests.Chaos` | Chaos and property-based test suite |
+| `Rowles.LeanCorpus.Benchmarks` | BenchmarkDotNet suites, compared against the external benchmark baseline |
+| `Rowles.LeanCorpus.Example.JsonApi` | ASP.NET Minimal API example |
+| `Rowles.LeanCorpus.Example.NewsgroupsIndexer` | Console example that builds a checker-ready 20 Newsgroups index |
+| `Rowles.LeanCorpus.Example.Telemetry` | OpenTelemetry traces, metrics and structured logs example |
+| `Rowles.LeanCorpus.Example.NativeAot` | Native AOT smoke executable |
 
 ## Building and Testing
 
@@ -33,7 +35,7 @@ dotnet test
 
 ## Native AOT
 
-`Rowles.LeanLucene` is marked AOT-compatible for `net10.0` and `net11.0`. The core library avoids reflection-based JSON metadata and is validated by a dedicated console smoke executable rather than the ASP.NET JSON API example.
+`Rowles.LeanCorpus` is marked AOT-compatible for `net10.0` and `net11.0`. The core library avoids reflection-based JSON metadata and is validated by a dedicated console smoke executable rather than the ASP.NET JSON API example.
 
 Run the local smoke check with:
 
@@ -41,9 +43,9 @@ Run the local smoke check with:
 .\scripts\aot-smoke.ps1
 ```
 
-This publishes `src\examples\Rowles.LeanLucene.Example.NativeAot\Rowles.LeanLucene.Example.NativeAot.csproj` for `win-x64` with `PublishAot=true`, then runs the native executable. The smoke executable indexes, commits, reopens, searches, reads stored fields, writes diagnostics, and exercises `FieldCompressionPolicy.None`, `FieldCompressionPolicy.Deflate`, and `FieldCompressionPolicy.Brotli`.
+This publishes `src\examples\Rowles.LeanCorpus.Example.NativeAot\Rowles.LeanCorpus.Example.NativeAot.csproj` for `win-x64` with `PublishAot=true`, then runs the native executable. The smoke executable indexes, commits, reopens, searches, reads stored fields, writes diagnostics, and exercises `FieldCompressionPolicy.None`, `FieldCompressionPolicy.Deflate`, and `FieldCompressionPolicy.Brotli`.
 
-The core library has no native sidecar dependencies for compression. Optional packages (`Rowles.LeanLucene.Compression.LZ4`, `Rowles.LeanLucene.Compression.Snappy`, `Rowles.LeanLucene.Compression.Zstandard`) may include RID-specific native binaries; AOT consumers using those packages must call their respective `Register()` methods at startup.
+The core library has no native sidecar dependencies for compression. Optional packages (`Rowles.LeanCorpus.Compression.LZ4`, `Rowles.LeanCorpus.Compression.Snappy`, `Rowles.LeanCorpus.Compression.Zstandard`) may include RID-specific native binaries; AOT consumers using those packages must call their respective `Register()` methods at startup.
 
 ## Quick Start
 
@@ -162,16 +164,16 @@ var restore = IndexBackup.Restore("./index.backup", "./index.restored");
 
 The backup manifest records the selected `segments_N` generation, segment-owned files, optional sidecars, file lengths, and CRC-32 checksums. Restore validates the manifest before copying files and validates the restored index by default.
 
-The CLI is built as `leanlucene-cli.exe` and exposes validation, inventory, compatibility, migration, backup, and restore commands:
+The CLI is built as `leancorpus-cli.exe` and exposes validation, inventory, compatibility, migration, backup, and restore commands:
 
 ```powershell
-leanlucene-cli.exe check .\index --deep
-leanlucene-cli.exe inspect .\index --json
-leanlucene-cli.exe compat .\index --deep
-leanlucene-cli.exe migrate .\index --dry-run --json
-leanlucene-cli.exe migrate .\index --execute --staging .\index.migration
-leanlucene-cli.exe backup .\index .\index.backup --json
-leanlucene-cli.exe restore .\index.backup .\index.restored
+leancorpus-cli.exe check .\index --deep
+leancorpus-cli.exe inspect .\index --json
+leancorpus-cli.exe compat .\index --deep
+leancorpus-cli.exe migrate .\index --dry-run --json
+leancorpus-cli.exe migrate .\index --execute --staging .\index.migration
+leancorpus-cli.exe backup .\index .\index.backup --json
+leancorpus-cli.exe restore .\index.backup .\index.restored
 ```
 
 See [Index checker CLI](docs/tutorials/index-management/04-cli-checker.md) for command options and exit codes.
@@ -221,7 +223,7 @@ Character filters can be added to `IndexWriterConfig.CharFilters` and run before
 
 ### Query Parser
 
-Parses Lucene-style query strings:
+Parses Corpus-style query strings:
 
 ```csharp
 var parser = new QueryParser("content", new StandardAnalyser());
@@ -358,8 +360,8 @@ On construction, `IndexWriter` reads the latest `segments_N` file and loads any 
 Use `IndexValidator.Check` for structured validation from application code:
 
 ```csharp
-using Rowles.LeanLucene.Index;
-using Rowles.LeanLucene.Store;
+using Rowles.LeanCorpus.Index;
+using Rowles.LeanCorpus.Store;
 
 using var dir = new MMapDirectory("./index");
 IndexCheckResult result = IndexValidator.Check(dir, new IndexCheckOptions
@@ -373,23 +375,23 @@ foreach (var issue in result.DetailedIssues)
 
 The checker reports stable issue codes, severity, file names, segment IDs, repairability flags, and suggested repair actions. Shallow validation checks commit files, segment metadata, required sidecars, codec headers, stored-field compression metadata, deletion generations, vectors, and HNSW files. Deep validation can additionally read postings, stored fields, DocValues, vectors, HNSW graphs, and live docs.
 
-The CLI executable is `leanlucene-cli.exe`:
+The CLI executable is `leancorpus-cli.exe`:
 
 ```powershell
-dotnet build .\src\devops\Rowles.LeanLucene.Cli\Rowles.LeanLucene.Cli.csproj -c Release
-.\src\devops\Rowles.LeanLucene.Cli\bin\Release\net10.0\leanlucene-cli.exe check .\index --deep
-.\src\devops\Rowles.LeanLucene.Cli\bin\Release\net10.0\leanlucene-cli.exe check .\index --json --doc-values --vectors
-.\src\devops\Rowles.LeanLucene.Cli\bin\Release\net10.0\leanlucene-cli.exe check .\index --summary-only --output .\check.txt
-.\src\devops\Rowles.LeanLucene.Cli\bin\Release\net10.0\leanlucene-cli.exe migrate .\index --execute --staging .\index.migration
-.\src\devops\Rowles.LeanLucene.Cli\bin\Release\net10.0\leanlucene-cli.exe backup .\index .\index.backup
-.\src\devops\Rowles.LeanLucene.Cli\bin\Release\net10.0\leanlucene-cli.exe restore .\index.backup .\index.restored
+dotnet build .\src\devops\Rowles.LeanCorpus.Cli\Rowles.LeanCorpus.Cli.csproj -c Release
+.\src\devops\Rowles.LeanCorpus.Cli\bin\Release\net10.0\leancorpus-cli.exe check .\index --deep
+.\src\devops\Rowles.LeanCorpus.Cli\bin\Release\net10.0\leancorpus-cli.exe check .\index --json --doc-values --vectors
+.\src\devops\Rowles.LeanCorpus.Cli\bin\Release\net10.0\leancorpus-cli.exe check .\index --summary-only --output .\check.txt
+.\src\devops\Rowles.LeanCorpus.Cli\bin\Release\net10.0\leancorpus-cli.exe migrate .\index --execute --staging .\index.migration
+.\src\devops\Rowles.LeanCorpus.Cli\bin\Release\net10.0\leancorpus-cli.exe backup .\index .\index.backup
+.\src\devops\Rowles.LeanCorpus.Cli\bin\Release\net10.0\leancorpus-cli.exe restore .\index.backup .\index.restored
 ```
 
 Exit code `0` means healthy or warnings only, `1` means validation errors, and `2` means invalid arguments or CLI failure. `--fail-on-warnings` makes warnings return `1`. See [Index checker CLI](docs/tutorials/index-management/04-cli-checker.md).
 
 ## Benchmarks
 
-Benchmark suites compare LeanLucene against Lucene.NET across indexing, search, analysis, and more.
+Benchmark suites compare LeanCorpus against the external benchmark baseline across indexing, search, analysis, and more.
 
 ```powershell
 # All suites, full run
@@ -411,10 +413,10 @@ Output is written to `bench/{machine}/{yyyy-MM-dd}/{HH-mm}/` with JSON, Markdown
 
 ## Example JSON API
 
-`Rowles.LeanLucene.Example.JsonApi` is an ASP.NET Minimal API that exposes collections over HTTP. Configure the data directory:
+`Rowles.LeanCorpus.Example.JsonApi` is an ASP.NET Minimal API that exposes collections over HTTP. Configure the data directory:
 
 ```
-LEANLUCENE_DATA_PATH=/path/to/data
+LEANCORPUS_DATA_PATH=/path/to/data
 ```
 
 Endpoints:
@@ -431,11 +433,11 @@ Search responses include `totalHits`, `hits` (score + stored fields), and `sugge
 
 ## Example Newsgroups Indexer
 
-`Rowles.LeanLucene.Example.NewsgroupsIndexer` reads the shared `bench\data\20newsgroups` corpus and writes an index suitable for exercising the checker:
+`Rowles.LeanCorpus.Example.NewsgroupsIndexer` reads the shared `bench\data\20newsgroups` corpus and writes an index suitable for exercising the checker:
 
 ```powershell
-dotnet run --project .\src\examples\Rowles.LeanLucene.Example.NewsgroupsIndexer -- --index .\artifacts\newsgroups-index --limit 500
-.\src\devops\Rowles.LeanLucene.Cli\bin\Release\net10.0\leanlucene-cli.exe check .\artifacts\newsgroups-index --deep
+dotnet run --project .\src\examples\Rowles.LeanCorpus.Example.NewsgroupsIndexer -- --index .\artifacts\newsgroups-index --limit 500
+.\src\devops\Rowles.LeanCorpus.Cli\bin\Release\net10.0\leancorpus-cli.exe check .\artifacts\newsgroups-index --deep
 ```
 
 Run `.\scripts\download-news.ps1 -SkipReuters` first if the benchmark data is not present. Use `--limit` to control the number of source files indexed, `--source` to point at another 20 Newsgroups checkout, and `--append` to keep an existing index directory.

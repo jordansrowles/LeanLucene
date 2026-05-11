@@ -1,0 +1,20 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <IsAotCompatible>true</IsAotCompatible>
+    <PackageId>LeanCorpus.Compression.Snappy</PackageId>
+    <Authors>Jordan Rowles</Authors>
+    <Description>Snappy stored-field compression codec for LeanCorpus.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Rowles.LeanCorpus\Rowles.LeanCorpus.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Snappier" />
+  </ItemGroup>
+
+</Project>

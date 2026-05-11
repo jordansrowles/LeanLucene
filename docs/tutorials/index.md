@@ -1,6 +1,6 @@
-# Tutorials
+﻿# Tutorials
 
-Short, focused walkthroughs of the LeanLucene API. Each page is high-level and links into
+Short, focused walkthroughs of the LeanCorpus API. Each page is high-level and links into
 the [API reference](~/api/index.md) for full signatures.
 
 ## Getting Started
