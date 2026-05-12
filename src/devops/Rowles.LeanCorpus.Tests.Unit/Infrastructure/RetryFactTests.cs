@@ -169,6 +169,12 @@ public sealed class RetryFactDiscovererTests
         public void Deserialize(IXunitSerializationInfo data) { }
     }
 
+    private sealed class NoOpMessageBus : IMessageBus
+    {
+        public bool QueueMessage(IMessageSinkMessage message) => true;
+        public void Dispose() { }
+    }
+
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     private RetryTestCase CreateTestCase(int maxRetries) =>
@@ -230,6 +236,58 @@ public sealed class RetryFactDiscovererTests
 
         Assert.Equal(9, roundTripInfo.GetValue<int>("MaxRetries"));
     }
+
+    [Fact(DisplayName = "RetryTestCase: zero maxRetries skips loop body and returns failed summary")]
+    public async Task RetryTestCase_ZeroRetries_SkipsLoopBody_ReturnsFailed()
+    {
+        // _maxRetries = 0 → loop condition false immediately → falls through to line 101.
+        var testCase = CreateTestCase(0);
+        var bus = new NoOpMessageBus();
+
+        var summary = await testCase.RunAsync(
+            new NullMessageSink(), bus, [], new ExceptionAggregator(), new CancellationTokenSource());
+
+        Assert.Equal(1, summary.Failed);
+        Assert.Equal(1, summary.Total);
+    }
+
+    [Fact(DisplayName = "RetryTestCase: all retries exhausted flushes buffer and returns failed summary")]
+    public async Task RetryTestCase_AllRetriesExhausted_FlushesFailedSummary()
+    {
+        // Build real xunit metadata for AlwaysFailingHelper.AlwaysFails so that
+        // xunit can instantiate the class and invoke the method (which throws).
+        var assembly  = Reflector.Wrap(typeof(AlwaysFailingHelper).Assembly);
+        var type      = Reflector.Wrap(typeof(AlwaysFailingHelper));
+        var method    = Reflector.Wrap(typeof(AlwaysFailingHelper).GetMethod(nameof(AlwaysFailingHelper.AlwaysFails))!);
+
+        var testAssembly = new TestAssembly(assembly);
+        var collection   = new TestCollection(testAssembly, null, "AlwaysFailing");
+        var testClass    = new TestClass(collection, type);
+        var testMethod   = new TestMethod(testClass, method);
+
+        var testCase = new RetryTestCase(
+            new NullMessageSink(),
+            TestMethodDisplay.Method,
+            TestMethodDisplayOptions.None,
+            testMethod,
+            maxRetries: 1);
+
+        var bus     = new NoOpMessageBus();
+        var summary = await testCase.RunAsync(
+            new NullMessageSink(), bus, [], new ExceptionAggregator(), new CancellationTokenSource());
+
+        // attempt 1 fails, attempt == maxRetries → buffer flushed, summary returned.
+        Assert.Equal(1, summary.Failed);
+    }
+}
+
+/// <summary>
+/// Public helper used by <see cref="RetryFactDiscovererTests"/> to exercise the exhausted-retries path.
+/// Must be public so xunit can instantiate it via <see cref="Activator.CreateInstance"/>.
+/// </summary>
+public sealed class AlwaysFailingHelper
+{
+    public void AlwaysFails() => throw new InvalidOperationException("deliberate failure");
 }
 
 /// <summary>
