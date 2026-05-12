@@ -8,8 +8,7 @@ namespace Rowles.LeanCorpus.Tests.Integration.Index;
 /// GetPostingsEnumWithPositions, GetPositions, GetTermFrequency.
 /// </summary>
 [Trait("Category", "Index")]
-[Trait("Category", "UnitTest")]
-public sealed class SegmentReaderPostingsTests : IDisposable
+public sealed class SegmentReaderPostingsTests: IDisposable
 {
     private readonly string _dir;
 

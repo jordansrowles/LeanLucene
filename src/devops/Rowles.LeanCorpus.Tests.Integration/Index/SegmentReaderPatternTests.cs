@@ -9,8 +9,7 @@ namespace Rowles.LeanCorpus.Tests.Integration.Index;
 /// GetTermsMatching and IntersectAutomaton.
 /// </summary>
 [Trait("Category", "Index")]
-[Trait("Category", "UnitTest")]
-public sealed class SegmentReaderPatternTests : IDisposable
+public sealed class SegmentReaderPatternTests: IDisposable
 {
     private readonly string _dir;
 

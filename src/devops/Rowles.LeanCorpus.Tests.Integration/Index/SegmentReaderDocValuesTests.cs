@@ -9,8 +9,7 @@ namespace Rowles.LeanCorpus.Tests.Integration.Index;
 /// GetNumericDocValues, GetSortedSetDocValues, GetSortedNumericDocValues.
 /// </summary>
 [Trait("Category", "Index")]
-[Trait("Category", "UnitTest")]
-public sealed class SegmentReaderDocValuesTests : IDisposable
+public sealed class SegmentReaderDocValuesTests: IDisposable
 {
     private readonly string _dir;
 

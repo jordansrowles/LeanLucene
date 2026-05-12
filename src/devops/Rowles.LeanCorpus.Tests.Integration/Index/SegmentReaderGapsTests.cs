@@ -9,8 +9,7 @@ namespace Rowles.LeanCorpus.Tests.Integration.Index;
 /// GetDocIds, GetDocFreq, HasTermVectors, GetTermVectors, GetParentBitSet.
 /// </summary>
 [Trait("Category", "Index")]
-[Trait("Category", "UnitTest")]
-public sealed class SegmentReaderGapsTests : IDisposable
+public sealed class SegmentReaderGapsTests: IDisposable
 {
     private readonly string _dir;
 

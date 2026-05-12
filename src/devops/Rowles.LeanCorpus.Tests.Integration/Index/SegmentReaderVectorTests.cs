@@ -8,8 +8,7 @@ namespace Rowles.LeanCorpus.Tests.Integration.Index;
 /// GetVector(int), GetVector(string, int), EnsureVectorReaderNoLock (cache and missing-path branches).
 /// </summary>
 [Trait("Category", "Index")]
-[Trait("Category", "UnitTest")]
-public sealed class SegmentReaderVectorTests : IDisposable
+public sealed class SegmentReaderVectorTests: IDisposable
 {
     private readonly string _dir;
 
