@@ -14,6 +14,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added unit tests for `IndexFormatInspectionOptions.IncludeChecksums`, `IndexFileInspector` commit-file discovery and all error branches of `TryReadCommit` and `CheckCodecHeader`, and `VectorFilePaths.Sanitise` covering all character-substitution and heap-allocation branches.
 - Added integration tests for `SimdIntrinsicsVectorOps` AVX-512 paths (`CosineAvx512`, `DotAvx512`; conditionally skipped when unsupported) and three new `IndexCodecMigrator` paths: non-executable plan, pre-migration validation failure, and auto-generated staging directory.
 - Added chaos tests for `IndexCodecMigrator`: read-only `.dic` forcing the exception catch path, and a staged migration where a corrupted `.nrm` triggers `ValidateAfterMigration` failure.
+- Added unit tests for `StringField` and `TextField` null-value guard, `FieldType`, and `IsIndexed` branches.
+- Added unit tests for `BooleanClause` equality: null object, wrong type, null typed, differing query, differing occur, equal instances, and consistent hash code.
+- Added unit tests for `AggregationRequest` null-name and null-field guards, and for `AggregationResult.Avg` zero-count path and `Empty` factory.
+- Added unit test for `SegmentInfo.ReadFrom` with a JSON `null` literal, verifying `InvalidDataException` is raised.
+- Added unit tests for `InMemoryVectorSource`: `Count` property, `GetVector` hit, `GetVector` miss (`KeyNotFoundException`), and null-dictionary guard.
+- Added unit tests for `CompressionCodecRegistry.TryGet` false path and `Get` unregistered-policy throw.
+- Added unit tests in `IndexInputEdgeCaseTests` covering EOF throws across all primitive readers (ref and non-ref), all five unrolled `ReadVarIntFast` byte-length paths, the fallback path, VarInt mid-decode EOF and overflow, corrupt UTF-8 sequences (3-byte, 4-byte, truncated, bytes-exhausted), heap-allocation path for charCount > 256 in `ReadUtf8String` and `CompareCharsAndAdvance`, and `Prefetch` on empty and non-empty files.
+- Added an integration test for `IndexStats.TryLoadFrom` with a JSON `null` literal returning null.
+- Added `GeoDistanceQuery` equality tests for previously uncovered branches: differ-by-field, differ-by-CentreLat, differ-by-CentreLon, `Equals(null)`, and `Equals(wrong-type)`.
+- Added chaos tests for `IndexStats.WriteTo`: read-only destination fires the `UnauthorisedException` catch block and cleans up the tmp file; file-locked destination fires the `IOException` catch block.
 
 ### Changed
 - License changed to Apache 2
