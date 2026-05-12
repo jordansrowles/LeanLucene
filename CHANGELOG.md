@@ -24,6 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added an integration test for `IndexStats.TryLoadFrom` with a JSON `null` literal returning null.
 - Added `GeoDistanceQuery` equality tests for previously uncovered branches: differ-by-field, differ-by-CentreLat, differ-by-CentreLon, `Equals(null)`, and `Equals(wrong-type)`.
 - Added chaos tests for `IndexStats.WriteTo`: read-only destination fires the `UnauthorisedException` catch block and cleans up the tmp file; file-locked destination fires the `IOException` catch block.
+- Added integration and chaos tests for `SearcherManager` refresh-failure paths: `LastRefreshError`, `LastRefreshErrorAt`, `ConsecutiveRefreshFailures`, `RefreshFailed` event, subscriber-exception guard, and counter reset after recovery.
 
 ### Changed
 - License changed to Apache 2
