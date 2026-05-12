@@ -5,6 +5,7 @@ using Rowles.LeanCorpus.Codecs.Postings;
 using Rowles.LeanCorpus.Codecs.TermDictionary;
 using Rowles.LeanCorpus.Document;
 using Rowles.LeanCorpus.Document.Fields;
+using Rowles.LeanCorpus.Index;
 using Rowles.LeanCorpus.Index.Compatibility;
 using Rowles.LeanCorpus.Index.Migration;
 using Rowles.LeanCorpus.Store;
@@ -602,6 +603,79 @@ public sealed class IndexCodecMigratorTests : IClassFixture<TestDirectoryFixture
                 }
             }
         }
+    }
+
+    [Fact]
+    public void Migrate_NonExecutablePlan_ReturnsFailedWithUnsupportedIssue()
+    {
+        // A .nrm file at a legacy version is recognised by the inspector but .nrm is not in
+        // ExecutableRewriteExtensions, so the plan has CanExecute = false.
+        using var directory = CreateMigrationIndex("migrate_non_exec", out _);
+        var nrmPath = Path.Combine(directory.DirectoryPath, "seg_0.nrm");
+        WriteCodecVersionToPath(nrmPath, (byte)(CodecConstants.NormsVersion - 1));
+
+        var result = IndexCodecMigrator.Migrate(directory, new IndexCodecMigrationOptions
+        {
+            DryRun = false,
+            StagingDirectory = null,
+            ValidateBeforeMigration = false
+        });
+
+        Assert.False(result.Succeeded);
+        Assert.Contains(result.Issues, i => i.Code == IndexCheckIssueCodes.UnsupportedMigrationPath);
+    }
+
+    [Fact]
+    public void Migrate_ValidateBeforeMigration_WithCorruptIndex_ReturnsValidationFailure()
+    {
+        using var directory = CreateMigrationIndex("migrate_validate_before", out _);
+        // Downgrade .pos so there's work to do (otherwise plan.Actions is empty and
+        // migration returns succeeded=true with no actions before reaching the validate-before check).
+        RewritePostingsAsV2(directory);
+        // Corrupt the .nrm header so IndexValidator finds an error.
+        var nrmPath = Path.Combine(directory.DirectoryPath, "seg_0.nrm");
+        File.WriteAllBytes(nrmPath, new byte[] { 0xFF, 0xFF, 0xFF, 0xFF, 0x00 });
+
+        var result = IndexCodecMigrator.Migrate(directory, new IndexCodecMigrationOptions
+        {
+            DryRun = false,
+            ValidateBeforeMigration = true,
+            StagingDirectory = Path.Combine(_fixture.Path, $"validate_before_staging_{Guid.NewGuid():N}")
+        });
+
+        Assert.False(result.Succeeded);
+        Assert.NotNull(result.ValidationResult);
+        Assert.Contains(result.Issues, i => i.Severity == IndexCheckSeverity.Error);
+    }
+
+    [Fact]
+    public void Migrate_WithNullStagingDirectory_AutoGeneratesStagingDir()
+    {
+        using var directory = CreateMigrationIndex("migrate_auto_staging", out var expected);
+        RewritePostingsAsV2(directory);
+        var dirsBefore = Directory.GetDirectories(Path.GetDirectoryName(directory.DirectoryPath)!).ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        var result = IndexCodecMigrator.Migrate(directory, new IndexCodecMigrationOptions
+        {
+            DryRun = false,
+            StagingDirectory = null,
+            UseStagingDirectory = true
+        });
+
+        Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Issues.Select(static i => i.ToString())));
+        // Auto-generated staging dir should have been cleaned up.
+        var dirsAfter = Directory.GetDirectories(Path.GetDirectoryName(directory.DirectoryPath)!);
+        Assert.All(dirsAfter, dir => Assert.Contains(dir, dirsBefore));
+        AssertReadable(directory, expected);
+    }
+
+    private static void WriteCodecVersionToPath(string path, byte version)
+    {
+        // Write a minimal header: 4-byte magic + 1-byte version.
+        using var stream = File.Create(path);
+        using var writer = new BinaryWriter(stream, Encoding.UTF8, leaveOpen: false);
+        writer.Write(CodecConstants.Magic);
+        writer.Write(version);
     }
 
     public sealed record MigrationCodecCase(string Name, IReadOnlyList<string> ExpectedExtensions, byte LegacyVersion, Action<MMapDirectory> Downgrade)

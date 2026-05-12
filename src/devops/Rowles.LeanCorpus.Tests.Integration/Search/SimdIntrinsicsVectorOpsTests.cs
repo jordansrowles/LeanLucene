@@ -186,6 +186,37 @@ public sealed class SimdIntrinsicsVectorOpsTests
         return result;
     }
 
+    [Fact(DisplayName = "Dot Product: AVX-512 Path Matches Scalar")]
+    public void DotProduct_Avx512Path_MatchesScalar()
+    {
+        if (!SimdIntrinsicsVectorOps.IsAvx512Supported)
+            return;
+
+        // Vector512<float>.Count == 16; use 32 to exercise the main loop and tail.
+        var a = BuildVector(32, 0.5f);
+        var b = BuildVector(32, -0.25f);
+
+        float expected = DotProductScalar(a, b);
+        float actual = SimdIntrinsicsVectorOps.DotProduct(a, b);
+
+        Assert.InRange(actual - expected, -1e-4f, 1e-4f);
+    }
+
+    [Fact(DisplayName = "Cosine Similarity: AVX-512 Path Matches Scalar")]
+    public void CosineSimilarity_Avx512Path_MatchesScalar()
+    {
+        if (!SimdIntrinsicsVectorOps.IsAvx512Supported)
+            return;
+
+        var a = BuildVector(32, 1.0f);
+        var b = BuildVector(32, 0.75f);
+
+        float expected = CosineSimilarityScalar(a, b);
+        float actual = SimdIntrinsicsVectorOps.CosineSimilarity(a, b);
+
+        Assert.InRange(actual - expected, -1e-4f, 1e-4f);
+    }
+
     private static float CosineSimilarityScalar(ReadOnlySpan<float> a, ReadOnlySpan<float> b)
     {
         float dot = 0f;
