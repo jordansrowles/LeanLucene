@@ -1,3 +1,5 @@
+using System.Reflection;
+using System.Runtime.CompilerServices;
 using Rowles.LeanCorpus.Search;
 using Rowles.LeanCorpus.Search.Queries;
 using Rowles.LeanCorpus.Search.Scoring;
@@ -26,6 +28,15 @@ public sealed class QueryFamilyUnitTests
 
         Assert.Equal(a, b);
         Assert.Equal(a.GetHashCode(), b.GetHashCode());
+    }
+
+    [Fact(DisplayName = "TermInSetQuery: Qualified Term Cache Uses Volatile Publication")]
+    public void TermInSetQuery_QualifiedTermCache_UsesVolatilePublication()
+    {
+        var field = typeof(TermInSetQuery).GetField("_cachedQualifiedTerms", BindingFlags.Instance | BindingFlags.NonPublic);
+
+        Assert.NotNull(field);
+        Assert.Contains(typeof(IsVolatile), field!.GetRequiredCustomModifiers());
     }
 
     [Fact(DisplayName = "PointInSetQuery: Normalises Point Order For Equality")]

@@ -6,7 +6,7 @@ public sealed class TermInSetQuery : Query
     /// <summary>Maximum distinct terms accepted by a single query instance.</summary>
     public const int MaxTermCount = 65536;
     private readonly string[] _terms;
-    private string[]? _cachedQualifiedTerms;
+    private volatile string[]? _cachedQualifiedTerms;
 
     /// <inheritdoc/>
     public override string Field { get; }

@@ -46,6 +46,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `FieldExistsQuery` no longer deserialises full stored-field values just to check stored-field presence.
 - Stored binary field reads now return defensive copies so callers cannot mutate cached stored-field buffers.
 - `StoredFieldsReader` now validates matching `.fdt` and `.fdx` header versions and block sizes before decoding stored values, and rejects unsupported `.fdt` versions up front.
+- `TermInSetQuery` now publishes its cached qualified-term array safely for parallel search execution.
 
 ## [1.3.0] - 2026-05-11
 
