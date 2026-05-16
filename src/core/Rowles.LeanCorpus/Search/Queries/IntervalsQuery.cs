@@ -152,6 +152,8 @@ public sealed class IntervalsOrSource : IntervalsSource
     public IntervalsOrSource(params IntervalsSource[] sources)
     {
         ArgumentNullException.ThrowIfNull(sources);
+        if (sources.Length == 0)
+            throw new ArgumentException("OR intervals must contain at least one child source.", nameof(sources));
         _sources = sources;
         Field = GetSharedField(_sources);
     }
@@ -191,6 +193,8 @@ public sealed class IntervalsOrderedSource : IntervalsSource
     public IntervalsOrderedSource(int maxGaps, params IntervalsSource[] sources)
     {
         ArgumentNullException.ThrowIfNull(sources);
+        if (sources.Length == 0)
+            throw new ArgumentException("Ordered intervals must contain at least one child source.", nameof(sources));
         ArgumentOutOfRangeException.ThrowIfNegative(maxGaps);
         _sources = sources;
         Field = GetSharedField(_sources);
@@ -234,6 +238,8 @@ public sealed class IntervalsUnorderedSource : IntervalsSource
     public IntervalsUnorderedSource(int maxGaps, params IntervalsSource[] sources)
     {
         ArgumentNullException.ThrowIfNull(sources);
+        if (sources.Length == 0)
+            throw new ArgumentException("Unordered intervals must contain at least one child source.", nameof(sources));
         ArgumentOutOfRangeException.ThrowIfNegative(maxGaps);
         _sources = sources;
         Field = GetSharedField(_sources);

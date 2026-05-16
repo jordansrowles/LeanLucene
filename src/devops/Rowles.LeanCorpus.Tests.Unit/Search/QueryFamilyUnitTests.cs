@@ -88,6 +88,9 @@ public sealed class QueryFamilyUnitTests
         Assert.Throws<ArgumentException>(() => new MultiPhraseQuery("body", [["alpha"], []]));
         Assert.Throws<ArgumentException>(() => new IntervalsTermSource("body", ""));
         Assert.Throws<ArgumentException>(() => new IntervalsPhraseSource("body", []));
+        Assert.Throws<ArgumentException>(() => new IntervalsOrSource([]));
+        Assert.Throws<ArgumentException>(() => new IntervalsOrderedSource(1, []));
+        Assert.Throws<ArgumentException>(() => new IntervalsUnorderedSource(1, []));
         Assert.Throws<ArgumentException>(() => new CombinedFieldsQuery([""], ["alpha"]));
         Assert.Throws<ArgumentException>(() => new CombinedFieldsQuery(["body"], [""]));
         Assert.Throws<ArgumentException>(() => new CombinedFieldsQuery(
