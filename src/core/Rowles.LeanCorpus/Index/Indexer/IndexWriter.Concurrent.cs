@@ -187,12 +187,14 @@ public sealed partial class IndexWriter
             {
                 dstAcc = new PostingAccumulator();
                 _postings[qt] = dstAcc;
+                _postingsRamBytes += dstAcc.EstimatedBytes;
             }
             var srcIds = srcAcc.DocIds;
             bool srcHasPositions = srcAcc.HasPositions;
             for (int i = 0; i < srcIds.Length; i++)
             {
                 int remappedDocId = srcIds[i] + docBase;
+                long before = dstAcc.EstimatedBytes;
                 if (srcHasPositions)
                 {
                     if (srcAcc.HasPayloads)
@@ -212,6 +214,7 @@ public sealed partial class IndexWriter
                 {
                     dstAcc.AddDocOnly(remappedDocId);
                 }
+                _postingsRamBytes += dstAcc.EstimatedBytes - before;
             }
         }
 
@@ -228,7 +231,7 @@ public sealed partial class IndexWriter
             int end = (d + 1) < dwptDocCount ? srcDocStarts[d + 1] : srcEntryTotal;
             for (int e = start; e < end; e++)
             {
-                AppendStoredField(srcIdToName[srcFieldIds[e]], srcValues[e]);
+                AppendMergedStoredField(srcIdToName[srcFieldIds[e]], srcValues[e]);
             }
         }
 
@@ -324,10 +327,22 @@ public sealed partial class IndexWriter
 
         _bufferedDocCount += dwpt.DocCount;
         _contentChangedSinceCommit = true;
-        // Stored-field overhead already tracked; postings tracked via EstimatedBytes
-
         if (ShouldFlush())
             FlushSegment();
+    }
+
+    private void AppendMergedStoredField(string fieldName, StoredFieldValue value)
+    {
+        if (!_sfFieldNameToId.TryGetValue(fieldName, out int fid))
+        {
+            fid = _sfFieldIdToName.Count;
+            _sfFieldNameToId[fieldName] = fid;
+            _sfFieldIdToName.Add(fieldName);
+        }
+
+        _sfFieldIds.Add(fid);
+        _sfValues.Add(value);
+        _estimatedRamBytes += value.EstimatedSize;
     }
 
     private static void MergeMultiValuedDocValues<T>(
