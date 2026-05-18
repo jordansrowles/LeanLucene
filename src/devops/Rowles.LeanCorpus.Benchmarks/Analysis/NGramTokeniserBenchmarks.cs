@@ -1,6 +1,7 @@
 using BenchmarkDotNet.Attributes;
 using Lucene.Net.Analysis.NGram;
 using Lucene.Net.Util;
+using Rowles.LeanCorpus.Analysis;
 using Rowles.LeanCorpus.Analysis.Tokenisers;
 
 namespace Rowles.LeanCorpus.Benchmarks;
@@ -28,6 +29,8 @@ public class NGramTokeniserBenchmarks
     private string[] _documents = [];
     private EdgeNGramTokeniser _edgeTokeniser = null!;
     private NGramTokeniser _ngramTokeniser = null!;
+    private readonly List<Token> _edgeTokens = [];
+    private readonly List<Token> _ngramTokens = [];
     private int _min;
     private int _max;
 
@@ -48,7 +51,10 @@ public class NGramTokeniserBenchmarks
     {
         int total = 0;
         foreach (var doc in _documents)
-            total += _edgeTokeniser.Tokenise(doc.AsSpan()).Count;
+        {
+            _edgeTokeniser.Tokenise(doc.AsSpan(), _edgeTokens);
+            total += _edgeTokens.Count;
+        }
         return total;
     }
 
@@ -58,7 +64,10 @@ public class NGramTokeniserBenchmarks
     {
         int total = 0;
         foreach (var doc in _documents)
-            total += _ngramTokeniser.Tokenise(doc.AsSpan()).Count;
+        {
+            _ngramTokeniser.Tokenise(doc.AsSpan(), _ngramTokens);
+            total += _ngramTokens.Count;
+        }
         return total;
     }
 

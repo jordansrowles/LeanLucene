@@ -1,6 +1,7 @@
 ﻿using Rowles.LeanCorpus.Codecs.DocValues;
 using Rowles.LeanCorpus.Codecs.Hnsw;
 using Rowles.LeanCorpus.Codecs.Vectors;
+using Rowles.LeanCorpus.Util;
 
 namespace Rowles.LeanCorpus.Index.Segment;
 
@@ -219,35 +220,57 @@ public sealed partial class SegmentReader
     public List<(int DocId, double Value)> GetNumericRange(string field, double min, double max)
     {
         var results = new List<(int, double)>();
+        VisitNumericRange(field, min, max, (docId, value) => results.Add((docId, value)));
+        return results;
+    }
 
-        // Fast path: use the BKD tree if one is available for this segment.
+    internal bool VisitNumericRange(string field, double min, double max, Action<int, double> visitor)
+    {
+        ArgumentNullException.ThrowIfNull(visitor);
+
         var bkd = EnsureBkdReader();
         if (bkd is not null && bkd.HasField(field))
         {
-            var raw = bkd.RangeQuery(field, min, max);
-            if (_liveDocs is null)
-                return raw;
-            results.Capacity = raw.Count;
-            foreach (var hit in raw)
+            bkd.VisitRange(field, min, max, (docId, value) =>
             {
-                if (IsLive(hit.DocId))
-                    results.Add(hit);
-            }
-            return results;
+                if (_liveDocs is null || IsLive(docId))
+                    visitor(docId, value);
+            });
+            return true;
         }
 
-        // Fallback: linear scan of the sparse numeric index. Used for legacy segments
-        // written before BKD was wired or when the .bkd file is missing for this field.
         var numericIndex = EnsureNumericIndex();
-        if (!numericIndex.TryGetValue(field, out var fieldMap))
-            return results;
-
-        foreach (var (docId, value) in fieldMap)
+        if (numericIndex.TryGetValue(field, out var fieldMap))
         {
-            if (value >= min && value <= max && IsLive(docId))
-                results.Add((docId, value));
+            foreach (var (docId, value) in fieldMap)
+            {
+                if (value >= min && value <= max && IsLive(docId))
+                    visitor(docId, value);
+            }
+
+            return true;
         }
-        return results;
+
+        var numericDocValues = EnsureNumericDocValues();
+        if (!numericDocValues.TryGetValue(field, out var values))
+            return false;
+
+        RoaringBitmap? presenceBitmap = null;
+        _numericDocValuesPresence?.TryGetValue(field, out presenceBitmap);
+        for (int docId = 0; docId < values.Length; docId++)
+        {
+            if (!IsLive(docId))
+                continue;
+
+            if (presenceBitmap is not null && !presenceBitmap.Contains(docId))
+                continue;
+
+            double value = values[docId];
+            if (value >= min && value <= max)
+                visitor(docId, value);
+        }
+
+        return true;
     }
 
     /// <summary>

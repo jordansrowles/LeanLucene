@@ -223,25 +223,35 @@ public sealed partial class IndexSearcher
     {
         int docBase = reader.DocBase;
         float score = query.Boost != 1.0f ? query.Boost : 1.0f;
-        var rangeResults = reader.GetNumericRange(query.Field, query.Min, query.Max);
-        if (rangeResults.Count > 0)
+        var localCollector = collector;
+        if (reader.VisitNumericRange(query.Field, query.Min, query.Max, (docId, _) =>
+            localCollector.Collect(docBase + docId, ApplyFieldBoost(reader, docId, query.Field, score))))
         {
-            foreach (var r in rangeResults)
-                collector.Collect(docBase + r.DocId, ApplyFieldBoost(reader, r.DocId, query.Field, score));
+            collector = localCollector;
             return;
         }
 
         for (int docId = 0; docId < reader.MaxDoc; docId++)
         {
-            if (!reader.IsLive(docId)) continue;
+            if (!reader.IsLive(docId))
+                continue;
+
+            if (reader.TryGetNumericValue(query.Field, docId, out var numericValue))
+            {
+                if (numericValue >= query.Min && numericValue <= query.Max)
+                    collector.Collect(docBase + docId, ApplyFieldBoost(reader, docId, query.Field, score));
+                continue;
+            }
 
             var stored = reader.GetStoredFields(docId);
             if (stored.TryGetValue(query.Field, out var values) && values.Count > 0 && double.TryParse(values[0], out var val))
             {
                 if (val >= query.Min && val <= query.Max)
-                    collector.Collect(docBase + docId, ApplyFieldBoost(reader, docId, query.Field, score));
+                    localCollector.Collect(docBase + docId, ApplyFieldBoost(reader, docId, query.Field, score));
             }
         }
+
+        collector = localCollector;
     }
 
     private void ExecutePrefixQuery(PrefixQuery query, SegmentReader reader,

@@ -1,6 +1,7 @@
 ﻿namespace Rowles.LeanCorpus.Analysis.Tokenisers;
 
 using Rowles.LeanCorpus.Analysis;
+using Rowles.LeanCorpus.Analysis.Analysers;
 
 /// <summary>
 /// Splits text into character substrings of length [<see cref="MinGram"/>, <see cref="MaxGram"/>]
@@ -21,9 +22,8 @@ public sealed class EdgeNGramTokeniser : ITokeniser
     /// </summary>
     public int MaxGram { get; }
 
-    // Intern cache to reduce string allocations for repeated edge n-grams
-    private readonly Dictionary<int, string> _internCache = new();
-    private const int MaxInternCacheSize = 2048;
+    private const int MaxTextCacheSize = 65_536;
+    private readonly TokenTextCache _textCache = new(MaxTextCacheSize);
 
     /// <summary>
     /// Initialises a new <see cref="EdgeNGramTokeniser"/> with the specified gram size range.
@@ -45,6 +45,24 @@ public sealed class EdgeNGramTokeniser : ITokeniser
     public List<Token> Tokenise(ReadOnlySpan<char> input)
     {
         var tokens = new List<Token>(CountEdgeNGrams(input));
+        Tokenise(input, tokens);
+        return tokens;
+    }
+
+    /// <summary>
+    /// Tokenises the input into the supplied destination list, clearing it before use.
+    /// </summary>
+    /// <param name="input">The text to tokenise.</param>
+    /// <param name="tokens">The destination token buffer to populate.</param>
+    public void Tokenise(ReadOnlySpan<char> input, List<Token> tokens)
+    {
+        ArgumentNullException.ThrowIfNull(tokens);
+
+        tokens.Clear();
+        int tokenCount = CountEdgeNGrams(input);
+        if (tokens.Capacity < tokenCount)
+            tokens.Capacity = tokenCount;
+
         int len = input.Length;
         int tokenStart = 0;
 
@@ -61,13 +79,11 @@ public sealed class EdgeNGramTokeniser : ITokeniser
                 for (int gramLen = MinGram; gramLen <= MaxGram && gramLen <= tokenLen; gramLen++)
                 {
                     var span = input.Slice(tokenStart, gramLen);
-                    string text = GetOrCacheString(span);
-                    tokens.Add(new Token(text, tokenStart, tokenStart + gramLen));
+                    tokens.Add(new Token(_textCache.GetOrAdd(span), tokenStart, tokenStart + gramLen));
                 }
             }
             tokenStart = i + 1;
         }
-        return tokens;
     }
 
     private int CountEdgeNGrams(ReadOnlySpan<char> input)
@@ -89,17 +105,5 @@ public sealed class EdgeNGramTokeniser : ITokeniser
         }
 
         return count;
-    }
-
-    private string GetOrCacheString(ReadOnlySpan<char> span)
-    {
-        int hash = string.GetHashCode(span, StringComparison.Ordinal);
-        if (_internCache.TryGetValue(hash, out var cached) && cached.AsSpan().SequenceEqual(span))
-            return cached;
-
-        var text = span.ToString();
-        if (_internCache.Count < MaxInternCacheSize)
-            _internCache[hash] = text;
-        return text;
     }
 }

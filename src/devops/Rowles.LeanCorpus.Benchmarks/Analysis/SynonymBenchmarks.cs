@@ -32,7 +32,7 @@ public class SynonymBenchmarks
     {
         _documents = BenchmarkData.BuildDocuments(DocumentCount);
         _baseAnalyser = new StandardAnalyser();
-        _synonymFilter = BuildSynonymFilter(SynonymCount);
+        _synonymFilter = BuildSynonymFilter(SynonymCount, _documents, _baseAnalyser);
     }
 
     [Benchmark(Baseline = true)]
@@ -59,20 +59,44 @@ public class SynonymBenchmarks
         return total;
     }
 
-    private static SynonymGraphFilter BuildSynonymFilter(int count)
+    private static SynonymGraphFilter BuildSynonymFilter(int count, string[] documents, StandardAnalyser analyser)
     {
         var map = new SynonymMap();
-        var words = new[]
+        var sources = BuildSynonymSources(documents, analyser, count);
+        for (int i = 0; i < sources.Length; i++)
         {
-            "government", "market", "company", "nation", "people", "policy", "leader",
-            "economy", "country", "region", "sector", "report", "official", "minister",
-            "party", "council", "program", "project", "agency", "office"
-        };
-        for (int i = 0; i < count; i++)
-        {
-            var source = words[i % words.Length];
-            map.Add(source, [$"{source}_synonym_{i}", $"{source}_alt"]);
+            var source = sources[i];
+            var slug = source.Replace(' ', '_');
+            map.Add(source, [$"{slug}_synonym_{i}", $"{slug}_alt"]);
         }
         return new SynonymGraphFilter(map);
+    }
+
+    private static string[] BuildSynonymSources(string[] documents, StandardAnalyser analyser, int count)
+    {
+        var frequencies = new Dictionary<string, int>(StringComparer.Ordinal);
+        int sampleCount = Math.Min(documents.Length, 4_096);
+
+        for (int i = 0; i < sampleCount; i++)
+        {
+            var tokens = analyser.Analyse(documents[i].AsSpan());
+            foreach (var token in tokens)
+            {
+                frequencies.TryGetValue(token.Text, out int current);
+                frequencies[token.Text] = current + 1;
+            }
+        }
+
+        var sources = frequencies
+            .OrderByDescending(static entry => entry.Value)
+            .ThenBy(static entry => entry.Key, StringComparer.Ordinal)
+            .Take(count)
+            .Select(static entry => entry.Key)
+            .ToArray();
+
+        if (sources.Length != count)
+            throw new InvalidOperationException($"Expected {count} synonym sources but only found {sources.Length}.");
+
+        return sources;
     }
 }
