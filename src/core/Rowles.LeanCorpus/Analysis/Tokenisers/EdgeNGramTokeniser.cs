@@ -6,8 +6,9 @@ using Rowles.LeanCorpus.Analysis.Analysers;
 /// <summary>
 /// Splits text into character substrings of length [<see cref="MinGram"/>, <see cref="MaxGram"/>]
 /// anchored at the start of each whitespace-delimited token (edge n-grams).
-/// 
-/// Thread-safety: This class maintains an instance-level intern cache (_internCache) for performance.
+/// Whitespace is defined as <c>' '</c>, <c>'\t'</c>, <c>'\r'</c>, and <c>'\n'</c>.
+///
+/// Thread-safety: This class maintains an instance-level intern cache for performance.
 /// Each instance should be used by a single thread, or callers should create separate instances per thread.
 /// </summary>
 public sealed class EdgeNGramTokeniser : ITokeniser
@@ -45,35 +46,34 @@ public sealed class EdgeNGramTokeniser : ITokeniser
     public List<Token> Tokenise(ReadOnlySpan<char> input)
     {
         var tokens = new List<Token>(CountEdgeNGrams(input));
-        Tokenise(input, tokens);
+        TokeniseCore(input, tokens);
         return tokens;
     }
 
     /// <summary>
     /// Tokenises the input into the supplied destination list, clearing it before use.
+    /// The list's existing capacity is reused; no pre-count pass is performed.
     /// </summary>
     /// <param name="input">The text to tokenise.</param>
     /// <param name="tokens">The destination token buffer to populate.</param>
     public void Tokenise(ReadOnlySpan<char> input, List<Token> tokens)
     {
         ArgumentNullException.ThrowIfNull(tokens);
-
         tokens.Clear();
-        int tokenCount = CountEdgeNGrams(input);
-        if (tokens.Capacity < tokenCount)
-            tokens.Capacity = tokenCount;
+        TokeniseCore(input, tokens);
+    }
 
+    private void TokeniseCore(ReadOnlySpan<char> input, List<Token> tokens)
+    {
         int len = input.Length;
         int tokenStart = 0;
 
         for (int i = 0; i <= len; i++)
         {
-            bool boundary = i == len || input[i] == ' ' || input[i] == '\t'
-                            || input[i] == '\r' || input[i] == '\n';
-            if (!boundary) continue;
+            if (i != len && input[i] != ' ' && input[i] != '\t' && input[i] != '\r' && input[i] != '\n')
+                continue;
 
-            int tokenEnd = i;
-            int tokenLen = tokenEnd - tokenStart;
+            int tokenLen = i - tokenStart;
             if (tokenLen > 0)
             {
                 for (int gramLen = MinGram; gramLen <= MaxGram && gramLen <= tokenLen; gramLen++)
@@ -82,6 +82,7 @@ public sealed class EdgeNGramTokeniser : ITokeniser
                     tokens.Add(new Token(_textCache.GetOrAdd(span), tokenStart, tokenStart + gramLen));
                 }
             }
+
             tokenStart = i + 1;
         }
     }
@@ -93,9 +94,7 @@ public sealed class EdgeNGramTokeniser : ITokeniser
 
         for (int i = 0; i <= input.Length; i++)
         {
-            bool boundary = i == input.Length || input[i] == ' ' || input[i] == '\t'
-                            || input[i] == '\r' || input[i] == '\n';
-            if (!boundary)
+            if (i != input.Length && input[i] != ' ' && input[i] != '\t' && input[i] != '\r' && input[i] != '\n')
                 continue;
 
             int tokenLen = i - tokenStart;

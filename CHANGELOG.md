@@ -36,6 +36,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - License changed to Apache 2
+- `NGramTokeniser` now accepts a `splitOnWhitespace` constructor parameter (default `false`). When `true`, n-grams are generated per whitespace-delimited word rather than across the full input, eliminating cross-word-boundary grams and dramatically reducing allocations for larger gram ranges.
+- Removed the redundant pre-count pass from the `Tokenise(input, tokens)` buffer overload of both `NGramTokeniser` and `EdgeNGramTokeniser`; the reused list's existing capacity is sufficient after warmup and the O(n) scan is no longer performed on every call. The allocating `Tokenise(input)` overload retains its pre-count for correct initial sizing.
+- Added `LeanCorpus_NGramTokeniser_WordSplit` benchmark variant to `NGramTokeniserBenchmarks` to surface the per-word splitting path in benchmark runs.
 - Replaced the enum-based `TokenKind` analysis contract with string token types, removed the public generic `TokenTypes` taxonomy, and moved producer-specific token type names onto the tokenisers that emit them.
 - Tightened new query constructors so empty fields, empty term groups, unknown combined-field weights, and non-finite point values fail fast instead of being silently filtered or coerced.
 - Scoped lightweight phonetic and English stemming APIs to honest names, and added Hunspell condition parsing plus generated-form limits.

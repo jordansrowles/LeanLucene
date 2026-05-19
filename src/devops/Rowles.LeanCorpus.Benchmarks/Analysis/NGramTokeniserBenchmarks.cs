@@ -29,8 +29,10 @@ public class NGramTokeniserBenchmarks
     private string[] _documents = [];
     private EdgeNGramTokeniser _edgeTokeniser = null!;
     private NGramTokeniser _ngramTokeniser = null!;
+    private NGramTokeniser _ngramTokeniserWs = null!;
     private readonly List<Token> _edgeTokens = [];
     private readonly List<Token> _ngramTokens = [];
+    private readonly List<Token> _ngramTokensWs = [];
     private int _min;
     private int _max;
 
@@ -43,6 +45,7 @@ public class NGramTokeniserBenchmarks
         _documents = BenchmarkData.BuildDocuments(DocumentCount);
         _edgeTokeniser = new EdgeNGramTokeniser(_min, _max);
         _ngramTokeniser = new NGramTokeniser(_min, _max);
+        _ngramTokeniserWs = new NGramTokeniser(_min, _max, splitOnWhitespace: true);
     }
 
     [Benchmark(Baseline = true)]
@@ -67,6 +70,20 @@ public class NGramTokeniserBenchmarks
         {
             _ngramTokeniser.Tokenise(doc.AsSpan(), _ngramTokens);
             total += _ngramTokens.Count;
+        }
+        return total;
+    }
+
+    /// <summary>NGram tokeniser with per-word whitespace splitting enabled.</summary>
+    [Benchmark]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public int LeanCorpus_NGramTokeniser_WordSplit()
+    {
+        int total = 0;
+        foreach (var doc in _documents)
+        {
+            _ngramTokeniserWs.Tokenise(doc.AsSpan(), _ngramTokensWs);
+            total += _ngramTokensWs.Count;
         }
         return total;
     }
