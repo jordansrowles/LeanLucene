@@ -4,30 +4,95 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.3.1] - 2026-xx-xx
+## [1.4.0] - 2026-xx-xx
+
+### Changed (unreleased)
+- `Tokeniser` now implements `ISpanTokeniser` and `StandardAnalyser` now implements `ISpanAnalyser`, so the default indexing path feeds tokens directly to the `SpanPostingTokenSink` without allocating a `List<Token>` or per-token strings. The qualified-term interning and postings dictionary lookup are merged into a single alternate-lookup probe per token, eliminating the double hash computation. `FstBuilder.EnsureNodeCapacity` lets `TermDictionaryWriter` pre-size the suffix-sharing registry to the unique term count, avoiding rehashing during FST construction.
+- Regexp query execution now extracts a literal prefix from simple patterns like `gov.*ment` or `mark.*` and enumerates only the matching FST subtree, avoiding full field enumeration and the associated allocation explosion. A new `IAutomaton.IsSink` default method lets the FST intersection path bail into a fast output-collection traversal when the automaton enters a fully-permissive state, improving wildcard throughput for patterns with interior `*` after early literal matches.
+- Moved `kstem-dict.txt` out of the embedded resources into `lexicons/` at the solution root. `KStemmer` no longer has a parameterless constructor; provide a `KStemLexicon` loaded via `KStemLexicon.FromFile` or `KStemLexicon.FromStream`. `KStemLexicon.Default` and `KStemLexicon.FromEmbeddedResource` are removed.
+- Moved the built-in Thai lexicon out of `ThaiTokeniser` into `lexicons/thai-dict.txt`. `ThaiTokeniser` no longer has a parameterless constructor; provide a lexicon via the constructor, `ThaiTokeniser.FromFile`, or `ThaiTokeniser.FromStream`.
+- Decoupled `IcuTokeniser` and `Uax29UrlEmailTokeniser` from `ThaiTokeniser`. Both now accept an optional `ITokeniser` for Thai segmentation via their constructor. Without injection, Thai characters are treated as regular word characters.
+- `MediaWikiTokeniser` now caches its `IcuTokeniser` instance as a field rather than allocating a new one per markup block.
+- Cut the on-disk term dictionary over to a real FST (Daciuk minimal acyclic transducer) with the new v3 `.dic` format. Exact lookups become O(term length) arc walks with shared-prefix memory; prefix, wildcard, and fuzzy queries are now native FST × automaton intersections via the new `IAutomaton` overloads on `FstReader`. v1 and v2 dictionaries are no longer opened by the live read path; `TermDictionaryReader.Open` throws an `InvalidDataException` with a "run leancorpus-cli migrate" hint, and `IndexCodecMigrator` upgrades them in place via the legacy readers held under `Codecs\TermDictionary\Legacy\`.
+- Switched fuzzy matching to a byte-level (UTF-8) Levenshtein automaton. For ASCII queries this is identical to the previous char-level distance; for queries containing multi-byte code points the reported edit distance now counts UTF-8 byte edits rather than character edits.
+- Renamed the real FST builder `FiniteStateTransducerBuilder` to `FstBuilder` and moved the legacy v2 byte-array term dictionary (formerly misnamed `FSTReader`/`FSTBuilder`) and the v1 reader to `Codecs\TermDictionary\Legacy\` for migrator-only use.
+- Added a real `FstReader` over the FST1 blob format with arc-walk exact lookup, prefix enumeration, automaton intersection, and allocation-light `CollectIntersectOutputs` / `CollectOutputsWithPrefix` / `CollectContainsOutputs` overloads; extended `LevenshteinAutomaton` with `MinDistance(state)` so fuzzy callers can recover edit distance from the FST traversal.
+- `IndexCodecMigrator` now tolerates `LLIDX033`/`LLIDX034` validation errors caused by an outdated term dictionary on segments it is about to rewrite, so legacy `.dic` files no longer block `ValidateBeforeMigration`.
 
 ### Added
-- Added integration and chaos tests covering previously untested `SegmentReader` methods: `GetFieldLength`, `GetDocIds`, `GetDocFreq`, `GetStoredFields` null path, `GetNumericRange` variants, all DocValues readers, postings methods (`GetPostingsEnumWithPositions`, `GetPositions`, `GetTermFrequency`), pattern-matching methods (`GetTermsMatching`, `IntersectAutomaton`), and vector methods (`GetVector`, `EnsureVectorReaderNoLock`).
-- Added chaos property tests for corrupted `.pos`, `.dvn`, and `.vec` codec files to verify structured exceptions are raised rather than silent data corruption.
-- Added integration tests covering previously untested `IndexValidator` branches: corrupt migration marker catch block, stale temp file patterns, segment-missing-files path, `.fdt`/`.fdx` magic and version checks, doc count and block offset validation, missing deletion file, live-doc count mismatch, vector/HNSW magic, dimension, and normalisation checks, and deep vector/HNSW validation.
-- Added integration tests covering previously untested `IndexSearcher` members: `Metrics` property, `SpanNearQuery`/`SpanOrQuery`/`SpanNotQuery` collection paths, `BlockJoinQuery` with a non-`TermQuery` child (exercises the `BitArray` path in `CollectChildDocsIntoBitArray`), and `VectorQuery` execution.
-- Added unit tests for `IndexFormatInspectionOptions.IncludeChecksums`, `IndexFileInspector` commit-file discovery and all error branches of `TryReadCommit` and `CheckCodecHeader`, and `VectorFilePaths.Sanitise` covering all character-substitution and heap-allocation branches.
-- Added integration tests for `SimdIntrinsicsVectorOps` AVX-512 paths (`CosineAvx512`, `DotAvx512`; conditionally skipped when unsupported) and three new `IndexCodecMigrator` paths: non-executable plan, pre-migration validation failure, and auto-generated staging directory.
-- Added chaos tests for `IndexCodecMigrator`: read-only `.dic` forcing the exception catch path, and a staged migration where a corrupted `.nrm` triggers `ValidateAfterMigration` failure.
-- Added unit tests for `StringField` and `TextField` null-value guard, `FieldType`, and `IsIndexed` branches.
-- Added unit tests for `BooleanClause` equality: null object, wrong type, null typed, differing query, differing occur, equal instances, and consistent hash code.
-- Added unit tests for `AggregationRequest` null-name and null-field guards, and for `AggregationResult.Avg` zero-count path and `Empty` factory.
-- Added unit test for `SegmentInfo.ReadFrom` with a JSON `null` literal, verifying `InvalidDataException` is raised.
-- Added unit tests for `InMemoryVectorSource`: `Count` property, `GetVector` hit, `GetVector` miss (`KeyNotFoundException`), and null-dictionary guard.
-- Added unit tests for `CompressionCodecRegistry.TryGet` false path and `Get` unregistered-policy throw.
-- Added unit tests in `IndexInputEdgeCaseTests` covering EOF throws across all primitive readers (ref and non-ref), all five unrolled `ReadVarIntFast` byte-length paths, the fallback path, VarInt mid-decode EOF and overflow, corrupt UTF-8 sequences (3-byte, 4-byte, truncated, bytes-exhausted), heap-allocation path for charCount > 256 in `ReadUtf8String` and `CompareCharsAndAdvance`, and `Prefetch` on empty and non-empty files.
-- Added an integration test for `IndexStats.TryLoadFrom` with a JSON `null` literal returning null.
-- Added `GeoDistanceQuery` equality tests for previously uncovered branches: differ-by-field, differ-by-CentreLat, differ-by-CentreLon, `Equals(null)`, and `Equals(wrong-type)`.
-- Added chaos tests for `IndexStats.WriteTo`: read-only destination fires the `UnauthorisedException` catch block and cleans up the tmp file; file-locked destination fires the `IOException` catch block.
-- Added integration and chaos tests for `SearcherManager` refresh-failure paths: `LastRefreshError`, `LastRefreshErrorAt`, `ConsecutiveRefreshFailures`, `RefreshFailed` event, subscriber-exception guard, and counter reset after recovery.
+- `HunspellDictionary` now supports character ranges (`[a-z]`, `[A-Z]`, `[0-9]`) in affix conditions; `AF` alias directive parsing; morphological tag extraction from dictionary entries (`word/flags po:verb`); thread-safe content-hash-based dictionary caching across repeated `Parse` calls; and `FromFile`/`FromStream` convenience overloads.
+- `KStemLexicon` now supports `FromEmbeddedResource` for loading lexicons from assembly manifest resources, and `FromFile` resolves relative paths against `AppContext.BaseDirectory`.
+- `StemTokenFilter` wraps any `IStemmer` as a composable `ITokenFilter` for use in the `Analyser` pipeline.
+- `StemmerAnalyser` provides a generic analyser pipeline (tokenise → lowercase → stopwords → stem) accepting any `IStemmer`, with factory methods for Porter, KStemmer, LightEnglish, and Hunspell backends.
+- `PorterStemmer` is now a public `IStemmer` adapter (previously internal via `PorterStemmerFilter.Stem`).
+- `LightEnglishStemmer` now has comprehensive unit tests covering irregular forms, plurals, past tense, progressive, derivational suffixes, protected words, and e-restoration.
+- Added benchmark suites: `KStemmerParityBenchmarks`, `HunspellBenchmarks`, and `LightEnglishStemmerBenchmarks` (accessible via `--suite kstemmer`, `--suite hunspell`, `--suite lightenglish`).
+- Added a Roslyn source generator (`Rowles.LeanCorpus.SourceGen`) that turns `[LeanDocument]`-annotated models into typed `LeanDocumentMap<T>`s with `ToDocument`, `FromStoredDocument`, `CreateSchema`, and `Fields` descriptors via direct, reflection-free, AOT-friendly code; ships attributes (`LeanText`, `LeanString`, `LeanNumeric`, `LeanVector`, `LeanGeoPoint`, `LeanStored`, `LeanIgnore`) and the `Mapping` runtime surface (`LeanDocumentMap<T>`, `LeanFieldBinding<T>`, `LeanField<T,V>`, `StoredDocument`, `LeanGeoLocation`, `LeanNumericEncoding`, `LeanNumericEncoders`) in the core library, with diagnostics `LCGEN001`–`LCGEN013`, strict-schema defaults, materialiser safety checks, stored round-tripping guidance, and a dedicated test project exercising generator output, diagnostics, nullability rules, encoder round-trips, and map round-trips.
+- Added Unicode-aware analysis components: `IcuAnalyser`, `IcuTokeniser`, `Uax29UrlEmailTokeniser`, `ThaiTokeniser`, `MediaWikiTokeniser`, `KeepWordFilter`, `TypeTokenFilter`, `LimitTokenCountFilter`, `FlattenGraphFilter`, `MetaphoneFilter`, `PhoneticAlternatesFilter`, `HunspellStemFilter`, `LightEnglishStemmer`, and a lexicon-backed `KStemmer`.
+- Added `BinaryField` for stored raw byte values, with typed stored-field codec support, binary doc-values mirroring, and binary retrieval through `SegmentReader` and `IndexSearcher`.
+- Added index-time field boosting on document fields, persisted through norms, applied across text, boolean, range, vector, and geo scoring paths, and surfaced in score explanations.
+- Added payload-bearing term vectors and payload-preserving merge paths for postings and stored term vectors.
+- Added `MatchAllDocsQuery`, `MatchNoDocsQuery`, `FieldExistsQuery`, `TermInSetQuery`, `PointInSetQuery`, `MultiPhraseQuery`, `IntervalsQuery`, and `CombinedFieldsQuery`, with execution support in `IndexSearcher`, order-stable query-cache fingerprints, BKD exact-set lookup, and stored-only field-existence fallback.
+- Added async indexing APIs on `IndexWriter` for single-document, batched, block, and commit workflows, using cancellation-aware backpressure waits while preserving the existing synchronous indexing core.
+- Added streamed bulk ingestion from `IAsyncEnumerable<LeanDocument>` with bounded batching.
+- Added these unit tests:
+  - `StringField` and `TextField` null-value guard, `FieldType`, and `IsIndexed` branches.
+  - `BooleanClause` equality: null object, wrong type, null typed, differing query, differing occur, equal instances, and consistent hash code.
+  - `AggregationRequest` null-name and null-field guards, and for `AggregationResult.Avg` zero-count path and `Empty` factory.
+  - `SegmentInfo.ReadFrom` with a JSON `null` literal, verifying `InvalidDataException` is raised.
+  - `InMemoryVectorSource`: `Count` property, `GetVector` hit, `GetVector` miss (`KeyNotFoundException`), and null-dictionary guard.
+  - `CompressionCodecRegistry.TryGet` false path and `Get` unregistered-policy throw.
+  - `GeoDistanceQuery` equality: differ-by-field, differ-by-CentreLat, differ-by-CentreLon, `Equals(null)`, and `Equals(wrong-type)`.
+  - `IndexInputEdgeCaseTests` covering EOF throws across all primitive readers (ref and non-ref), all five unrolled `ReadVarIntFast` byte-length paths, the fallback path, VarInt mid-decode EOF and overflow, corrupt UTF-8 sequences (3-byte, 4-byte, truncated, bytes-exhausted), heap-allocation path for charCount > 256 in `ReadUtf8String` and `CompareCharsAndAdvance`, and `Prefetch` on empty and non-empty files.
+  - `IndexFormatInspectionOptions.IncludeChecksums`, `IndexFileInspector` commit-file discovery and all error branches of `TryReadCommit` and `CheckCodecHeader`, and `VectorFilePaths.Sanitise` covering all character-substitution and heap-allocation branches.
+- Added these integration tests:
+  - `SegmentReader` methods: `GetFieldLength`, `GetDocIds`, `GetDocFreq`, `GetStoredFields` null path, `GetNumericRange` variants, all DocValues readers, postings methods (`GetPostingsEnumWithPositions`, `GetPositions`, `GetTermFrequency`), pattern-matching methods (`GetTermsMatching`, `IntersectAutomaton`), and vector methods (`GetVector`, `EnsureVectorReaderNoLock`).
+  - `IndexValidator` branches: corrupt migration marker catch block, stale temp file patterns, segment-missing-files path, `.fdt`/`.fdx` magic and version checks, doc count and block offset validation, missing deletion file, live-doc count mismatch, vector/HNSW magic, dimension, and normalisation checks, and deep vector/HNSW validation.
+  - `IndexSearcher` members: `Metrics` property, `SpanNearQuery`/`SpanOrQuery`/`SpanNotQuery` collection paths, `BlockJoinQuery` with a non-`TermQuery` child (exercises the `BitArray` path in `CollectChildDocsIntoBitArray`), and `VectorQuery` execution.
+  - `SimdIntrinsicsVectorOps` AVX-512 paths (`CosineAvx512`, `DotAvx512`; conditionally skipped when unsupported) and three new `IndexCodecMigrator` paths: non-executable plan, pre-migration validation failure, and auto-generated staging directory.
+  - `IndexStats.TryLoadFrom` with a JSON `null` literal returning null.
+  - `SearcherManager` refresh-failure paths: `LastRefreshError`, `LastRefreshErrorAt`, `ConsecutiveRefreshFailures`, `RefreshFailed` event, subscriber-exception guard, and counter reset after recovery.
+  - New query families: BM25F helper logic, multiphrase slot alternates, interval span semantics, set-query fingerprinting, BKD fallback on corrupt point trees, and explicit corruption failure paths for stored fields and positional queries.
+  - Binary fields, boost scoring, merge round-trips, and truncated payload and boost tails.
+  - Unicode-aware analysis components: extensible token types, MediaWiki token classes, phonetic alternates, Hunspell stemming, and token-budget guardrails.
+  - Async ingestion, source-failure retention semantics, backpressure cancellation, and async block indexing.
+- Added these chaos tests:
+  - Corrupted `.pos`, `.dvn`, and `.vec` codec files verifying structured exceptions are raised rather than silent data corruption.
+  - `IndexCodecMigrator`: read-only `.dic` forcing the exception catch path, and a staged migration where a corrupted `.nrm` triggers `ValidateAfterMigration` failure.
+  - `IndexStats.WriteTo`: read-only destination fires the `UnauthorisedException` catch block and cleans up the tmp file; file-locked destination fires the `IOException` catch block.
+  - `SearcherManager` refresh-failure paths: `LastRefreshError`, `LastRefreshErrorAt`, `ConsecutiveRefreshFailures`, `RefreshFailed` event, subscriber-exception guard, and counter reset after recovery.
+  - Binary fields, boost scoring, merge round-trips, and truncated payload and boost tails.
+  - New query families: BM25F helper logic, multiphrase slot alternates, interval span semantics, set-query fingerprinting, BKD fallback on corrupt point trees, and explicit corruption failure paths for stored fields and positional queries.
 
 ### Changed
 - License changed to Apache 2
+- `NGramTokeniser` now accepts a `splitOnWhitespace` constructor parameter (default `false`). When `true`, n-grams are generated per whitespace-delimited word rather than across the full input, eliminating cross-word-boundary grams and dramatically reducing allocations for larger gram ranges.
+- Removed the redundant pre-count pass from the `Tokenise(input, tokens)` buffer overload of both `NGramTokeniser` and `EdgeNGramTokeniser`; the reused list's existing capacity is sufficient after warmup and the O(n) scan is no longer performed on every call. The allocating `Tokenise(input)` overload retains its pre-count for correct initial sizing.
+- Added `LeanCorpus_NGramTokeniser_WordSplit` benchmark variant to `NGramTokeniserBenchmarks` to surface the per-word splitting path in benchmark runs.
+- Added span-backed analysis APIs (`SpanToken`, `ISpanTokeniser`, `ISpanAnalyser`, `ISpanTokenSink`, and `ISpanTokenFilter`) and wired `NGramTokeniser`, `EdgeNGramTokeniser`, `Analyser`, `LowercaseFilter`, `IndexWriter`, and DWPT indexing through them so n-gram indexing no longer materialises token text strings on the hot path.
+- Added span-sink n-gram benchmark variants to measure the allocation-aware tokenisation path separately from the legacy `List<Token>` API.
+- Replaced the enum-based `TokenKind` analysis contract with string token types, removed the public generic `TokenTypes` taxonomy, and moved producer-specific token type names onto the tokenisers that emit them.
+- Tightened new query constructors so empty fields, empty term groups, unknown combined-field weights, and non-finite point values fail fast instead of being silently filtered or coerced.
+- Scoped lightweight phonetic and English stemming APIs to honest names, and added Hunspell condition parsing plus generated-form limits.
+- Hardened async and batch indexing so schema validation runs before slot acquisition, dispose drains active indexing operations, block indexing suppresses mid-block threshold flushes until the parent marker is present, and partial indexing failures make the writer unusable until reopened.
+- Precomputed `CombinedFieldsQuery` union document frequencies once per search execution and bounded `TermInSetQuery` term counts.
+- Changed `KStemmer` to load its default lexicon from an embedded `kstem-dict.txt` resource generated from Lucene.NET's KStem word list, while still allowing custom `KStemLexicon` injection.
+- Stopped mirroring stored `TextField` values into binary DocValues by default, keeping binary DocValues for `BinaryField`, `StoredField`, and exact `StringField` values.
+- Changed norms boost storage to sparse entries so default field boosts do not write or load per-document `float[]` arrays.
+- Added offsets-only prefix enumeration for prefix and trailing-wildcard query execution when global document-frequency remapping is not needed.
+- Changed phrase query execution to intersect candidate documents before decoding positional data for common multi-term phrases.
+- Hardened benchmark suites by splitting block-join and deletion workloads, broadening Boolean and fuzzy query scenarios, aligning Lucene.NET disk-backed comparison paths, and making suite selection fail fast on unknown names.
+
+### Fixed
+- `NGramTokeniser` and `EdgeNGramTokeniser` no longer hold a shared `_wordOffsets` list; each span-path call and each `Enumerator` instance now owns its own local list, making the span tokenisation path safe for concurrent use on a shared tokeniser instance.
+- `LowercaseFilter` no longer holds a shared `_spanBuffer` field; the span path now rents a buffer from `ArrayPool<char>.Shared` per call and returns it in a `finally` block, eliminating the shared mutable state.
+- `Analyser.Clone()` added so `CreateThreadLocalDocumentWriter` can give each DWPT its own `FilteringSpanTokenSink` while sharing the (now stateless) tokeniser and filter references; `IndexWriter.Concurrent` switches on `Analyser` before the fallback arm that shared the original instance across threads.
+- Stored binary field reads now return defensive copies so callers cannot mutate cached stored-field buffers.
+- `StoredFieldsReader` now validates matching `.fdt` and `.fdx` header versions and block sizes before decoding stored values, and rejects unsupported `.fdt` versions up front.
+- `TermInSetQuery` now publishes its cached qualified-term array safely for parallel search execution.
+- `FuzzyQuery` now accumulates scores per document so multiple matching term expansions do not inflate hit counts with duplicate documents.
+- Hunspell affix parsing now rejects mismatched counted rule lines, applies cross-product suffix conditions to the prefix-modified form, and guards malformed strip lengths.
+- Concurrent DWPT merges now preserve per-document binary DocValues and account merged postings for RAM-threshold flushes.
 
 ## [1.3.0] - 2026-05-11
 

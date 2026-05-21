@@ -1,12 +1,16 @@
-﻿namespace Rowles.LeanCorpus.Analysis.Analysers;
+﻿using Rowles.LeanCorpus.Analysis.Tokenisers;
+
+namespace Rowles.LeanCorpus.Analysis.Analysers;
 
 /// <summary>
 /// Composable analyser that runs a tokeniser followed by a chain of filters.
 /// </summary>
-public sealed class Analyser : IAnalyser
+public sealed class Analyser : IAnalyser, ISpanAnalyser
 {
     private readonly ITokeniser _tokeniser;
     private readonly ITokenFilter[] _filters;
+    private readonly ISpanTokenFilter[]? _spanFilters;
+    private readonly FilteringSpanTokenSink _filteringSink = new();
 
     /// <summary>
     /// Initialises a new <see cref="Analyser"/> with the specified tokeniser and optional filter chain.
@@ -17,14 +21,133 @@ public sealed class Analyser : IAnalyser
     {
         _tokeniser = tokeniser;
         _filters = filters;
+        _spanFilters = TryGetSpanFilters(filters);
     }
 
+    /// <summary>Creates a new <see cref="Analyser"/> sharing the same tokeniser and filters.</summary>
+    /// <remarks>
+    /// After the tokeniser and all filters have been made stateless per-call, the shared references
+    /// are safe. Only <see cref="FilteringSpanTokenSink"/> needs to be per-instance, which this
+    /// method ensures by constructing a fresh <see cref="Analyser"/>.
+    /// </remarks>
+    internal Analyser Clone() => new(_tokeniser, _filters);
+
     /// <inheritdoc/>
-    public List<Token> Analyse(ReadOnlySpan<char> input)
-    {
+    public List<Token> Analyse(ReadOnlySpan<char> input)    {
         var tokens = _tokeniser.Tokenise(input);
         foreach (var filter in _filters)
             filter.Apply(tokens);
         return tokens;
+    }
+
+    /// <inheritdoc/>
+    public bool TryAnalyse(ReadOnlySpan<char> input, ISpanTokenSink sink)
+    {
+        ArgumentNullException.ThrowIfNull(sink);
+
+        if (_tokeniser is not ISpanTokeniser spanTokeniser || _spanFilters is null)
+            return false;
+
+        if (_spanFilters.Length == 0)
+        {
+            spanTokeniser.Tokenise(input, sink);
+        }
+        else
+        {
+            _filteringSink.Reset(_spanFilters, sink);
+            spanTokeniser.Tokenise(input, _filteringSink);
+        }
+
+        return true;
+    }
+
+    private static ISpanTokenFilter[]? TryGetSpanFilters(ITokenFilter[] filters)
+    {
+        if (filters.Length == 0)
+            return [];
+
+        var spanFilters = new ISpanTokenFilter[filters.Length];
+        for (int i = 0; i < filters.Length; i++)
+        {
+            if (filters[i] is not ISpanTokenFilter spanFilter)
+                return null;
+
+            spanFilters[i] = spanFilter;
+        }
+
+        return spanFilters;
+    }
+
+    private sealed class FilteringSpanTokenSink : ISpanTokenSink
+    {
+        private ISpanTokenFilter[] _filters = [];
+        private StageSink[] _stageSinks = [];
+        private ISpanTokenSink _finalSink = null!;
+
+        public void Reset(ISpanTokenFilter[] filters, ISpanTokenSink finalSink)
+        {
+            _filters = filters;
+            _finalSink = finalSink;
+
+            if (_stageSinks.Length < filters.Length)
+            {
+                var stageSinks = new StageSink[filters.Length];
+                for (int i = 0; i < stageSinks.Length; i++)
+                    stageSinks[i] = new StageSink(this, i + 1);
+                _stageSinks = stageSinks;
+            }
+        }
+
+        public void Add(
+            ReadOnlySpan<char> text,
+            int startOffset,
+            int endOffset,
+            string type = Token.DefaultType,
+            int positionIncrement = 1,
+            byte[]? payload = null)
+        {
+            ApplyAt(0, text, startOffset, endOffset, type, positionIncrement, payload);
+        }
+
+        private void ApplyAt(
+            int filterIndex,
+            ReadOnlySpan<char> text,
+            int startOffset,
+            int endOffset,
+            string type,
+            int positionIncrement,
+            byte[]? payload)
+        {
+            if (filterIndex >= _filters.Length)
+            {
+                _finalSink.Add(text, startOffset, endOffset, type, positionIncrement, payload);
+                return;
+            }
+
+            _filters[filterIndex].Apply(text, startOffset, endOffset, type, positionIncrement, payload, _stageSinks[filterIndex]);
+        }
+
+        private sealed class StageSink : ISpanTokenSink
+        {
+            private readonly FilteringSpanTokenSink _owner;
+            private readonly int _nextFilterIndex;
+
+            public StageSink(FilteringSpanTokenSink owner, int nextFilterIndex)
+            {
+                _owner = owner;
+                _nextFilterIndex = nextFilterIndex;
+            }
+
+            public void Add(
+                ReadOnlySpan<char> text,
+                int startOffset,
+                int endOffset,
+                string type = Token.DefaultType,
+                int positionIncrement = 1,
+                byte[]? payload = null)
+            {
+                _owner.ApplyAt(_nextFilterIndex, text, startOffset, endOffset, type, positionIncrement, payload);
+            }
+        }
     }
 }

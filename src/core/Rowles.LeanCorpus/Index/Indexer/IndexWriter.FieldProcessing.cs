@@ -1,11 +1,14 @@
 ﻿using System.Runtime.CompilerServices;
+using Rowles.LeanCorpus.Analysis;
+using Rowles.LeanCorpus.Analysis.Analysers;
+using Rowles.LeanCorpus.Codecs.StoredFields;
 using Rowles.LeanCorpus.Document;
 
 namespace Rowles.LeanCorpus.Index.Indexer;
 
 public sealed partial class IndexWriter
 {
-    private void AddDocumentCore(LeanDocument doc)
+    private void AddDocumentCore(LeanDocument doc, bool suppressFlush = false)
     {
         int localDocId = _bufferedDocCount;
         _sfDocStarts.Add(_sfFieldIds.Count);
@@ -17,28 +20,32 @@ public sealed partial class IndexWriter
             switch (field)
             {
                 case TextField tf:
+                    TrackFieldBoost(tf.Name, localDocId, tf.Boost);
                     IndexTextField(tf.Name, tf.Value, localDocId);
                     if (tf.IsStored)
                     {
-                        AppendStoredField(tf.Name, tf.Value);
+                        AppendStoredField(tf.Name, StoredFieldValue.FromString(tf.Value), mirrorStringToBinaryDocValues: false);
                     }
                     break;
                 case StringField sf:
+                    TrackFieldBoost(sf.Name, localDocId, sf.Boost);
                     IndexStringField(sf.Name, sf.Value, localDocId);
                     if (sf.IsStored)
                     {
-                        AppendStoredField(sf.Name, sf.Value);
+                        AppendStoredField(sf.Name, StoredFieldValue.FromString(sf.Value));
                     }
                     break;
                 case NumericField nf:
+                    TrackFieldBoost(nf.Name, localDocId, nf.Boost);
                     IndexNumericField(nf.Name, nf.Value, localDocId);
                     numericDoc ??= new Dictionary<string, double>();
                     if (nf.IsStored)
                     {
-                        AppendStoredField(nf.Name, nf.Value.ToString(System.Globalization.CultureInfo.InvariantCulture));
+                        AppendStoredField(nf.Name, StoredFieldValue.FromString(nf.Value.ToString(System.Globalization.CultureInfo.InvariantCulture)));
                     }
                     break;
                 case VectorField vf:
+                    TrackFieldBoost(vf.Name, localDocId, vf.Boost);
                     if (!_bufferedVectors.TryGetValue(vf.Name, out var perField))
                     {
                         perField = new Dictionary<int, ReadOnlyMemory<float>>();
@@ -47,13 +54,17 @@ public sealed partial class IndexWriter
                     perField[localDocId] = vf.Value;
                     break;
                 case GeoPointField gf:
+                    TrackFieldBoost(gf.Name, localDocId, gf.Boost);
                     IndexNumericField(gf.LatFieldName, gf.Latitude, localDocId);
                     IndexNumericField(gf.LonFieldName, gf.Longitude, localDocId);
                     if (gf.IsStored)
-                        AppendStoredField(gf.Name, gf.Value);
+                        AppendStoredField(gf.Name, StoredFieldValue.FromString(gf.Value));
                     break;
                 case StoredField sf:
-                    AppendStoredField(sf.Name, sf.Value);
+                    AppendStoredField(sf.Name, StoredFieldValue.FromString(sf.Value));
+                    break;
+                case BinaryField bf:
+                    AppendStoredField(bf.Name, StoredFieldValue.FromBinary(bf.Value.Span));
                     break;
             }
         }
@@ -65,10 +76,10 @@ public sealed partial class IndexWriter
 
         // Track stored-field RAM (postings tracked accurately via EstimatedBytes)
         for (int i = storedEntryStart; i < _sfFieldIds.Count; i++)
-            _estimatedRamBytes += _sfValues[i].Length * 2 + 16;
+            _estimatedRamBytes += _sfValues[i].EstimatedSize;
 
         // Check flush thresholds
-        if (ShouldFlush())
+        if (!suppressFlush && ShouldFlush())
             FlushSegment();
     }
 
@@ -90,6 +101,10 @@ public sealed partial class IndexWriter
             analyser = _config.FieldAnalysers.GetValueOrDefault(fieldName, _defaultAnalyser);
             _analyserCache[fieldName] = analyser;
         }
+
+        if (TryIndexTextFieldWithSpanAnalyser(analyser, input, fieldName, docId))
+            return;
+
         var tokens = analyser.Analyse(input);
 
         // Enforce token budget if configured
@@ -109,8 +124,49 @@ public sealed partial class IndexWriter
             }
         }
 
-        // Track per-field token count for O(1) per-field norm computation
-        // Pre-allocate to MaxBufferedDocs to avoid resize overhead during indexing
+        AddTokenCount(fieldName, docId, tokens.Count);
+
+        _fieldNames.Add(fieldName);
+
+        int pos = -1;
+        for (int i = 0; i < tokens.Count; i++)
+        {
+            int increment = tokens[i].PositionIncrement > 0 ? tokens[i].PositionIncrement : 0;
+            if (pos < 0 && increment == 0)
+                increment = 1;
+            pos += increment;
+
+            var term = CanonicaliseTerm(tokens[i].Text);
+            AccumulatePosting(fieldName, term.AsSpan(), docId, pos, tokens[i].Payload);
+        }
+    }
+
+    private bool TryIndexTextFieldWithSpanAnalyser(IAnalyser analyser, ReadOnlySpan<char> input, string fieldName, int docId)
+    {
+        if (analyser is not ISpanAnalyser spanAnalyser)
+            return false;
+
+        int budget = _config.MaxTokensPerDocument;
+        if (budget > 0 && _config.TokenBudgetPolicy == Analysis.TokenBudgetPolicy.Reject)
+        {
+            _spanCountingSink.Reset(limit: budget);
+            if (!spanAnalyser.TryAnalyse(input, _spanCountingSink))
+                return false;
+            if (_spanCountingSink.ExceededLimit)
+                throw new Analysis.TokenBudgetExceededException(_spanCountingSink.Count, budget);
+        }
+
+        _spanPostingSink.Reset(fieldName, docId, budget, _config.TokenBudgetPolicy);
+        if (!spanAnalyser.TryAnalyse(input, _spanPostingSink))
+            return false;
+
+        AddTokenCount(fieldName, docId, _spanPostingSink.AcceptedCount);
+        _fieldNames.Add(fieldName);
+        return true;
+    }
+
+    private void AddTokenCount(string fieldName, int docId, int tokenCount)
+    {
         if (!_docTokenCounts.TryGetValue(fieldName, out var counts))
         {
             counts = new int[_config.MaxBufferedDocs];
@@ -122,26 +178,7 @@ public sealed partial class IndexWriter
             Array.Resize(ref counts, Math.Max(counts.Length * 2, docId + 1));
             _docTokenCounts[fieldName] = counts;
         }
-        counts[docId] += tokens.Count;
-
-        _fieldNames.Add(fieldName);
-
-        for (int pos = 0; pos < tokens.Count; pos++)
-        {
-            var term = CanonicaliseTerm(tokens[pos].Text);
-
-            var pooledTerm = GetOrCreateQualifiedTerm(fieldName, term);
-
-            if (!_postings.TryGetValue(pooledTerm, out var acc))
-            {
-                acc = new PostingAccumulator();
-                _postings[pooledTerm] = acc;
-                _postingsRamBytes += acc.EstimatedBytes;
-            }
-            long before = acc.EstimatedBytes;
-            acc.Add(docId, pos);
-            _postingsRamBytes += acc.EstimatedBytes - before;
-        }
+        counts[docId] += tokenCount;
     }
 
     private void IndexStringField(string fieldName, string value, int docId)
@@ -217,7 +254,7 @@ public sealed partial class IndexWriter
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private void AppendStoredField(string fieldName, string value)
+    private void AppendStoredField(string fieldName, StoredFieldValue value, bool mirrorStringToBinaryDocValues = true)
     {
         if (!_sfFieldNameToId.TryGetValue(fieldName, out int fid))
         {
@@ -227,7 +264,14 @@ public sealed partial class IndexWriter
         }
         _sfFieldIds.Add(fid);
         _sfValues.Add(value);
-        AddBinaryDocValue(fieldName, _bufferedDocCount, value);
+        if (value.IsBinary)
+        {
+            AddBinaryDocValue(fieldName, _bufferedDocCount, value.BinaryValue ?? []);
+        }
+        else if (mirrorStringToBinaryDocValues && value.StringValue is not null)
+        {
+            AddBinaryDocValue(fieldName, _bufferedDocCount, value.StringValue);
+        }
     }
 
     private void AddSortedSetDocValue(string fieldName, int docId, string value)
@@ -266,6 +310,11 @@ public sealed partial class IndexWriter
 
     private void AddBinaryDocValue(string fieldName, int docId, string value)
     {
+        AddBinaryDocValue(fieldName, docId, System.Text.Encoding.UTF8.GetBytes(value));
+    }
+
+    private void AddBinaryDocValue(string fieldName, int docId, ReadOnlySpan<byte> value)
+    {
         if (!_binaryDocValues.TryGetValue(fieldName, out var fieldMap))
         {
             fieldMap = new Dictionary<int, List<byte[]>>();
@@ -278,7 +327,32 @@ public sealed partial class IndexWriter
             fieldMap[docId] = values;
         }
 
-        values.Add(System.Text.Encoding.UTF8.GetBytes(value));
+        values.Add(value.ToArray());
+    }
+
+    private void TrackFieldBoost(string fieldName, int docId, float boost)
+    {
+        if (boost == 1.0f)
+            return;
+
+        if (!_fieldBoosts.TryGetValue(fieldName, out var fieldMap))
+        {
+            fieldMap = new Dictionary<int, float>();
+            _fieldBoosts[fieldName] = fieldMap;
+        }
+
+        if (fieldMap.TryGetValue(docId, out var existingBoost))
+        {
+            if (Math.Abs(existingBoost - boost) > 1e-6f)
+            {
+                throw new InvalidOperationException(
+                    $"Document field '{fieldName}' was indexed multiple times with conflicting boosts ({existingBoost} and {boost}). Use one consistent boost per field per document.");
+            }
+
+            return;
+        }
+
+        fieldMap[docId] = boost;
     }
 
     private string CanonicaliseTerm(string term)
@@ -296,6 +370,51 @@ public sealed partial class IndexWriter
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private string GetOrCreateQualifiedTerm(string fieldName, string term)
+        => GetOrCreateQualifiedTerm(fieldName, term.AsSpan());
+
+    /// <summary>
+    /// Accumulates a posting for a single token, combining qualified-term interning and
+    /// postings lookup into one alternate-lookup probe to avoid a double hash computation.
+    /// </summary>
+    private void AccumulatePosting(string fieldName, ReadOnlySpan<char> term, int docId, int position, byte[]? payload)
+    {
+        if (!_fieldPrefixCache.TryGetValue(fieldName, out var prefix))
+        {
+            prefix = string.Concat(fieldName, "\x00");
+            _fieldPrefixCache[fieldName] = prefix;
+        }
+
+        int totalLen = prefix.Length + term.Length;
+        Span<char> buf = totalLen <= 256 ? stackalloc char[totalLen] : new char[totalLen];
+        prefix.AsSpan().CopyTo(buf);
+        term.CopyTo(buf[prefix.Length..]);
+
+        var lookup = _postings.GetAlternateLookup<ReadOnlySpan<char>>();
+        if (lookup.TryGetValue(buf, out var acc))
+        {
+            // Cache hit — the key string is already interned inside _postings.
+        }
+        else
+        {
+            acc = new PostingAccumulator();
+            var qualifiedTerm = new string(buf);
+            _postings[qualifiedTerm] = acc;
+            _postingsRamBytes += acc.EstimatedBytes;
+        }
+
+        long before = acc.EstimatedBytes;
+        if (_config.StorePayloads && (acc.HasPayloads || payload is { Length: > 0 }))
+            acc.AddWithPayload(docId, position, payload);
+        else
+            acc.Add(docId, position);
+        _postingsRamBytes += acc.EstimatedBytes - before;
+    }
+
+    /// <summary>
+    /// Returns a pooled qualified term string ("field\0term") directly from a token span.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private string GetOrCreateQualifiedTerm(string fieldName, ReadOnlySpan<char> term)
     {
         if (!_fieldPrefixCache.TryGetValue(fieldName, out var prefix))
         {
@@ -307,7 +426,7 @@ public sealed partial class IndexWriter
         int totalLen = prefix.Length + term.Length;
         Span<char> buf = totalLen <= 256 ? stackalloc char[totalLen] : new char[totalLen];
         prefix.AsSpan().CopyTo(buf);
-        term.AsSpan().CopyTo(buf[prefix.Length..]);
+        term.CopyTo(buf[prefix.Length..]);
 
         var lookup = _qualifiedTermPool.GetAlternateLookup<ReadOnlySpan<char>>();
         if (lookup.TryGetValue(buf, out var pooled))
@@ -316,5 +435,82 @@ public sealed partial class IndexWriter
         var qualifiedTerm = new string(buf);
         _qualifiedTermPool[qualifiedTerm] = qualifiedTerm;
         return qualifiedTerm;
+    }
+
+    private sealed class SpanCountingTokenSink : ISpanTokenSink
+    {
+        private int _limit;
+
+        public int Count { get; private set; }
+
+        public bool ExceededLimit => _limit > 0 && Count > _limit;
+
+        public void Reset(int limit)
+        {
+            _limit = limit;
+            Count = 0;
+        }
+
+        public void Add(
+            ReadOnlySpan<char> text,
+            int startOffset,
+            int endOffset,
+            string type = Token.DefaultType,
+            int positionIncrement = 1,
+            byte[]? payload = null)
+        {
+            Count++;
+        }
+    }
+
+    private sealed class SpanPostingTokenSink : ISpanTokenSink
+    {
+        private readonly IndexWriter _owner;
+        private string _fieldName = string.Empty;
+        private int _docId;
+        private int _budget;
+        private Analysis.TokenBudgetPolicy _budgetPolicy;
+        private int _position;
+
+        public SpanPostingTokenSink(IndexWriter owner)
+        {
+            _owner = owner;
+        }
+
+        public int AcceptedCount { get; private set; }
+
+        public void Reset(string fieldName, int docId, int budget, Analysis.TokenBudgetPolicy budgetPolicy)
+        {
+            _fieldName = fieldName;
+            _docId = docId;
+            _budget = budget;
+            _budgetPolicy = budgetPolicy;
+            _position = -1;
+            AcceptedCount = 0;
+        }
+
+        public void Add(
+            ReadOnlySpan<char> text,
+            int startOffset,
+            int endOffset,
+            string type = Token.DefaultType,
+            int positionIncrement = 1,
+            byte[]? payload = null)
+        {
+            if (_budget > 0 &&
+                _budgetPolicy == Analysis.TokenBudgetPolicy.Truncate &&
+                AcceptedCount >= _budget)
+            {
+                return;
+            }
+
+            int increment = positionIncrement > 0 ? positionIncrement : 0;
+            if (_position < 0 && increment == 0)
+                increment = 1;
+            _position += increment;
+
+            _owner.AccumulatePosting(_fieldName, text, _docId, _position, payload);
+            AcceptedCount++;
+        }
     }
 }
